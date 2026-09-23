@@ -48,7 +48,8 @@ import {
   deleteExpenseFromSupabase,
   fetchProjectsFromSupabase,
   fetchSuppliersFromSupabase,
-  fetchUsersFromSupabase
+  fetchUsersFromSupabase,
+  subscribeToExpensesRealtime
 } from './services/supabaseService';
 import { 
   INITIAL_EXPENSES, 
@@ -201,7 +202,10 @@ export default function App() {
         fetchUsersFromSupabase(),
       ]);
 
-      if (remoteExpenses && remoteExpenses.length > 0) setExpenses(remoteExpenses);
+      // If remote expenses exist (even empty array after deletions), sync it
+      if (remoteExpenses !== null) {
+        setExpenses(remoteExpenses);
+      }
       if (remoteProjects && remoteProjects.length > 0) setProjects(remoteProjects);
       if (remoteSuppliers && remoteSuppliers.length > 0) setSuppliers(remoteSuppliers);
       if (remoteUsers && remoteUsers.length > 0) setUsers(remoteUsers);
@@ -213,6 +217,32 @@ export default function App() {
 
   useEffect(() => {
     loadDataFromSupabase();
+
+    // Lắng nghe thay đổi Realtime: khi bất kỳ máy tính nào thêm/sửa/xóa, máy tính khác cập nhật tức thời
+    const unsubscribe = subscribeToExpensesRealtime(
+      (newExpense) => {
+        setExpenses((prev) => {
+          if (prev.some((e) => e.id === newExpense.id)) {
+            return prev.map((e) => (e.id === newExpense.id ? newExpense : e));
+          }
+          return [newExpense, ...prev];
+        });
+        showToast(`Đồng bộ tức thời: Nhận khoản chi mới (${newExpense.code})`);
+      },
+      (updatedExpense) => {
+        setExpenses((prev) =>
+          prev.map((e) => (e.id === updatedExpense.id ? updatedExpense : e))
+        );
+      },
+      (deletedId) => {
+        setExpenses((prev) => prev.filter((e) => e.id !== deletedId));
+        showToast('Đồng bộ tức thời: 1 khoản chi vừa được xóa trên thiết bị khác');
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   // Filtered expenses calculation
@@ -318,11 +348,15 @@ export default function App() {
     showToast(`Đã ghi nhận thanh toán hoàn tất cho: ${item.code}`);
   };
 
-  const handleDelete = (item: ExpenseItem) => {
+  const handleDelete = async (item: ExpenseItem) => {
     if (confirm(`Bạn có chắc chắn muốn xóa ${item.code} (${item.title})?`)) {
       setExpenses((prev) => prev.filter((e) => e.id !== item.id));
       if (isSupabaseConfigured()) {
-        deleteExpenseFromSupabase(item.id);
+        const ok = await deleteExpenseFromSupabase(item.id);
+        if (!ok) {
+          showToast(`Lỗi: Không xóa được trên Supabase (hãy kiểm tra quyền RLS)`);
+          return;
+        }
       }
       showToast(`Đã xóa khoản chi ${item.code}`);
     }

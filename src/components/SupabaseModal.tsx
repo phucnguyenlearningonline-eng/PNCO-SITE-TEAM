@@ -49,6 +49,55 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
   const [copiedEnv, setCopiedEnv] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
+
+  const FIX_SQL = `-- CẤP TOÀN QUYỀN ĐỌC, GHI, SỬA, XÓA & KÍCH HOẠT REALTIME ĐA THIẾT BỊ
+ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.site_users ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public Read Expenses" ON public.expenses;
+DROP POLICY IF EXISTS "Public Insert/Update Expenses" ON public.expenses;
+DROP POLICY IF EXISTS "Allow All Expenses" ON public.expenses;
+CREATE POLICY "Allow All Expenses" ON public.expenses FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public Read Projects" ON public.projects;
+DROP POLICY IF EXISTS "Public Insert/Update Projects" ON public.projects;
+DROP POLICY IF EXISTS "Allow All Projects" ON public.projects;
+CREATE POLICY "Allow All Projects" ON public.projects FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public Read Suppliers" ON public.suppliers;
+DROP POLICY IF EXISTS "Public Insert/Update Suppliers" ON public.suppliers;
+DROP POLICY IF EXISTS "Allow All Suppliers" ON public.suppliers;
+CREATE POLICY "Allow All Suppliers" ON public.suppliers FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public Read Users" ON public.site_users;
+DROP POLICY IF EXISTS "Public Insert/Update Users" ON public.site_users;
+DROP POLICY IF EXISTS "Allow All Users" ON public.site_users;
+CREATE POLICY "Allow All Users" ON public.site_users FOR ALL USING (true) WITH CHECK (true);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'expenses') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.expenses;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'projects') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.projects;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'suppliers') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.suppliers;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'site_users') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.site_users;
+  END IF;
+END $$;`;
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(FIX_SQL);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 2500);
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -162,6 +211,19 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
                 Khi deploy lên <strong>Vercel</strong>, vào <strong>Settings → Environment Variables</strong> và thêm 2 biến môi trường tương ứng: <code className="bg-white px-1.5 py-0.5 rounded border border-slate-300 text-sky-800 font-mono">VITE_SUPABASE_URL</code> và <code className="bg-white px-1.5 py-0.5 rounded border border-slate-300 text-sky-800 font-mono">VITE_SUPABASE_ANON_KEY</code>.
               </li>
             </ol>
+            <div className="pt-2 border-t border-sky-200/80 flex items-center justify-between">
+              <span className="text-[11px] text-sky-800 font-medium">
+                💡 Cần kích hoạt đồng bộ tức thời (Realtime) & cấp quyền Xóa trên Supabase?
+              </span>
+              <button
+                type="button"
+                onClick={handleCopySql}
+                className="px-2.5 py-1 bg-sky-700 hover:bg-sky-800 text-white rounded font-bold text-[11px] flex items-center gap-1 transition-colors"
+              >
+                {copiedSql ? <Check className="w-3 h-3 text-emerald-300" /> : <Copy className="w-3 h-3" />}
+                <span>{copiedSql ? 'Đã sao chép SQL Cấp Quyền & Realtime' : 'Sao Chép SQL Cấp Quyền & Realtime'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Form Credentials */}

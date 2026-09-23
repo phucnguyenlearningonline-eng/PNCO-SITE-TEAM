@@ -80,24 +80,68 @@ CREATE INDEX IF NOT EXISTS idx_expenses_category ON public.expenses(category);
 CREATE INDEX IF NOT EXISTS idx_expenses_status ON public.expenses(status);
 CREATE INDEX IF NOT EXISTS idx_expenses_project_id ON public.expenses(project_id);
 
--- CẤU HÌNH ROW LEVEL SECURITY (RLS)
+-- ================================================================
+-- CẤU HÌNH BẢO MẬT & QUYỀN TRUY CẬP (TOÀN QUYỀN ĐỌC, GHI, SỬA, XÓA)
+-- ================================================================
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 
--- CHO PHÉP ĐỌC VÀ GHI CHO CLIENT ĐƯỢC ỦY QUYỀN (ANON KEY / AUTHENTICATED)
-CREATE POLICY "Public Read Projects" ON public.projects FOR SELECT USING (true);
-CREATE POLICY "Public Insert/Update Projects" ON public.projects FOR ALL USING (true);
+-- Xóa các policy cũ để tránh trùng lặp
+DROP POLICY IF EXISTS "Public Read Projects" ON public.projects;
+DROP POLICY IF EXISTS "Public Insert/Update Projects" ON public.projects;
+DROP POLICY IF EXISTS "Allow All Projects" ON public.projects;
+CREATE POLICY "Allow All Projects" ON public.projects FOR ALL USING (true) WITH CHECK (true);
 
-CREATE POLICY "Public Read Suppliers" ON public.suppliers FOR SELECT USING (true);
-CREATE POLICY "Public Insert/Update Suppliers" ON public.suppliers FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Read Suppliers" ON public.suppliers;
+DROP POLICY IF EXISTS "Public Insert/Update Suppliers" ON public.suppliers;
+DROP POLICY IF EXISTS "Allow All Suppliers" ON public.suppliers;
+CREATE POLICY "Allow All Suppliers" ON public.suppliers FOR ALL USING (true) WITH CHECK (true);
 
-CREATE POLICY "Public Read Users" ON public.site_users FOR SELECT USING (true);
-CREATE POLICY "Public Insert/Update Users" ON public.site_users FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Read Users" ON public.site_users;
+DROP POLICY IF EXISTS "Public Insert/Update Users" ON public.site_users;
+DROP POLICY IF EXISTS "Allow All Users" ON public.site_users;
+CREATE POLICY "Allow All Users" ON public.site_users FOR ALL USING (true) WITH CHECK (true);
 
-CREATE POLICY "Public Read Expenses" ON public.expenses FOR SELECT USING (true);
-CREATE POLICY "Public Insert/Update Expenses" ON public.expenses FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Read Expenses" ON public.expenses;
+DROP POLICY IF EXISTS "Public Insert/Update Expenses" ON public.expenses;
+DROP POLICY IF EXISTS "Allow All Expenses" ON public.expenses;
+CREATE POLICY "Allow All Expenses" ON public.expenses FOR ALL USING (true) WITH CHECK (true);
+
+-- ================================================================
+-- KÍCH HOẠT ĐỒNG BỘ REALTIME TỨC THỜI CHO CÁC MÁY TÍNH & ĐIỆN THOẠI
+-- ================================================================
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'expenses'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.expenses;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'projects'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.projects;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'suppliers'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.suppliers;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'site_users'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.site_users;
+  END IF;
+END $$;
 
 -- ================================================================
 -- DỮ LIỆU MẪU BAN ĐẦU (SEED DATA PHÚC NGUYÊN M&E)

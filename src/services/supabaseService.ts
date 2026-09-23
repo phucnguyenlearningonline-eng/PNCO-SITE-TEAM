@@ -4,6 +4,36 @@ import { ExpenseItem, Project, Supplier, User } from '../types';
 // ==============================================================
 // EXPENSES SERVICE
 // ==============================================================
+// Row mapper
+export function mapRowToExpense(row: any): ExpenseItem {
+  return {
+    id: row.id,
+    code: row.code,
+    type: row.type,
+    category: row.category,
+    title: row.title,
+    subDescription: row.sub_description || undefined,
+    projectId: row.project_id || '',
+    projectName: row.project_name || '',
+    supplier: row.supplier || '',
+    createdById: row.created_by_id || '',
+    createdByName: row.created_by_name || '',
+    createdByRole: row.created_by_role || '',
+    date: row.date,
+    amount: Number(row.amount || 0),
+    vatRate: Number(row.vat_rate || 0),
+    vatAmount: Number(row.vat_amount || 0),
+    totalAmount: Number(row.total_amount || 0),
+    priority: row.priority || 'normal',
+    status: row.status || 'pending',
+    paymentMethod: row.payment_method || 'advance_fund',
+    receiptImage: row.receipt_image || undefined,
+    notes: row.notes || undefined,
+    approvedBy: row.approved_by || undefined,
+    approvedAt: row.approved_at || undefined,
+  };
+}
+
 export async function fetchExpensesFromSupabase(): Promise<ExpenseItem[] | null> {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
@@ -19,34 +49,9 @@ export async function fetchExpensesFromSupabase(): Promise<ExpenseItem[] | null>
       return null;
     }
 
-    if (!data) return null;
+    if (!data) return [];
 
-    return data.map((row: any): ExpenseItem => ({
-      id: row.id,
-      code: row.code,
-      type: row.type,
-      category: row.category,
-      title: row.title,
-      subDescription: row.sub_description || undefined,
-      projectId: row.project_id || '',
-      projectName: row.project_name || '',
-      supplier: row.supplier || '',
-      createdById: row.created_by_id || '',
-      createdByName: row.created_by_name || '',
-      createdByRole: row.created_by_role || '',
-      date: row.date,
-      amount: Number(row.amount || 0),
-      vatRate: Number(row.vat_rate || 0),
-      vatAmount: Number(row.vat_amount || 0),
-      totalAmount: Number(row.total_amount || 0),
-      priority: row.priority || 'normal',
-      status: row.status || 'pending',
-      paymentMethod: row.payment_method || 'advance_fund',
-      receiptImage: row.receipt_image || undefined,
-      notes: row.notes || undefined,
-      approvedBy: row.approved_by || undefined,
-      approvedAt: row.approved_at || undefined,
-    }));
+    return data.map(mapRowToExpense);
   } catch (err) {
     console.error('Failed to load expenses from Supabase:', err);
     return null;
@@ -111,6 +116,60 @@ export async function deleteExpenseFromSupabase(id: string): Promise<boolean> {
   } catch (err) {
     console.error('Failed to delete expense from Supabase:', err);
     return false;
+  }
+}
+
+// ==============================================================
+// REALTIME SUBSCRIPTION (ĐỒNG BỘ TỨC THỜI GIỮA CÁC MÁY TÍNH)
+// ==============================================================
+export function subscribeToExpensesRealtime(
+  onInsert: (item: ExpenseItem) => void,
+  onUpdate: (item: ExpenseItem) => void,
+  onDelete: (id: string) => void
+) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return () => {};
+
+  try {
+    const channel = supabase
+      .channel('public-expenses-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'expenses' },
+        (payload) => {
+          if (payload.new) {
+            onInsert(mapRowToExpense(payload.new));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'expenses' },
+        (payload) => {
+          if (payload.new) {
+            onUpdate(mapRowToExpense(payload.new));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'expenses' },
+        (payload) => {
+          if (payload.old && payload.old.id) {
+            onDelete(payload.old.id);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  } catch (err) {
+    console.error('Failed to start Realtime subscription:', err);
+    return () => {};
   }
 }
 
