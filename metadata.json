@@ -1,0 +1,6 @@
+{
+  "name": "Phúc Nguyên M&E - Quản Lý Tài Chính & Chi Tiêu Site",
+  "description": "Hệ thống quản lý tài chính và chi tiêu công trường M&E: chi phí vật tư, vận chuyển, đồ ăn tăng ca, phân quyền nhân viên và xuất Excel kế toán.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
