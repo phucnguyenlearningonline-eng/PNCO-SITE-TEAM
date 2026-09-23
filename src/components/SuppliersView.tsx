@@ -30,7 +30,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
   onEditSupplier,
   onDeleteSupplier,
 }) => {
-  const [filterType, setFilterType] = useState<string>('all');
+  const [filterType, setFilterType] = useState<string>('in_expenses');
   const [showModal, setShowModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
 
@@ -40,7 +40,14 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
   const [contactPerson, setContactPerson] = useState('');
   const [address, setAddress] = useState('');
 
-  const filteredSuppliers = filterType === 'all'
+  // Danh sách nhà cung cấp thực tế có trong bản chi tiết giao dịch
+  const suppliersWithExpenses = suppliers.filter((s) =>
+    expenses.some((e) => e.supplier.trim().toLowerCase() === s.name.trim().toLowerCase())
+  );
+
+  const filteredSuppliers = filterType === 'in_expenses'
+    ? suppliersWithExpenses
+    : filterType === 'all'
     ? suppliers
     : suppliers.filter((s) => s.type === filterType);
 
@@ -128,14 +135,25 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
       {/* Filter Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         <button
-          onClick={() => setFilterType('all')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-            filterType === 'all'
-              ? 'bg-slate-900 text-white'
+          onClick={() => setFilterType('in_expenses')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+            filterType === 'in_expenses'
+              ? 'bg-sky-700 text-white shadow-xs'
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
-          Tất cả đối tác ({suppliers.length})
+          <Building2 className="w-3.5 h-3.5" />
+          Trong bản chi tiết ({suppliersWithExpenses.length})
+        </button>
+        <button
+          onClick={() => setFilterType('all')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            filterType === 'all'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          Tất cả danh bạ ({suppliers.length})
         </button>
         <button
           onClick={() => setFilterType('material')}
@@ -241,8 +259,11 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
               </div>
 
               <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-xs text-slate-500">Tổng thanh toán:</span>
-                <span className="font-mono font-bold text-slate-900 text-sm">{formatVND(totalSpent)}</span>
+                <div className="text-xs text-slate-500">
+                  <span>Bản chi tiết:</span>
+                  <span className="font-bold text-slate-800 ml-1">{supplierExpenses.length} giao dịch</span>
+                </div>
+                <span className="font-mono font-bold text-slate-900 text-xs sm:text-sm">{formatVND(totalSpent)}</span>
               </div>
             </div>
           );

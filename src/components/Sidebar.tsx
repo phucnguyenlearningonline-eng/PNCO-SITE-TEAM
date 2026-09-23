@@ -28,6 +28,7 @@ interface SidebarProps {
   ordersCount: number;
   projectsCount: number;
   suppliersCount: number;
+  clientsCount: number;
   currentUser: User;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
@@ -42,6 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ordersCount,
   projectsCount,
   suppliersCount,
+  clientsCount,
   currentUser,
   isCollapsed,
   onToggleCollapse,
@@ -79,14 +81,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       id: 'clients' as ActiveTab,
       label: 'Tên Khách Hàng',
-      sublabel: 'Chủ đầu tư & tiến độ giải ngân',
+      sublabel: 'Chủ đầu tư các dự án thi công',
       icon: Building2,
-      count: 6,
+      count: clientsCount,
     },
     {
       id: 'suppliers' as ActiveTab,
       label: 'Tên Nhà Cung Cấp',
-      sublabel: 'Đối tác cung ứng & công nợ',
+      sublabel: 'Đối tác cung ứng & nhà xe site',
       icon: Users,
       count: suppliersCount,
     },

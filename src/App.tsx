@@ -555,6 +555,19 @@ export default function App() {
     },
   ];
 
+  // Tính toán số lượng khách hàng thực tế (từ các công trình/giao dịch thực tế)
+  const actualClientsCount = useMemo(() => {
+    return new Set(projects.map((p) => p.client.trim()).filter(Boolean)).size;
+  }, [projects]);
+
+  // Tính toán số lượng nhà cung cấp thực tế trong bản chi tiết giao dịch
+  const actualSuppliersCount = useMemo(() => {
+    const suppliersInExpenses = new Set(
+      expenses.map((e) => e.supplier?.trim()).filter(Boolean)
+    );
+    return suppliersInExpenses.size > 0 ? suppliersInExpenses.size : suppliers.length;
+  }, [expenses, suppliers]);
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
       {/* Toast Notification */}
@@ -600,7 +613,8 @@ export default function App() {
           pendingCount={pendingCount}
           ordersCount={expenses.length}
           projectsCount={projects.length}
-          suppliersCount={suppliers.length}
+          suppliersCount={actualSuppliersCount}
+          clientsCount={actualClientsCount}
           currentUser={currentUser}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -679,6 +693,7 @@ export default function App() {
           ) : activeTab === 'clients' ? (
             <ClientsView
               projects={projects}
+              expenses={expenses}
               onUpdateClient={handleUpdateClient}
               onEditProject={handleEditProject}
               onDeleteProject={handleDeleteProject}
