@@ -1,5 +1,17 @@
 import React, { useState } from 'react';
-import { Building, DollarSign, PlusCircle, TrendingUp, MapPin, User, Calendar, CheckCircle } from 'lucide-react';
+import { 
+  Building, 
+  DollarSign, 
+  PlusCircle, 
+  TrendingUp, 
+  MapPin, 
+  User, 
+  Calendar, 
+  CheckCircle,
+  Edit3,
+  Trash2,
+  X
+} from 'lucide-react';
 import { ExpenseItem, Project } from '../types';
 import { formatVND } from '../utils/formatters';
 
@@ -7,6 +19,8 @@ interface ProjectsViewProps {
   projects: Project[];
   expenses: ExpenseItem[];
   onAddProject: (project: Project) => void;
+  onEditProject?: (project: Project) => void;
+  onDeleteProject?: (projectId: string) => void;
   onSelectProjectFilter: (projectId: string) => void;
 }
 
@@ -14,9 +28,14 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   projects,
   expenses,
   onAddProject,
+  onEditProject,
+  onDeleteProject,
   onSelectProjectFilter,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+
+  // Form states for Add / Edit
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [client, setClient] = useState('');
@@ -25,29 +44,79 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   const [totalRevenue, setTotalRevenue] = useState(25000000000);
   const [totalBudget, setTotalBudget] = useState(20000000000);
   const [currentAdvance, setCurrentAdvance] = useState(1500000000);
+  const [status, setStatus] = useState<'active' | 'completed' | 'paused'>('active');
+
+  const openAddModal = () => {
+    setName('');
+    setCode(`PN-PJ-${Math.floor(100 + Math.random() * 900)}`);
+    setClient('');
+    setLocation('TP. Hồ Chí Minh');
+    setManager('Trần Anh Minh');
+    setTotalRevenue(25000000000);
+    setTotalBudget(20000000000);
+    setCurrentAdvance(1500000000);
+    setStatus('active');
+    setEditingProject(null);
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (p: Project) => {
+    setEditingProject(p);
+    setName(p.name);
+    setCode(p.code);
+    setClient(p.client);
+    setLocation(p.location);
+    setManager(p.manager);
+    setTotalRevenue(p.totalRevenue);
+    setTotalBudget(p.totalBudget);
+    setCurrentAdvance(p.currentAdvance);
+    setStatus(p.status);
+    setShowAddModal(true);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    const newProject: Project = {
-      id: `prj-${Date.now()}`,
-      code: code.trim() || `PN-PJ-${Math.floor(100 + Math.random() * 900)}`,
-      name: name.trim(),
-      client: client.trim() || 'Chủ đầu tư M&E',
-      location: location.trim() || 'TP. Hồ Chí Minh',
-      manager: manager.trim() || 'Trần Anh Minh',
-      totalRevenue,
-      totalBudget,
-      currentAdvance,
-      status: 'active',
-    };
+    if (editingProject && onEditProject) {
+      const updated: Project = {
+        ...editingProject,
+        name: name.trim(),
+        code: code.trim() || editingProject.code,
+        client: client.trim() || editingProject.client,
+        location: location.trim() || editingProject.location,
+        manager: manager.trim() || editingProject.manager,
+        totalRevenue,
+        totalBudget,
+        currentAdvance,
+        status,
+      };
+      onEditProject(updated);
+    } else {
+      const newProject: Project = {
+        id: `prj-${Date.now()}`,
+        code: code.trim() || `PN-PJ-${Math.floor(100 + Math.random() * 900)}`,
+        name: name.trim(),
+        client: client.trim() || 'Chủ đầu tư M&E',
+        location: location.trim() || 'TP. Hồ Chí Minh',
+        manager: manager.trim() || 'Trần Anh Minh',
+        totalRevenue,
+        totalBudget,
+        currentAdvance,
+        status,
+      };
+      onAddProject(newProject);
+    }
 
-    onAddProject(newProject);
     setShowAddModal(false);
-    setName('');
-    setCode('');
-    setClient('');
+    setEditingProject(null);
+  };
+
+  const handleDelete = (p: Project) => {
+    if (!onDeleteProject) return;
+    if (confirm(`Bạn có chắc chắn muốn xóa dự án "${p.name}" (${p.code})?`)) {
+      onDeleteProject(p.id);
+    }
   };
 
   return (
@@ -65,7 +134,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         </div>
 
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={openAddModal}
           className="px-3.5 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
         >
           <PlusCircle className="w-4 h-4" />
@@ -79,7 +148,6 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
           const projectExpenses = expenses.filter((e) => e.projectId === project.id);
           const totalSpent = projectExpenses.reduce((sum, e) => sum + e.totalAmount, 0);
           const spentPercent = project.totalBudget > 0 ? (totalSpent / project.totalBudget) * 100 : 0;
-          const remaining = Math.max(0, project.totalBudget - totalSpent);
 
           const materialsCost = projectExpenses
             .filter((e) => e.category === 'material')
@@ -101,10 +169,41 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200">
                     {project.code}
                   </span>
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3 text-emerald-600" />
-                    Đang thi công
-                  </span>
+                  
+                  <div className="flex items-center gap-1">
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                      project.status === 'completed' 
+                        ? 'bg-blue-100 text-blue-800' 
+                        : project.status === 'paused'
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      <CheckCircle className="w-3 h-3 text-emerald-600" />
+                      {project.status === 'completed' ? 'Hoàn thành' : project.status === 'paused' ? 'Tạm dừng' : 'Đang thi công'}
+                    </span>
+
+                    {/* Sửa dự án */}
+                    {onEditProject && (
+                      <button
+                        onClick={() => openEditModal(project)}
+                        className="p-1 rounded text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-colors ml-1"
+                        title="Chỉnh sửa tên dự án & thông tin"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    {/* Xóa dự án */}
+                    {onDeleteProject && (
+                      <button
+                        onClick={() => handleDelete(project)}
+                        className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        title="Xóa dự án"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <h3 className="font-bold text-slate-900 text-base mt-2.5 line-clamp-1" title={project.name}>
@@ -182,19 +281,23 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         })}
       </div>
 
-      {/* Add Project Modal */}
+      {/* Add / Edit Project Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/70 backdrop-blur-xs">
           <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95">
             <div className="bg-[#102742] text-white px-5 py-4 flex items-center justify-between">
-              <h3 className="font-bold text-base">Thêm Dự Án Thi Công M&E Mới</h3>
+              <h3 className="font-bold text-base">
+                {editingProject ? 'Chỉnh Sửa Dự Án Thi Công M&E' : 'Thêm Dự Án Thi Công M&E Mới'}
+              </h3>
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-white">
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
             <form onSubmit={handleSubmit} className="p-5 space-y-3 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 uppercase mb-1">Tên Dự Án Thi Công</label>
+                <label className="block font-bold text-slate-700 uppercase mb-1">
+                  Tên Dự Án Thi Công <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   value={name}
@@ -217,7 +320,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 uppercase mb-1">Chủ Đầu Tư</label>
+                  <label className="block font-bold text-slate-700 uppercase mb-1">Tên Khách Hàng / Chủ Đầu Tư</label>
                   <input
                     type="text"
                     value={client}
@@ -274,6 +377,19 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 </div>
               </div>
 
+              <div>
+                <label className="block font-bold text-slate-700 uppercase mb-1">Trạng Thái Dự Án</label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as any)}
+                  className="w-full py-2 px-3 border border-slate-300 rounded bg-white"
+                >
+                  <option value="active">Đang thi công</option>
+                  <option value="completed">Đã hoàn thành bàn giao</option>
+                  <option value="paused">Tạm dừng thi công</option>
+                </select>
+              </div>
+
               <div className="flex justify-end gap-2 pt-3 border-t">
                 <button
                   type="button"
@@ -284,9 +400,9 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded shadow-sm"
+                  className="px-4 py-2 font-bold text-white bg-sky-600 hover:bg-sky-500 rounded shadow-sm"
                 >
-                  Thêm Dự Án
+                  {editingProject ? 'Lưu Cập Nhật' : 'Thêm Dự Án'}
                 </button>
               </div>
             </form>

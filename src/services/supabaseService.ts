@@ -231,6 +231,23 @@ export async function upsertProjectToSupabase(project: Project): Promise<boolean
   }
 }
 
+export async function deleteProjectFromSupabase(id: string): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase.from('projects').delete().eq('id', id);
+    if (error) {
+      console.error('Supabase delete project error:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to delete project:', err);
+    return false;
+  }
+}
+
 // ==============================================================
 // SUPPLIERS SERVICE
 // ==============================================================
@@ -279,6 +296,23 @@ export async function upsertSupplierToSupabase(supplier: Supplier): Promise<bool
     return !error;
   } catch (err) {
     console.error('Failed to upsert supplier:', err);
+    return false;
+  }
+}
+
+export async function deleteSupplierFromSupabase(id: string): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase.from('suppliers').delete().eq('id', id);
+    if (error) {
+      console.error('Supabase delete supplier error:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to delete supplier:', err);
     return false;
   }
 }
@@ -356,24 +390,39 @@ export async function syncAllLocalDataToSupabase(data: {
   }
 
   try {
+    let failedCount = 0;
+    let lastError = '';
+
     // 1. Projects
     for (const p of data.projects) {
-      await upsertProjectToSupabase(p);
+      const ok = await upsertProjectToSupabase(p);
+      if (!ok) failedCount++;
     }
 
     // 2. Suppliers
     for (const s of data.suppliers) {
-      await upsertSupplierToSupabase(s);
+      const ok = await upsertSupplierToSupabase(s);
+      if (!ok) failedCount++;
     }
 
     // 3. Users
     for (const u of data.users) {
-      await upsertUserToSupabase(u);
+      const ok = await upsertUserToSupabase(u);
+      if (!ok) failedCount++;
     }
 
     // 4. Expenses
     for (const e of data.expenses) {
-      await upsertExpenseToSupabase(e);
+      const ok = await upsertExpenseToSupabase(e);
+      if (!ok) failedCount++;
+    }
+
+    if (failedCount > 0) {
+      return {
+        success: false,
+        message: `Có ${failedCount} bản ghi không thể ghi vào Supabase. Vui lòng kiểm tra lại URL và Anon Key.`,
+        count: data.expenses.length - failedCount,
+      };
     }
 
     return {

@@ -47,10 +47,15 @@ import {
   upsertExpenseToSupabase, 
   deleteExpenseFromSupabase,
   fetchProjectsFromSupabase,
+  upsertProjectToSupabase,
+  deleteProjectFromSupabase,
   fetchSuppliersFromSupabase,
+  upsertSupplierToSupabase,
+  deleteSupplierFromSupabase,
   fetchUsersFromSupabase,
   subscribeToExpensesRealtime
 } from './services/supabaseService';
+import { ClientsView } from './components/ClientsView';
 import { 
   INITIAL_EXPENSES, 
   INITIAL_PROJECTS, 
@@ -302,7 +307,7 @@ export default function App() {
   }, [expenses]);
 
   // Handlers for expense CRUD
-  const handleSaveExpense = (item: ExpenseItem) => {
+  const handleSaveExpense = async (item: ExpenseItem) => {
     if (editingExpense) {
       setExpenses((prev) => prev.map((e) => (e.id === item.id ? item : e)));
       showToast(`Đã cập nhật khoản chi ${item.code} thành công`);
@@ -311,12 +316,15 @@ export default function App() {
       showToast(`Đã tạo khoản chi / PO mới: ${item.code}`);
     }
     if (isSupabaseConfigured()) {
-      upsertExpenseToSupabase(item);
+      const ok = await upsertExpenseToSupabase(item);
+      if (!ok) {
+        showToast(`Lỗi: Không lưu được lên Supabase (vui lòng kiểm tra quyền RLS)`);
+      }
     }
     setEditingExpense(null);
   };
 
-  const handleApprove = (item: ExpenseItem) => {
+  const handleApprove = async (item: ExpenseItem) => {
     const updated: ExpenseItem = {
       ...item,
       status: 'approved',
@@ -325,25 +333,25 @@ export default function App() {
     };
     setExpenses((prev) => prev.map((e) => (e.id === item.id ? updated : e)));
     if (isSupabaseConfigured()) {
-      upsertExpenseToSupabase(updated);
+      await upsertExpenseToSupabase(updated);
     }
     showToast(`Đã phê duyệt khoản chi: ${item.code}`);
   };
 
-  const handleReject = (item: ExpenseItem) => {
+  const handleReject = async (item: ExpenseItem) => {
     const updated: ExpenseItem = { ...item, status: 'rejected' };
     setExpenses((prev) => prev.map((e) => (e.id === item.id ? updated : e)));
     if (isSupabaseConfigured()) {
-      upsertExpenseToSupabase(updated);
+      await upsertExpenseToSupabase(updated);
     }
     showToast(`Đã từ chối khoản chi: ${item.code}`);
   };
 
-  const handlePay = (item: ExpenseItem) => {
+  const handlePay = async (item: ExpenseItem) => {
     const updated: ExpenseItem = { ...item, status: 'paid' };
     setExpenses((prev) => prev.map((e) => (e.id === item.id ? updated : e)));
     if (isSupabaseConfigured()) {
-      upsertExpenseToSupabase(updated);
+      await upsertExpenseToSupabase(updated);
     }
     showToast(`Đã ghi nhận thanh toán hoàn tất cho: ${item.code}`);
   };
@@ -390,15 +398,85 @@ export default function App() {
   };
 
   // Add Project handler
-  const handleAddProject = (newProject: Project) => {
+  const handleAddProject = async (newProject: Project) => {
     setProjects((prev) => [newProject, ...prev]);
+    if (isSupabaseConfigured()) {
+      await upsertProjectToSupabase(newProject);
+    }
     showToast(`Đã thêm công trình: ${newProject.name}`);
   };
 
+  // Edit Project handler
+  const handleEditProject = async (updatedProject: Project) => {
+    setProjects((prev) => prev.map((p) => (p.id === updatedProject.id ? updatedProject : p)));
+    if (isSupabaseConfigured()) {
+      await upsertProjectToSupabase(updatedProject);
+    }
+    showToast(`Đã cập nhật công trình: ${updatedProject.name}`);
+  };
+
+  // Delete Project handler
+  const handleDeleteProject = async (projectId: string) => {
+    const prj = projects.find((p) => p.id === projectId);
+    setProjects((prev) => prev.filter((p) => p.id !== projectId));
+    if (isSupabaseConfigured()) {
+      await deleteProjectFromSupabase(projectId);
+    }
+    showToast(`Đã xóa dự án: ${prj?.name || projectId}`);
+  };
+
   // Add Supplier handler
-  const handleAddSupplier = (newSupplier: Supplier) => {
+  const handleAddSupplier = async (newSupplier: Supplier) => {
     setSuppliers((prev) => [newSupplier, ...prev]);
+    if (isSupabaseConfigured()) {
+      await upsertSupplierToSupabase(newSupplier);
+    }
     showToast(`Đã thêm đối tác: ${newSupplier.name}`);
+  };
+
+  // Edit Supplier handler
+  const handleEditSupplier = async (updatedSupplier: Supplier) => {
+    setSuppliers((prev) => prev.map((s) => (s.id === updatedSupplier.id ? updatedSupplier : s)));
+    if (isSupabaseConfigured()) {
+      await upsertSupplierToSupabase(updatedSupplier);
+    }
+    showToast(`Đã cập nhật đối tác: ${updatedSupplier.name}`);
+  };
+
+  // Delete Supplier handler
+  const handleDeleteSupplier = async (supplierId: string) => {
+    const sup = suppliers.find((s) => s.id === supplierId);
+    setSuppliers((prev) => prev.filter((s) => s.id !== supplierId));
+    if (isSupabaseConfigured()) {
+      await deleteSupplierFromSupabase(supplierId);
+    }
+    showToast(`Đã xóa đối tác: ${sup?.name || supplierId}`);
+  };
+
+  // Update Client handler
+  const handleUpdateClient = async (oldClientName: string, newClientName: string, newRevenue?: number) => {
+    const affectedProjects = projects.filter((p) => p.client === oldClientName);
+    const updatedProjects = projects.map((p) => {
+      if (p.client === oldClientName) {
+        return {
+          ...p,
+          client: newClientName,
+          totalRevenue: newRevenue !== undefined ? newRevenue : p.totalRevenue,
+        };
+      }
+      return p;
+    });
+    setProjects(updatedProjects);
+    if (isSupabaseConfigured()) {
+      for (const prj of affectedProjects) {
+        await upsertProjectToSupabase({
+          ...prj,
+          client: newClientName,
+          totalRevenue: newRevenue !== undefined ? newRevenue : prj.totalRevenue,
+        });
+      }
+    }
+    showToast(`Đã cập nhật khách hàng/chủ đầu tư: ${newClientName}`);
   };
 
   // Add User handler
@@ -583,6 +661,8 @@ export default function App() {
               projects={projects}
               expenses={expenses}
               onAddProject={handleAddProject}
+              onEditProject={handleEditProject}
+              onDeleteProject={handleDeleteProject}
               onSelectProjectFilter={(prjId) => {
                 setFilters((prev) => ({ ...prev, projectId: prjId }));
                 setActiveTab('orders');
@@ -593,38 +673,16 @@ export default function App() {
               suppliers={suppliers}
               expenses={expenses}
               onAddSupplier={handleAddSupplier}
+              onEditSupplier={handleEditSupplier}
+              onDeleteSupplier={handleDeleteSupplier}
             />
           ) : activeTab === 'clients' ? (
-            <div className="space-y-4">
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-sky-600" />
-                  <span>DANH SÁCH CHỦ ĐẦU TƯ & KHÁCH HÀNG DỰ ÁN M&E</span>
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Thông tin các chủ đầu tư, tiến độ giải ngân hợp đồng xây dựng cơ điện.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {projects.map((p) => (
-                  <div key={p.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                    <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                      Chủ Đầu Tư
-                    </span>
-                    <h4 className="font-bold text-slate-900 text-base mt-2">{p.client}</h4>
-                    <div className="text-xs text-slate-600 mt-1">Dự án: <strong className="text-slate-800">{p.name}</strong></div>
-                    <div className="text-xs text-slate-500 mt-0.5">Vị trí: {p.location}</div>
-                    <div className="mt-3 pt-3 border-t border-slate-100 text-xs flex justify-between">
-                      <span className="text-slate-500">Giá trị hợp đồng:</span>
-                      <span className="font-mono font-bold text-sky-800">
-                        {new Intl.NumberFormat('vi-VN').format(p.totalRevenue)} đ
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <ClientsView
+              projects={projects}
+              onUpdateClient={handleUpdateClient}
+              onEditProject={handleEditProject}
+              onDeleteProject={handleDeleteProject}
+            />
           ) : activeTab === 'users' ? (
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
               <div className="flex items-center justify-between pb-4 border-b border-slate-100">

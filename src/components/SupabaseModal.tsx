@@ -122,6 +122,7 @@ END $$;`;
       success: true,
       message: 'Đã lưu cấu hình Supabase vào bộ nhớ ứng dụng.',
     });
+    onRefreshDataFromSupabase();
   };
 
   const handleTestConnection = async () => {
@@ -135,6 +136,9 @@ END $$;`;
     const res = await testSupabaseConnection(cfg);
     setTestResult(res);
     setIsTesting(false);
+    if (res.success) {
+      onRefreshDataFromSupabase();
+    }
   };
 
   const handleSyncToSupabase = async () => {
@@ -234,12 +238,12 @@ END $$;`;
                 Thông Tin Kết Nối Supabase
               </span>
               <a
-                href="https://supabase.com/dashboard"
+                href="https://supabase.com/dashboard/project/awofonpspmerjxzryzcv/settings/api"
                 target="_blank"
                 rel="noreferrer"
-                className="text-sky-600 hover:text-sky-800 font-bold flex items-center gap-1 text-[11px] underline"
+                className="text-sky-600 hover:text-sky-800 font-bold flex items-center gap-1 text-[11px] underline bg-sky-50 px-2 py-1 rounded border border-sky-200"
               >
-                Mở Supabase Dashboard <ExternalLink className="w-3 h-3" />
+                Mở Trang Lấy Anon Key Trên Supabase <ExternalLink className="w-3 h-3" />
               </a>
             </div>
 
