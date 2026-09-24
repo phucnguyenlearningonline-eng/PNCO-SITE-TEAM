@@ -44,11 +44,29 @@ export interface Supplier {
   unpaidBalance: number;
 }
 
+export interface MaterialItem {
+  id: string;
+  code: string; // "VT 0001", "VT 0002", "VT 0003"...
+  name: string;
+  category: 'electrical' | 'fire_protection' | 'water' | 'hvac' | 'cable_tray' | 'other';
+  unit: string; // Mét, Cuộn, Cái, Bộ, Cây, Thùng...
+  unitPrice: number; // Đơn giá tham khảo (VNĐ)
+  brand?: string; // CADIVI, Schneider, Hòa Phát, Viking...
+  specifications?: string; // Quy cách kỹ thuật
+  imageUrl?: string; // Hình ảnh nhận dạng chụp từ snap tool hoặc tải lên
+  supplier?: string; // Nhà cung cấp tiêu chuẩn
+  warehouseLocation: string; // Tên kho đang tồn: "Kho Tổng Dĩ An (Bình Dương)", "Kho Công Trường VSIP II", etc.
+  stockQuantity: number; // Số lượng tồn kho hiện tại
+  minStock?: number; // Mức tồn an toàn tối thiểu
+  shelfLocation?: string; // Vị trí kệ/khu vực lưu trữ
+}
+
 export interface ExpenseItem {
   id: string;
   code: string; // PO-2026-0224, EXP-2026-0105
   type: ExpenseType;
   category: ExpenseCategory;
+  materialCode?: string; // VT 0001, VT 0002...
   title: string;
   subDescription?: string;
   projectId: string;

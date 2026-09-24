@@ -56,18 +56,21 @@ import {
   subscribeToExpensesRealtime
 } from './services/supabaseService';
 import { ClientsView } from './components/ClientsView';
+import { MaterialsView } from './components/MaterialsView';
 import { 
   INITIAL_EXPENSES, 
   INITIAL_PROJECTS, 
   INITIAL_SUPPLIERS, 
   INITIAL_USERS 
 } from './data/mockData';
+import { INITIAL_MATERIALS } from './data/materialsData';
 import { 
   ExpenseItem, 
   FilterState, 
   Project, 
   Supplier, 
-  User 
+  User,
+  MaterialItem 
 } from './types';
 import { exportExpensesToExcel } from './utils/excelExport';
 import { 
@@ -88,6 +91,7 @@ const STORAGE_KEYS = {
   USERS: 'phuc_nguyen_me_users_v1',
   PROJECTS: 'phuc_nguyen_me_projects_v1',
   SUPPLIERS: 'phuc_nguyen_me_suppliers_v1',
+  MATERIALS: 'phuc_nguyen_me_materials_v1',
   CURRENT_USER_ID: 'phuc_nguyen_me_current_user_v1',
 };
 
@@ -137,6 +141,28 @@ export default function App() {
     return INITIAL_SUPPLIERS;
   });
 
+  const [materials, setMaterials] = useState<MaterialItem[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.MATERIALS);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((item: any, idx: number) => {
+            const fallback = INITIAL_MATERIALS.find((m) => m.code === item.code) || INITIAL_MATERIALS[idx % INITIAL_MATERIALS.length];
+            return {
+              ...item,
+              warehouseLocation: item.warehouseLocation || fallback?.warehouseLocation || 'Kho Tổng Dĩ An (Bình Dương)',
+              stockQuantity: typeof item.stockQuantity === 'number' ? item.stockQuantity : (fallback?.stockQuantity ?? 50),
+              minStock: typeof item.minStock === 'number' ? item.minStock : (fallback?.minStock ?? 10),
+              shelfLocation: item.shelfLocation || fallback?.shelfLocation || '',
+            };
+          });
+        }
+      } catch (e) { /* ignore */ }
+    }
+    return INITIAL_MATERIALS;
+  });
+
   const [currentUserId, setCurrentUserId] = useState<string>(() => {
     return localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID) || 'u-1';
   });
@@ -162,6 +188,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers));
   }, [suppliers]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.MATERIALS, JSON.stringify(materials));
+  }, [materials]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, currentUserId);
@@ -485,6 +515,34 @@ export default function App() {
     showToast(`Đã cấp quyền đăng nhập cho: ${newUser.name}`);
   };
 
+  // Material Handlers (Mã VT 0001+ & Snap Tool)
+  const handleAddMaterial = (newMat: MaterialItem) => {
+    setMaterials((prev) => [newMat, ...prev]);
+    showToast(`Đã thêm vật tư mới [${newMat.code}]: ${newMat.name}`);
+  };
+
+  const handleEditMaterial = (updatedMat: MaterialItem) => {
+    setMaterials((prev) => prev.map((m) => (m.id === updatedMat.id ? updatedMat : m)));
+    showToast(`Đã cập nhật vật tư [${updatedMat.code}]`);
+  };
+
+  const handleDeleteMaterial = (materialId: string) => {
+    const target = materials.find((m) => m.id === materialId);
+    setMaterials((prev) => prev.filter((m) => m.id !== materialId));
+    showToast(`Đã xóa vật tư [${target?.code || materialId}]`);
+  };
+
+  const handleUpdateMaterialImage = (materialCode: string, imageUrl: string) => {
+    setMaterials((prev) =>
+      prev.map((m) =>
+        m.code.toLowerCase().trim() === materialCode.toLowerCase().trim()
+          ? { ...m, imageUrl }
+          : m
+      )
+    );
+    showToast(`Đã cập nhật ảnh nhận dạng cho [${materialCode}] từ Snap Tool!`);
+  };
+
   // Restore database
   const handleRestoreData = (data: {
     expenses: ExpenseItem[];
@@ -505,6 +563,7 @@ export default function App() {
     setProjects(INITIAL_PROJECTS);
     setSuppliers(INITIAL_SUPPLIERS);
     setUsers(INITIAL_USERS);
+    setMaterials(INITIAL_MATERIALS);
     setCurrentUserId('u-1');
     localStorage.clear();
     showToast('Đã khôi phục dữ liệu ban đầu của Phúc Nguyên M&E');
@@ -521,6 +580,7 @@ export default function App() {
     {
       id: 'materials' as ActiveTab,
       label: 'SẢN PHẨM & VẬT TƯ',
+      badge: `${materials.length}`,
       icon: Package,
     },
     {
@@ -601,9 +661,6 @@ export default function App() {
           activeTab={activeTab}
           onTabChange={(tab) => {
             setActiveTab(tab);
-            if (tab === 'materials') {
-              setFilters((prev) => ({ ...prev, category: 'material' }));
-            }
           }}
           onOpenCreateModal={() => {
             setEditingExpense(null);
@@ -615,6 +672,7 @@ export default function App() {
           projectsCount={projects.length}
           suppliersCount={actualSuppliersCount}
           clientsCount={actualClientsCount}
+          materialsCount={materials.length}
           currentUser={currentUser}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -639,11 +697,6 @@ export default function App() {
                   key={tab.id}
                   onClick={() => {
                     setActiveTab(tab.id);
-                    if (tab.id === 'materials') {
-                      setFilters((prev) => ({ ...prev, category: 'material' }));
-                    } else if (tab.id === 'orders' || tab.id === 'transactions') {
-                      setFilters((prev) => ({ ...prev, category: 'all' }));
-                    }
                   }}
                   className={`px-3 py-2 rounded-md text-xs font-bold uppercase tracking-wide flex items-center gap-2 whitespace-nowrap transition-all ${
                     isActive
@@ -664,7 +717,42 @@ export default function App() {
           </div>
 
           {/* Conditional View by Active Tab */}
-          {activeTab === 'reports' ? (
+          {activeTab === 'materials' ? (
+            <MaterialsView
+              materials={materials}
+              expenses={expenses}
+              onAddMaterial={handleAddMaterial}
+              onEditMaterial={handleEditMaterial}
+              onDeleteMaterial={handleDeleteMaterial}
+              onSelectMaterialForPO={(mat) => {
+                setEditingExpense({
+                  id: `exp-${Date.now()}`,
+                  code: `PO-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+                  type: 'po',
+                  category: 'material',
+                  materialCode: mat.code,
+                  title: mat.name,
+                  subDescription: mat.specifications || '',
+                  projectId: projects[0]?.id || '',
+                  projectName: projects[0]?.name || '',
+                  supplier: mat.supplier || '',
+                  createdById: currentUser.id,
+                  createdByName: currentUser.name,
+                  createdByRole: currentUser.roleTitle,
+                  date: new Date().toISOString().split('T')[0],
+                  amount: mat.unitPrice,
+                  vatRate: 10,
+                  vatAmount: Math.round(mat.unitPrice * 0.1),
+                  totalAmount: Math.round(mat.unitPrice * 1.1),
+                  priority: 'normal',
+                  status: 'pending',
+                  paymentMethod: 'transfer',
+                  receiptImage: mat.imageUrl,
+                });
+                setIsExpenseModalOpen(true);
+              }}
+            />
+          ) : activeTab === 'reports' ? (
             <ChartsView
               expenses={expenses}
               projects={projects}
@@ -804,6 +892,8 @@ export default function App() {
         projects={projects}
         suppliers={suppliers}
         currentUser={currentUser}
+        materials={materials}
+        onUpdateMaterialImage={handleUpdateMaterialImage}
       />
 
       <ReceiptViewModal

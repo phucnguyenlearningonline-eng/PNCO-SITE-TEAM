@@ -138,6 +138,11 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
                       </div>
                     )}
                     <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                      {item.materialCode && (
+                        <span className="inline-flex items-center text-[10px] px-1.5 py-0.2 rounded font-mono font-bold bg-[#102742] text-sky-300 border border-sky-400">
+                          {item.materialCode}
+                        </span>
+                      )}
                       <span className={`inline-flex items-center text-[10px] px-2 py-0.2 rounded border font-medium ${getCategoryBadgeClass(item.category)}`}>
                         {getCategoryIcon(item.category)}
                         {getCategoryLabel(item.category)}

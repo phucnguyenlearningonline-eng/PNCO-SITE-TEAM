@@ -10,10 +10,14 @@ import {
   Utensils, 
   FileText,
   AlertTriangle,
-  Upload
+  Upload,
+  Scissors,
+  Sparkles,
+  ZoomIn
 } from 'lucide-react';
-import { ExpenseCategory, ExpenseItem, ExpenseType, PriorityLevel, Project, Supplier, User } from '../types';
+import { ExpenseCategory, ExpenseItem, ExpenseType, PriorityLevel, Project, Supplier, User, MaterialItem } from '../types';
 import { formatVND } from '../utils/formatters';
+import { SnapToolModal } from './SnapToolModal';
 
 interface ExpenseModalProps {
   isOpen: boolean;
@@ -23,6 +27,8 @@ interface ExpenseModalProps {
   projects: Project[];
   suppliers: Supplier[];
   currentUser: User;
+  materials?: MaterialItem[];
+  onUpdateMaterialImage?: (materialCode: string, imageUrl: string) => void;
 }
 
 export const ExpenseModal: React.FC<ExpenseModalProps> = ({
@@ -33,10 +39,13 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   projects,
   suppliers,
   currentUser,
+  materials = [],
+  onUpdateMaterialImage,
 }) => {
   const [code, setCode] = useState('');
   const [type, setType] = useState<ExpenseType>('expense');
   const [category, setCategory] = useState<ExpenseCategory>('material');
+  const [materialCode, setMaterialCode] = useState('');
   const [title, setTitle] = useState('');
   const [subDescription, setSubDescription] = useState('');
   const [projectId, setProjectId] = useState('');
@@ -48,12 +57,14 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'advance_fund'>('advance_fund');
   const [notes, setNotes] = useState('');
   const [receiptImage, setReceiptImage] = useState('');
+  const [isSnapModalOpen, setIsSnapModalOpen] = useState(false);
 
   useEffect(() => {
     if (initialData) {
       setCode(initialData.code);
       setType(initialData.type);
       setCategory(initialData.category);
+      setMaterialCode(initialData.materialCode || '');
       setTitle(initialData.title);
       setSubDescription(initialData.subDescription || '');
       setProjectId(initialData.projectId);
@@ -71,6 +82,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       setCode(type === 'po' ? `PO-2026-${randomNum}` : `EXP-2026-${randomNum}`);
       setType('expense');
       setCategory('material');
+      setMaterialCode('');
       setTitle('');
       setSubDescription('');
       setProjectId(projects[0]?.id || '');
@@ -92,6 +104,26 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
   const selectedProject = projects.find((p) => p.id === projectId) || projects[0];
 
+  // Tìm vật tư tương ứng khi người dùng nhập hoặc chọn mã VT
+  const matchedMaterial = materials.find(
+    (m) => m.code.toLowerCase().trim() === materialCode.toLowerCase().trim()
+  );
+
+  // Khi người dùng chọn mã vật tư từ dropdown / datalist
+  const handleSelectMaterialCode = (inputCode: string) => {
+    setMaterialCode(inputCode);
+    const found = materials.find(
+      (m) => m.code.toLowerCase().trim() === inputCode.toLowerCase().trim()
+    );
+    if (found) {
+      setTitle(found.name);
+      if (found.specifications) setSubDescription(found.specifications);
+      if (found.unitPrice && amount === 0) setAmount(found.unitPrice);
+      if (found.supplier) setSupplier(found.supplier);
+      if (found.imageUrl && !receiptImage) setReceiptImage(found.imageUrl);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || amount <= 0) {
@@ -104,6 +136,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       code: code || `EXP-2026-${Math.floor(1000 + Math.random() * 9000)}`,
       type,
       category,
+      materialCode: materialCode.trim() || undefined,
       title: title.trim(),
       subDescription: subDescription.trim(),
       projectId: selectedProject?.id || '',
@@ -121,7 +154,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       status: initialData?.status || 'pending',
       paymentMethod,
       notes: notes.trim(),
-      receiptImage: receiptImage || undefined,
+      receiptImage: receiptImage || matchedMaterial?.imageUrl || undefined,
     };
 
     onSave(newExpense);
@@ -343,6 +376,100 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
             </div>
           </div>
 
+          {/* Nhập Mã Vật Tư & Hình Ảnh Nhận Dạng Snap Tool */}
+          {category === 'material' && (
+            <div className="p-3.5 bg-slate-900 text-white rounded-xl border border-sky-500/50 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse" />
+                  <span className="text-xs font-bold text-sky-300 uppercase tracking-wide">
+                    Nhập Mã Vật Tư M&E (Mã VT 0001+) & Nhận Dạng Snap Tool
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsSnapModalOpen(true)}
+                  className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                >
+                  <Scissors className="w-3.5 h-3.5 text-white" />
+                  <span>Mở Snap Tool (Dán Ctrl+V / Chụp)</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                    Chọn nhanh từ danh mục hoặc nhập mã (VD: VT 0001, VT 0002...)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      list="materials-datalist"
+                      value={materialCode}
+                      onChange={(e) => handleSelectMaterialCode(e.target.value)}
+                      placeholder="Gõ mã VT (VD: VT 0001) hoặc chọn..."
+                      className="flex-1 py-1.5 px-3 text-xs font-mono font-bold text-sky-400 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-sky-500 focus:outline-none uppercase"
+                    />
+                    <datalist id="materials-datalist">
+                      {materials.map((m) => (
+                        <option key={m.id} value={m.code}>
+                          {m.code} - {m.name} ({formatVND(m.unitPrice)}/{m.unit})
+                        </option>
+                      ))}
+                    </datalist>
+
+                    <select
+                      value={materialCode}
+                      onChange={(e) => handleSelectMaterialCode(e.target.value)}
+                      className="py-1.5 px-2 text-xs bg-slate-800 text-slate-200 border border-slate-700 rounded-lg focus:ring-2 focus:ring-sky-500 max-w-[140px]"
+                    >
+                      <option value="">-- Danh mục VT --</option>
+                      {materials.map((m) => (
+                        <option key={m.id} value={m.code}>
+                          {m.code} - {m.name.slice(0, 18)}...
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Box Hình Ảnh Nhận Dạng Vật Tư */}
+                <div className="flex items-center gap-2.5 bg-slate-800/80 p-2 rounded-lg border border-slate-700">
+                  {matchedMaterial?.imageUrl || receiptImage ? (
+                    <div className="relative w-14 h-14 bg-slate-950 rounded border border-sky-400 overflow-hidden shrink-0 flex items-center justify-center">
+                      <img
+                        src={receiptImage || matchedMaterial?.imageUrl}
+                        alt="Ảnh nhận dạng"
+                        className="w-full h-full object-contain"
+                      />
+                      <span className="absolute bottom-0 inset-x-0 bg-black/85 text-[8px] text-white font-mono text-center">
+                        {materialCode || 'VT'}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="w-14 h-14 bg-slate-950 border border-dashed border-slate-600 rounded flex flex-col items-center justify-center text-slate-500 shrink-0">
+                      <Package className="w-5 h-5 text-slate-600" />
+                      <span className="text-[8px] mt-0.5">Chưa ảnh</span>
+                    </div>
+                  )}
+
+                  <div className="text-[11px] leading-tight">
+                    <div className="font-bold text-sky-400">Hình ảnh nhận dạng</div>
+                    <div className="text-slate-400 text-[10px] mt-0.5">
+                      {matchedMaterial ? 'Đã nhận dạng mã VT' : 'Dùng Snap Tool dán ảnh'}
+                    </div>
+                    {matchedMaterial && matchedMaterial.warehouseLocation && (
+                      <div className="text-emerald-400 text-[10px] font-medium mt-1">
+                        Tồn: {matchedMaterial.stockQuantity ?? 0} {matchedMaterial.unit} tại {matchedMaterial.warehouseLocation}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Tên hạng mục & Mô tả */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
@@ -543,6 +670,23 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
             </button>
           </div>
         </form>
+
+        {/* Snap Tool Modal */}
+        {isSnapModalOpen && (
+          <SnapToolModal
+            materialCode={materialCode || 'VT 0001'}
+            materialName={title || matchedMaterial?.name || 'Vật tư thi công site'}
+            currentImage={receiptImage || matchedMaterial?.imageUrl}
+            isOpen={isSnapModalOpen}
+            onClose={() => setIsSnapModalOpen(false)}
+            onApplyImage={(imageDataUrl) => {
+              setReceiptImage(imageDataUrl);
+              if (materialCode && onUpdateMaterialImage) {
+                onUpdateMaterialImage(materialCode, imageDataUrl);
+              }
+            }}
+          />
+        )}
       </div>
     </div>
   );
