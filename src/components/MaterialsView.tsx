@@ -8,7 +8,6 @@ import {
   Trash2,
   ExternalLink,
   ZoomIn,
-  CheckCircle2,
   X,
   Building2,
   Warehouse,
@@ -16,11 +15,12 @@ import {
   AlertTriangle,
   List,
   LayoutGrid,
-  Filter,
   DollarSign,
-  TrendingDown,
   Boxes,
-  Sparkles,
+  FileText,
+  Link as LinkIcon,
+  Store,
+  Layers,
 } from 'lucide-react';
 import { MaterialItem, ExpenseItem } from '../types';
 import { formatVND } from '../utils/formatters';
@@ -58,25 +58,36 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<MaterialItem | null>(null);
 
-  // Form states
+  // Form states theo đúng yêu cầu:
+  // - Mã: VT0001 đếm lên
+  // - Tên (Bắt buộc)
+  // - Setting là Số lượng (Bắt buộc)
+  // - Đơn vị (Bắt buộc)
+  // - Hình ảnh (chụp từ Snap Tool)
+  // - Link Catalogue
+  // - Nhà Cung Cấp (không bắt buộc)
+  // - Giá Tiền (không bắt buộc)
+  // - Kho lưu trữ & Vị trí kệ
   const [formCode, setFormCode] = useState('');
   const [formName, setFormName] = useState('');
-  const [formCategory, setFormCategory] = useState<MaterialItem['category']>('electrical');
+  const [formStockQuantity, setFormStockQuantity] = useState<number | string>(100);
   const [formUnit, setFormUnit] = useState('Mét');
-  const [formUnitPrice, setFormUnitPrice] = useState<number>(0);
+  const [formImageUrl, setFormImageUrl] = useState('');
+  const [formCatalogueUrl, setFormCatalogueUrl] = useState('');
+  const [formSupplier, setFormSupplier] = useState('');
+  const [formUnitPrice, setFormUnitPrice] = useState<number | string>('');
+  const [formCategory, setFormCategory] = useState<MaterialItem['category']>('electrical');
   const [formBrand, setFormBrand] = useState('');
   const [formSpecifications, setFormSpecifications] = useState('');
-  const [formImageUrl, setFormImageUrl] = useState('');
   const [formWarehouse, setFormWarehouse] = useState(STANDARD_WAREHOUSES[0]);
   const [formCustomWarehouse, setFormCustomWarehouse] = useState('');
-  const [formStockQuantity, setFormStockQuantity] = useState<number>(100);
-  const [formMinStock, setFormMinStock] = useState<number>(20);
   const [formShelfLocation, setFormShelfLocation] = useState('');
+  const [formMinStock, setFormMinStock] = useState<number | string>(15);
 
   // Zoom image state
   const [zoomImage, setZoomImage] = useState<{ url: string; code: string; name: string } | null>(null);
 
-  // Danh sách các kho thực tế đang có trong dữ liệu
+  // Danh sách các kho thực tế
   const existingWarehouses = useMemo(() => {
     const set = new Set<string>();
     materials.forEach((m) => {
@@ -111,18 +122,18 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     };
   }, [materials]);
 
-  // Tự động tính toán mã tiếp theo theo định dạng "VT 0001" trở lên
+  // Tự động tính toán mã tiếp theo theo định dạng "VT0001" trở lên
   const getNextMaterialCode = (): string => {
     let maxNumber = 0;
     materials.forEach((m) => {
-      const match = m.code.match(/VT\s*(\d+)/i);
+      const match = m.code.replace(/\s+/g, '').match(/^VT(\d+)$/i);
       if (match && match[1]) {
         const num = parseInt(match[1], 10);
         if (num > maxNumber) maxNumber = num;
       }
     });
-    const nextNum = maxNumber + 1;
-    return `VT ${String(nextNum).padStart(4, '0')}`;
+    const nextNum = maxNumber > 0 ? maxNumber + 1 : 1;
+    return `VT${String(nextNum).padStart(4, '0')}`;
   };
 
   const openAddModal = () => {
@@ -130,17 +141,19 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     setEditingMaterial(null);
     setFormCode(nextCode);
     setFormName('');
-    setFormCategory('electrical');
+    setFormStockQuantity(100);
     setFormUnit('Mét');
-    setFormUnitPrice(0);
+    setFormImageUrl('');
+    setFormCatalogueUrl('');
+    setFormSupplier('');
+    setFormUnitPrice('');
+    setFormCategory('electrical');
     setFormBrand('');
     setFormSpecifications('');
-    setFormImageUrl('');
     setFormWarehouse(STANDARD_WAREHOUSES[0]);
     setFormCustomWarehouse('');
-    setFormStockQuantity(100);
-    setFormMinStock(20);
     setFormShelfLocation('');
+    setFormMinStock(15);
     setIsFormModalOpen(true);
   };
 
@@ -148,29 +161,36 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     setEditingMaterial(m);
     setFormCode(m.code);
     setFormName(m.name);
-    setFormCategory(m.category);
+    setFormStockQuantity(m.stockQuantity ?? 0);
     setFormUnit(m.unit);
-    setFormUnitPrice(m.unitPrice);
+    setFormImageUrl(m.imageUrl || '');
+    setFormCatalogueUrl(m.catalogueUrl || '');
+    setFormSupplier(m.supplier || '');
+    setFormUnitPrice(m.unitPrice !== undefined ? m.unitPrice : '');
+    setFormCategory(m.category || 'electrical');
     setFormBrand(m.brand || '');
     setFormSpecifications(m.specifications || '');
-    setFormImageUrl(m.imageUrl || '');
     setFormWarehouse(m.warehouseLocation || STANDARD_WAREHOUSES[0]);
     setFormCustomWarehouse('');
-    setFormStockQuantity(m.stockQuantity ?? 0);
-    setFormMinStock(m.minStock ?? 10);
     setFormShelfLocation(m.shelfLocation || '');
+    setFormMinStock(m.minStock ?? 10);
     setIsFormModalOpen(true);
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formCode.trim() || !formName.trim()) return;
+    if (!formCode.trim() || !formName.trim() || !formUnit.trim()) return;
 
-    // Chuẩn hóa định dạng mã: nếu người dùng nhập VT0001 -> VT 0001
-    let normalizedCode = formCode.trim().toUpperCase();
-    if (/^VT\d+$/.test(normalizedCode)) {
-      const numPart = normalizedCode.replace('VT', '');
-      normalizedCode = `VT ${numPart.padStart(4, '0')}`;
+    // Chuẩn hóa mã vật tư theo định dạng VT0001, VT0002...
+    let cleanCode = formCode.trim().toUpperCase().replace(/\s+/g, '');
+    if (!cleanCode.startsWith('VT')) {
+      const numOnly = cleanCode.replace(/\D/g, '');
+      cleanCode = numOnly ? `VT${numOnly.padStart(4, '0')}` : getNextMaterialCode();
+    } else {
+      const numPart = cleanCode.replace('VT', '');
+      if (numPart) {
+        cleanCode = `VT${numPart.padStart(4, '0')}`;
+      }
     }
 
     const finalWarehouse =
@@ -178,38 +198,57 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
         ? formCustomWarehouse.trim()
         : formWarehouse;
 
+    const parsedPrice =
+      formUnitPrice === '' || formUnitPrice === null || isNaN(Number(formUnitPrice))
+        ? undefined
+        : Number(formUnitPrice);
+
+    const parsedStock =
+      formStockQuantity === '' || isNaN(Number(formStockQuantity))
+        ? 0
+        : Number(formStockQuantity);
+
+    const parsedMinStock =
+      formMinStock === '' || isNaN(Number(formMinStock))
+        ? 10
+        : Number(formMinStock);
+
     if (editingMaterial) {
       const updated: MaterialItem = {
         ...editingMaterial,
-        code: normalizedCode,
+        code: cleanCode,
         name: formName.trim(),
+        stockQuantity: parsedStock,
+        unit: formUnit.trim(),
+        imageUrl: formImageUrl.trim() || undefined,
+        catalogueUrl: formCatalogueUrl.trim() || undefined,
+        supplier: formSupplier.trim() || undefined,
+        unitPrice: parsedPrice,
         category: formCategory,
-        unit: formUnit.trim() || 'Cái',
-        unitPrice: Number(formUnitPrice) || 0,
-        brand: formBrand.trim(),
-        specifications: formSpecifications.trim(),
-        imageUrl: formImageUrl,
+        brand: formBrand.trim() || undefined,
+        specifications: formSpecifications.trim() || undefined,
         warehouseLocation: finalWarehouse || 'Kho Tổng Dĩ An (Bình Dương)',
-        stockQuantity: Number(formStockQuantity) || 0,
-        minStock: Number(formMinStock) || 0,
-        shelfLocation: formShelfLocation.trim(),
+        minStock: parsedMinStock,
+        shelfLocation: formShelfLocation.trim() || undefined,
       };
       onEditMaterial(updated);
     } else {
       const newMaterial: MaterialItem = {
         id: `mat-${Date.now()}`,
-        code: normalizedCode,
+        code: cleanCode,
         name: formName.trim(),
+        stockQuantity: parsedStock,
+        unit: formUnit.trim(),
+        imageUrl: formImageUrl.trim() || undefined,
+        catalogueUrl: formCatalogueUrl.trim() || undefined,
+        supplier: formSupplier.trim() || undefined,
+        unitPrice: parsedPrice,
         category: formCategory,
-        unit: formUnit.trim() || 'Cái',
-        unitPrice: Number(formUnitPrice) || 0,
-        brand: formBrand.trim(),
-        specifications: formSpecifications.trim(),
-        imageUrl: formImageUrl,
+        brand: formBrand.trim() || undefined,
+        specifications: formSpecifications.trim() || undefined,
         warehouseLocation: finalWarehouse || 'Kho Tổng Dĩ An (Bình Dương)',
-        stockQuantity: Number(formStockQuantity) || 0,
-        minStock: Number(formMinStock) || 0,
-        shelfLocation: formShelfLocation.trim(),
+        minStock: parsedMinStock,
+        shelfLocation: formShelfLocation.trim() || undefined,
       };
       onAddMaterial(newMaterial);
     }
@@ -258,6 +297,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
         m.code.toLowerCase().includes(q) ||
         m.name.toLowerCase().includes(q) ||
         (m.brand && m.brand.toLowerCase().includes(q)) ||
+        (m.supplier && m.supplier.toLowerCase().includes(q)) ||
         (m.warehouseLocation && m.warehouseLocation.toLowerCase().includes(q)) ||
         (m.shelfLocation && m.shelfLocation.toLowerCase().includes(q)) ||
         (m.specifications && m.specifications.toLowerCase().includes(q));
@@ -266,7 +306,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     });
   }, [materials, selectedCategory, selectedWarehouse, stockFilter, search]);
 
-  const getCategoryBadge = (category: MaterialItem['category']) => {
+  const getCategoryBadge = (category?: MaterialItem['category']) => {
     switch (category) {
       case 'electrical':
         return <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-100 text-sky-800 border border-sky-300">⚡ Điện & MSB</span>;
@@ -279,7 +319,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
       case 'hvac':
         return <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-teal-100 text-teal-800 border border-teal-300">❄️ HVAC Thông Gió</span>;
       default:
-        return <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-800 border border-slate-300">Vật tư khác</span>;
+        return <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-800 border border-slate-300">Cơ Điện M&E</span>;
     }
   };
 
@@ -310,13 +350,13 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
-                <span>QUẢN LÝ SẢN PHẨM & TỒN KHO VẬT TƯ M&E</span>
+                <span>QUẢN LÝ SẢN PHẨM & VẬT TƯ THI CÔNG M&E</span>
                 <span className="bg-sky-100 text-sky-800 text-xs px-2.5 py-0.5 rounded-full font-mono font-bold border border-sky-300">
-                  MÃ VT 0001+ ({materials.length})
+                  MÃ VT0001+ ({materials.length})
                 </span>
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Danh mục vật tư chuẩn hóa từ <strong className="text-sky-700 font-mono">VT 0001</strong>. Theo dõi <strong>đang tồn ở kho nào</strong>, số lượng tồn kho, vị trí kệ và nhận dạng qua <strong>Snap Tool</strong>.
+                Vật tư được thêm từ mã <strong className="text-sky-700 font-mono">VT0001</strong> đếm lên. Quản lý <strong>tên</strong>, <strong>setting số lượng</strong>, <strong>đơn vị</strong>, <strong>ảnh từ Snap Tool</strong>, <strong>link catalogue</strong>, <strong>nhà cung cấp</strong> &amp; <strong>giá tiền</strong>.
               </p>
             </div>
           </div>
@@ -372,7 +412,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             {stats.totalItems} <span className="text-xs font-normal text-slate-500">Mã VT</span>
           </div>
           <div className="text-[11px] text-slate-500 mt-0.5">
-            Từ <span className="font-mono font-bold text-sky-600">VT 0001</span> đến <span className="font-mono font-bold text-sky-600">{materials[materials.length - 1]?.code || 'VT 0014'}</span>
+            Mã tiếp theo: <span className="font-mono font-bold text-sky-600">{getNextMaterialCode()}</span>
           </div>
         </div>
 
@@ -385,20 +425,20 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             {formatVND(stats.totalStockValue)}
           </div>
           <div className="text-[11px] text-slate-500 mt-0.5">
-            Ước tính theo đơn giá tham khảo
+            Theo đơn giá đã khai báo
           </div>
         </div>
 
         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
           <div className="text-[11px] text-slate-500 font-medium uppercase flex items-center justify-between">
-            <span>Số Kho Đang Lưu Trữ</span>
+            <span>Điểm Kho Đang Tồn</span>
             <Warehouse className="w-4 h-4 text-indigo-600" />
           </div>
           <div className="text-xl font-extrabold text-slate-900 mt-1 font-mono">
             {existingWarehouses.length} <span className="text-xs font-normal text-slate-500">Điểm Kho</span>
           </div>
           <div className="text-[11px] text-indigo-600 font-semibold truncate mt-0.5" title="Kho Tổng Dĩ An & các Site công trường">
-            Kho Tổng Dĩ An & Kho Site
+            Kho Tổng Dĩ An &amp; Site Dự Án
           </div>
         </div>
 
@@ -426,7 +466,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm theo mã (VT 0001), tên vật tư, kho, kệ..."
+              placeholder="Tìm theo mã (VT0001), tên, NCC, kho, catalogue..."
               className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:bg-white"
             />
             {search && (
@@ -439,7 +479,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             )}
           </div>
 
-          {/* Lọc theo Kho Đang Lưu Trữ */}
+          {/* Lọc theo Kho Lưu Trữ */}
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-600 flex items-center gap-1 shrink-0">
               <Warehouse className="w-3.5 h-3.5 text-sky-600" />
@@ -518,7 +558,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            ⚡ Điện & MSB
+            ⚡ Điện &amp; MSB
           </button>
           <button
             onClick={() => setSelectedCategory('fire_protection')}
@@ -538,7 +578,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            📦 Máng & Thang cáp
+            📦 Máng &amp; Thang cáp
           </button>
           <button
             onClick={() => setSelectedCategory('water')}
@@ -563,41 +603,42 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
         </div>
       </div>
 
-      {/* VIEW CHÍNH: DẠNG DANH SÁCH (LIST VIEW) - BẢNG QUẢN LÝ KHO */}
+      {/* VIEW CHÍNH: DẠNG DANH SÁCH (LIST VIEW) */}
       {viewMode === 'list' ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[980px]">
+            <table className="w-full text-left border-collapse min-w-[1100px]">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">
-                  <th className="py-3 px-3 w-14 text-center">STT</th>
-                  <th className="py-3 px-3 w-28">Mã VT</th>
-                  <th className="py-3 px-3 w-20 text-center">Ảnh Nhận Dạng</th>
-                  <th className="py-3 px-4 min-w-[240px]">Tên Sản Phẩm & Quy Cách Kỹ Thuật</th>
-                  <th className="py-3 px-3 w-32">Phân Loại Hệ</th>
-                  <th className="py-3 px-3 w-20 text-center">ĐVT</th>
-                  <th className="py-3 px-3 w-28 text-right">Đơn Giá (VNĐ)</th>
-                  {/* CỘT NỔI BẬT: ĐANG TỒN Ở KHO NÀO & VỊ TRÍ */}
-                  <th className="py-3 px-4 min-w-[220px] bg-sky-50/60 text-sky-950 border-x border-sky-100">
+                  <th className="py-3 px-3 w-12 text-center">STT</th>
+                  <th className="py-3 px-3 w-24">Mã VT</th>
+                  <th className="py-3 px-3 w-20 text-center">Ảnh (Snap)</th>
+                  <th className="py-3 px-4 min-w-[220px]">Tên Vật Tư &amp; Quy Cách</th>
+                  <th className="py-3 px-3 w-28 text-center">Link Catalogue</th>
+                  <th className="py-3 px-3 min-w-[150px]">Nhà Cung Cấp</th>
+                  <th className="py-3 px-2 w-16 text-center">Đơn Vị</th>
+                  <th className="py-3 px-3 w-28 text-right">Giá Tiền</th>
+                  {/* CỘT THỂ HIỆN ĐANG TỒN Ở KHO NÀO */}
+                  <th className="py-3 px-4 min-w-[200px] bg-sky-50/60 text-sky-950 border-x border-sky-100">
                     <div className="flex items-center gap-1.5">
                       <Warehouse className="w-4 h-4 text-sky-600" />
-                      <span>Đang Tồn Ở Kho Nào & Kệ</span>
+                      <span>Đang Tồn Ở Kho Nào</span>
                     </div>
                   </th>
-                  {/* CỘT SỐ LƯỢNG TỒN */}
-                  <th className="py-3 px-3 w-32 text-right bg-sky-50/60 text-sky-950 border-r border-sky-100">
+                  {/* CỘT SETTING LÀ SỐ LƯỢNG */}
+                  <th className="py-3 px-3 w-28 text-right bg-sky-50/60 text-sky-950 border-r border-sky-100">
                     Số Lượng Tồn
                   </th>
-                  <th className="py-3 px-3 w-28 text-center">Thao Tác</th>
+                  <th className="py-3 px-3 w-24 text-center">Thao Tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
                 {filteredMaterials.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center text-slate-400">
+                    <td colSpan={11} className="py-12 text-center text-slate-400">
                       <Package className="w-10 h-10 mx-auto mb-2 text-slate-300" />
                       <p className="font-semibold text-slate-600 text-sm">Không tìm thấy vật tư nào phù hợp</p>
-                      <p className="text-xs text-slate-400 mt-1">Hãy thử xóa bộ lọc tìm kiếm hoặc thêm mới vật tư.</p>
+                      <p className="text-xs text-slate-400 mt-1">Bấm nút "+ Thêm Vật Tư Mới" để tạo mã tiếp theo.</p>
                     </td>
                   </tr>
                 ) : (
@@ -617,7 +658,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                           {index + 1}
                         </td>
 
-                        {/* Mã Vật Tư VT 0001+ */}
+                        {/* Mã VT0001+ */}
                         <td className="py-3 px-3">
                           <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#102742] text-sky-300 border border-sky-400 font-mono font-extrabold text-xs shadow-2xs">
                             <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
@@ -643,7 +684,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                               <button
                                 onClick={() => handleOpenSnapTool(m)}
                                 className="w-12 h-10 rounded border border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center text-slate-400 hover:bg-sky-50 hover:border-sky-400 hover:text-sky-600 transition-all"
-                                title="Bấm để chụp / dán ảnh nhận dạng (Snap Tool)"
+                                title="Bấm để chụp / dán ảnh từ Snap Tool"
                               >
                                 <Scissors className="w-3.5 h-3.5" />
                                 <span className="text-[8px] font-bold mt-0.5">Snap</span>
@@ -654,7 +695,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                               <button
                                 onClick={() => handleOpenSnapTool(m)}
                                 className="absolute -bottom-1 -right-1 p-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white shadow opacity-0 group-hover/img:opacity-100 transition-opacity"
-                                title="Chụp lại / dán ảnh khác"
+                                title="Chụp lại / dán ảnh nhận dạng khác (Snap Tool)"
                               >
                                 <Scissors className="w-2.5 h-2.5" />
                               </button>
@@ -667,11 +708,14 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                           <div className="font-bold text-slate-900 text-xs hover:text-sky-700 transition-colors">
                             {m.name}
                           </div>
-                          {m.brand && (
-                            <span className="inline-block mt-0.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide bg-slate-100 px-1.5 py-0.2 rounded mr-2">
-                              Hãng: {m.brand}
-                            </span>
-                          )}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                            {getCategoryBadge(m.category)}
+                            {m.brand && (
+                              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide bg-slate-100 px-1.5 py-0.2 rounded">
+                                {m.brand}
+                              </span>
+                            )}
+                          </div>
                           {m.specifications && (
                             <div className="text-[11px] text-slate-500 line-clamp-1 mt-0.5" title={m.specifications}>
                               {m.specifications}
@@ -679,37 +723,73 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                           )}
                         </td>
 
-                        {/* Phân loại */}
-                        <td className="py-3 px-3">
-                          {getCategoryBadge(m.category)}
+                        {/* Link Catalogue */}
+                        <td className="py-3 px-3 text-center">
+                          {m.catalogueUrl ? (
+                            <a
+                              href={m.catalogueUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded bg-sky-50 hover:bg-sky-100 text-sky-700 hover:text-sky-900 border border-sky-200 text-[11px] font-bold transition-all shadow-2xs"
+                              title={`Xem catalogue: ${m.catalogueUrl}`}
+                            >
+                              <FileText className="w-3 h-3 text-sky-600" />
+                              <span>Xem Cat</span>
+                              <ExternalLink className="w-2.5 h-2.5 text-sky-500" />
+                            </a>
+                          ) : (
+                            <button
+                              onClick={() => openEditModal(m)}
+                              className="text-[11px] text-slate-400 hover:text-sky-600 inline-flex items-center gap-1 italic"
+                              title="Bấm để bổ sung Link Catalogue"
+                            >
+                              <LinkIcon className="w-3 h-3" />
+                              <span>+ Thêm</span>
+                            </button>
+                          )}
                         </td>
 
-                        {/* ĐVT */}
-                        <td className="py-3 px-3 text-center">
+                        {/* Nhà Cung Cấp (không bắt buộc) */}
+                        <td className="py-3 px-3">
+                          {m.supplier ? (
+                            <div className="flex items-center gap-1.5 text-slate-700">
+                              <Store className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="font-medium text-[11px] line-clamp-2" title={m.supplier}>
+                                {m.supplier}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[11px] italic">Chưa xác định</span>
+                          )}
+                        </td>
+
+                        {/* Đơn vị */}
+                        <td className="py-3 px-2 text-center">
                           <span className="font-bold font-mono text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px]">
                             {m.unit}
                           </span>
                         </td>
 
-                        {/* Đơn giá */}
+                        {/* Giá Tiền (không bắt buộc) */}
                         <td className="py-3 px-3 text-right">
-                          <span className="font-mono font-bold text-slate-800">
-                            {formatVND(m.unitPrice)}
-                          </span>
+                          {m.unitPrice !== undefined && m.unitPrice > 0 ? (
+                            <span className="font-mono font-bold text-slate-800">
+                              {formatVND(m.unitPrice)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[11px] italic">Liên hệ</span>
+                          )}
                         </td>
 
-                        {/* ĐANG TỒN Ở KHO NÀO & VỊ TRÍ KỆ (ĐIỂM NHẤN CHÍNH) */}
+                        {/* THỂ HIỆN ĐANG TỒN Ở KHO NÀO & VỊ TRÍ */}
                         <td className="py-3 px-4 bg-sky-50/30 border-x border-sky-100">
                           <div className="space-y-1">
-                            {/* Tên Kho */}
                             <div className="flex items-center gap-1.5">
                               <Building2 className="w-3.5 h-3.5 text-sky-700 shrink-0" />
                               <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${getWarehouseBadgeClass(m.warehouseLocation || '')}`}>
                                 {m.warehouseLocation || 'Kho Tổng Dĩ An (Bình Dương)'}
                               </span>
                             </div>
-
-                            {/* Vị trí kệ / ô bãi */}
                             {m.shelfLocation && (
                               <div className="flex items-center gap-1 text-[11px] text-slate-500 pl-5">
                                 <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
@@ -719,7 +799,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                           </div>
                         </td>
 
-                        {/* SỐ LƯỢNG TỒN & TRẠNG THÁI */}
+                        {/* SETTING LÀ SỐ LƯỢNG (SỐ LƯỢNG TỒN) */}
                         <td className="py-3 px-3 text-right bg-sky-50/30 border-r border-sky-100">
                           <div className="font-mono font-extrabold text-sm text-slate-900">
                             {qty.toLocaleString('vi-VN')} <span className="text-xs font-semibold text-slate-500">{m.unit}</span>
@@ -756,7 +836,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                             <button
                               onClick={() => openEditModal(m)}
                               className="p-1.5 rounded-md text-amber-600 hover:bg-amber-100 transition-colors"
-                              title="Sửa thông tin & kho tồn"
+                              title="Sửa thông tin, số lượng &amp; kho tồn"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
@@ -813,7 +893,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
           </div>
         </div>
       ) : (
-        /* VIEW PHỤ: DẠNG LƯỚI THẺ (GRID CARDS) NẾU USER CẦN XEM HÌNH ẢNH TO */
+        /* VIEW PHỤ: DẠNG LƯỚI THẺ (GRID CARDS) */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredMaterials.map((m) => {
             const qty = m.stockQuantity ?? 0;
@@ -841,7 +921,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                       </div>
                     )}
 
-                    {/* Mã vật tư Badge nổi bật */}
+                    {/* Mã vật tư Badge VT0001+ */}
                     <div className="absolute top-2.5 left-2.5 bg-[#102742]/95 border border-sky-400 text-sky-300 font-mono font-extrabold text-xs px-2.5 py-1 rounded-md shadow-md backdrop-blur-xs flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
                       <span>{m.code}</span>
@@ -882,6 +962,30 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                       {m.name}
                     </h3>
 
+                    {/* Catalogue Link & Nhà cung cấp */}
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+                      {m.catalogueUrl ? (
+                        <a
+                          href={m.catalogueUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sky-600 hover:text-sky-800 font-bold inline-flex items-center gap-1 text-[11px]"
+                        >
+                          <FileText className="w-3 h-3" />
+                          <span>Catalogue</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 italic">Chưa có Cat</span>
+                      )}
+
+                      {m.supplier && (
+                        <span className="text-[11px] text-slate-600 font-medium truncate max-w-[120px]" title={m.supplier}>
+                          {m.supplier}
+                        </span>
+                      )}
+                    </div>
+
                     {/* Badge Kho Lưu Trữ */}
                     <div className="p-2 rounded-lg bg-sky-50/60 border border-sky-100 text-xs">
                       <div className="flex items-center gap-1 text-sky-800 font-bold truncate">
@@ -898,15 +1002,15 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
 
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                       <div>
-                        <div className="text-[10px] text-slate-400 font-medium">Tồn kho:</div>
+                        <div className="text-[10px] text-slate-400 font-medium">Setting số lượng:</div>
                         <div className="font-mono font-extrabold text-sm text-slate-900">
                           {qty.toLocaleString('vi-VN')} {m.unit}
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-[10px] text-slate-400 font-medium">Đơn giá tham khảo:</div>
+                        <div className="text-[10px] text-slate-400 font-medium">Giá tiền:</div>
                         <div className="font-mono font-bold text-sky-700 text-xs">
-                          {formatVND(m.unitPrice)}
+                          {m.unitPrice !== undefined && m.unitPrice > 0 ? formatVND(m.unitPrice) : 'Liên hệ'}
                         </div>
                       </div>
                     </div>
@@ -919,7 +1023,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                     <button
                       onClick={() => openEditModal(m)}
                       className="p-1.5 rounded text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-colors"
-                      title="Chỉnh sửa thông tin vật tư & kho"
+                      title="Chỉnh sửa thông tin vật tư &amp; kho"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
@@ -959,7 +1063,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             <div className="bg-[#102742] text-white px-5 py-4 flex items-center justify-between border-b border-slate-700">
               <h3 className="font-bold text-base flex items-center gap-2">
                 <Package className="w-5 h-5 text-sky-400" />
-                <span>{editingMaterial ? 'Chỉnh Sửa Vật Tư & Kho Tồn' : 'Thêm Mới Vật Tư Thi Công & Phân Kho'}</span>
+                <span>{editingMaterial ? `Chỉnh Sửa Vật Tư [${formCode}]` : `Thêm Mới Vật Tư [${formCode}]`}</span>
               </h3>
               <button onClick={() => setIsFormModalOpen(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
@@ -967,40 +1071,43 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             </div>
 
             <form onSubmit={handleFormSubmit} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+              {/* MÃ VẬT TƯ & PHÂN LOẠI HỆ */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 uppercase mb-1">
-                    Mã Vật Tư (Từ VT 0001+) <span className="text-rose-500">*</span>
+                    Mã Vật Tư (Từ VT0001 đếm lên) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
                     value={formCode}
                     onChange={(e) => setFormCode(e.target.value)}
-                    placeholder="VD: VT 0001, VT 0015..."
-                    className="w-full py-2 px-3 border border-slate-300 rounded-lg font-mono font-bold text-sky-800 focus:ring-2 focus:ring-sky-500"
+                    placeholder="VD: VT0001, VT0015..."
+                    className="w-full py-2 px-3 border border-slate-300 rounded-lg font-mono font-bold text-sky-800 focus:ring-2 focus:ring-sky-500 uppercase"
                   />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Hệ thống tự động đánh số tăng dần</span>
                 </div>
 
                 <div>
                   <label className="block font-bold text-slate-700 uppercase mb-1">
-                    Phân Loại Hệ M&E
+                    Phân Loại Hệ M&amp;E
                   </label>
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value as any)}
                     className="w-full py-2 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 font-semibold"
                   >
-                    <option value="electrical">⚡ Hệ Điện & Tủ cáp</option>
+                    <option value="electrical">⚡ Hệ Điện &amp; MSB</option>
                     <option value="fire_protection">🔥 Hệ PCCC Cứu hỏa</option>
                     <option value="cable_tray">📦 Thang Máng Cáp</option>
                     <option value="water">💧 Cấp Thoát Nước</option>
                     <option value="hvac">❄️ Hệ Thống HVAC / Thông Gió</option>
-                    <option value="other">Khác</option>
+                    <option value="other">Cơ điện khác</option>
                   </select>
                 </div>
               </div>
 
+              {/* TÊN SẢN PHẨM / VẬT TƯ (BẮT BUỘC) */}
               <div>
                 <label className="block font-bold text-slate-700 uppercase mb-1">
                   Tên Sản Phẩm / Vật Tư <span className="text-rose-500">*</span>
@@ -1010,16 +1117,114 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                   required
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder="VD: Cáp CADIVI CXV 3x120+1x70 mm2..."
+                  placeholder="VD: Cáp đồng CADIVI CXV 3x120+1x70 mm2..."
                   className="w-full py-2 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 text-sm font-semibold"
                 />
               </div>
 
-              {/* KHU VỰC QUẢN LÝ KHO & TỒN KHO */}
-              <div className="p-3.5 bg-sky-50/70 border border-sky-200 rounded-xl space-y-3">
-                <div className="flex items-center gap-1.5 text-sky-900 font-bold text-xs">
-                  <Warehouse className="w-4 h-4 text-sky-600" />
-                  <span>THÔNG TIN KHO LƯU TRỮ & VỊ TRÍ TỒN KHO</span>
+              {/* SETTING LÀ SỐ LƯỢNG & ĐƠN VỊ TÍNH (BẮT BUỘC) */}
+              <div className="grid grid-cols-2 gap-3 bg-sky-50/70 p-3 rounded-xl border border-sky-200">
+                <div>
+                  <label className="block font-bold text-slate-800 uppercase mb-1">
+                    Setting Số Lượng Tồn Kho <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={formStockQuantity}
+                    onChange={(e) => setFormStockQuantity(e.target.value)}
+                    placeholder="VD: 100, 250..."
+                    className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">Số lượng nhập tồn kho ban đầu</span>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 uppercase mb-1">
+                    Đơn Vị Tính (ĐVT) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formUnit}
+                    onChange={(e) => setFormUnit(e.target.value)}
+                    placeholder="VD: Mét, Cuộn, Cái, Bộ, Cây, Thùng..."
+                    className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white font-bold text-slate-800 focus:ring-2 focus:ring-sky-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">Đơn vị đo lường thi công</span>
+                </div>
+              </div>
+
+              {/* LINK CATALOGUE & NHÀ CUNG CẤP & GIÁ TIỀN */}
+              <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                {/* Link Catalogue */}
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase mb-1 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-sky-600" />
+                    <span>Link Catalogue (Tài liệu / PDF / Datasheet)</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="url"
+                      value={formCatalogueUrl}
+                      onChange={(e) => setFormCatalogueUrl(e.target.value)}
+                      placeholder="https://... (Link tải catalogue hoặc datasheet)"
+                      className="w-full py-2 pl-3 pr-8 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 bg-white"
+                    />
+                    {formCatalogueUrl && (
+                      <a
+                        href={formCatalogueUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sky-600 hover:text-sky-800"
+                        title="Mở thử liên kết"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Nhà Cung Cấp (không bắt buộc) */}
+                  <div>
+                    <label className="block font-bold text-slate-700 uppercase mb-1 flex items-center justify-between">
+                      <span>Nhà Cung Cấp</span>
+                      <span className="text-[10px] font-normal text-slate-400 lowercase">(không bắt buộc)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formSupplier}
+                      onChange={(e) => setFormSupplier(e.target.value)}
+                      placeholder="VD: Cty CADIVI, Fisa, Schneider..."
+                      className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+
+                  {/* Giá Tiền (không bắt buộc) */}
+                  <div>
+                    <label className="block font-bold text-slate-700 uppercase mb-1 flex items-center justify-between">
+                      <span>Giá Tiền (VNĐ)</span>
+                      <span className="text-[10px] font-normal text-slate-400 lowercase">(không bắt buộc)</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formUnitPrice}
+                      onChange={(e) => setFormUnitPrice(e.target.value)}
+                      placeholder="VD: 1050000 (để trống nếu liên hệ)"
+                      className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* KHO LƯU TRỮ & VỊ TRÍ KỆ (ĐANG TỒN Ở ĐÂU) */}
+              <div className="p-3 bg-amber-50/50 border border-amber-200 rounded-xl space-y-3">
+                <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
+                  <Warehouse className="w-4 h-4 text-amber-600" />
+                  <span>KHO LƯU TRỮ &amp; ĐIỂM TỒN KHO</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1069,76 +1274,36 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block font-bold text-slate-700 uppercase mb-1">
-                      Số Lượng Tồn Kho Hiện Tại <span className="text-rose-500">*</span>
+                      Mức Cảnh Báo Tồn Tối Thiểu
                     </label>
                     <input
                       type="number"
-                      required
                       min={0}
-                      value={formStockQuantity}
-                      onChange={(e) => setFormStockQuantity(Number(e.target.value))}
+                      value={formMinStock}
+                      onChange={(e) => setFormMinStock(e.target.value)}
                       className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500"
                     />
                   </div>
 
                   <div>
                     <label className="block font-bold text-slate-700 uppercase mb-1">
-                      Mức Tồn Cảnh Báo Tối Thiểu
+                      Thương Hiệu / Hãng
                     </label>
                     <input
-                      type="number"
-                      min={0}
-                      value={formMinStock}
-                      onChange={(e) => setFormMinStock(Number(e.target.value))}
-                      className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500"
+                      type="text"
+                      value={formBrand}
+                      onChange={(e) => setFormBrand(e.target.value)}
+                      placeholder="VD: CADIVI, Schneider, Viking..."
+                      className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 uppercase mb-1">
-                    Đơn Vị Tính (ĐVT)
-                  </label>
-                  <input
-                    type="text"
-                    value={formUnit}
-                    onChange={(e) => setFormUnit(e.target.value)}
-                    placeholder="Mét, Cái, Cuộn..."
-                    className="w-full py-2 px-3 border border-slate-300 rounded-lg font-semibold"
-                  />
-                </div>
-
-                <div className="col-span-2">
-                  <label className="block font-bold text-slate-700 uppercase mb-1">
-                    Đơn Giá Tham Khảo (VNĐ)
-                  </label>
-                  <input
-                    type="number"
-                    value={formUnitPrice}
-                    onChange={(e) => setFormUnitPrice(Number(e.target.value))}
-                    className="w-full py-2 px-3 border border-slate-300 rounded-lg font-mono font-bold text-slate-800"
-                  />
-                </div>
-              </div>
-
+              {/* QUY CÁCH KỸ THUẬT */}
               <div>
                 <label className="block font-bold text-slate-700 uppercase mb-1">
-                  Thương Hiệu / Nhà Sản Xuất
-                </label>
-                <input
-                  type="text"
-                  value={formBrand}
-                  onChange={(e) => setFormBrand(e.target.value)}
-                  placeholder="VD: CADIVI, Schneider, Hòa Phát, Viking..."
-                  className="w-full py-2 px-3 border border-slate-300 rounded-lg"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 uppercase mb-1">
-                  Quy Cách & Tiêu Chuẩn Kỹ Thuật
+                  Quy Cách &amp; Tiêu Chuẩn Kỹ Thuật
                 </label>
                 <textarea
                   rows={2}
@@ -1149,25 +1314,26 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                 />
               </div>
 
-              {/* Hình ảnh nhận dạng & Snap Tool Trigger */}
+              {/* HÌNH ẢNH CÓ THỂ CHỤP TỪ SNAP TOOL */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block font-bold text-slate-700 uppercase">
-                    Hình Ảnh Nhận Dạng (Snap Tool)
+                  <label className="block font-bold text-slate-700 uppercase flex items-center gap-1.5">
+                    <Scissors className="w-3.5 h-3.5 text-sky-600" />
+                    <span>Hình Ảnh Nhận Dạng (Chụp từ Snap Tool)</span>
                   </label>
                   <button
                     type="button"
                     onClick={() => {
                       setSnapTargetMaterial({
                         id: editingMaterial?.id || 'temp',
-                        code: formCode || 'VT 0001',
+                        code: formCode || 'VT0001',
                         name: formName || 'Vật tư mới',
                         category: formCategory,
                         unit: formUnit,
-                        unitPrice: formUnitPrice,
+                        unitPrice: typeof formUnitPrice === 'number' ? formUnitPrice : undefined,
                         imageUrl: formImageUrl,
                         warehouseLocation: formWarehouse,
-                        stockQuantity: formStockQuantity,
+                        stockQuantity: Number(formStockQuantity) || 0,
                         shelfLocation: formShelfLocation,
                       });
                       setIsSnapModalOpen(true);
@@ -1185,14 +1351,15 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setFormImageUrl('')}
-                      className="absolute top-2 right-2 bg-rose-600 text-white rounded p-1 text-xs hover:bg-rose-500"
+                      className="absolute top-2 right-2 bg-rose-600 text-white rounded p-1 text-xs hover:bg-rose-500 shadow"
+                      title="Xóa hình ảnh này"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ) : (
                   <div className="border border-dashed border-slate-300 rounded-lg p-3 text-center bg-slate-50 text-slate-500 text-xs">
-                    Chưa có hình ảnh. Bấm nút <strong>"Mở Snap Tool"</strong> ở trên để chụp màn hình hoặc tải ảnh nhận dạng.
+                    Chưa có hình ảnh. Bấm nút <strong>"Mở Snap Tool (Chụp / Dán Ctrl+V)"</strong> ở trên để chụp màn hình catalogue hoặc camera hiện trường.
                   </div>
                 )}
               </div>

@@ -106,14 +106,14 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
   // Tìm vật tư tương ứng khi người dùng nhập hoặc chọn mã VT
   const matchedMaterial = materials.find(
-    (m) => m.code.toLowerCase().trim() === materialCode.toLowerCase().trim()
+    (m) => m.code.replace(/\s+/g, '').toLowerCase() === materialCode.replace(/\s+/g, '').toLowerCase()
   );
 
   // Khi người dùng chọn mã vật tư từ dropdown / datalist
   const handleSelectMaterialCode = (inputCode: string) => {
     setMaterialCode(inputCode);
     const found = materials.find(
-      (m) => m.code.toLowerCase().trim() === inputCode.toLowerCase().trim()
+      (m) => m.code.replace(/\s+/g, '').toLowerCase() === inputCode.replace(/\s+/g, '').toLowerCase()
     );
     if (found) {
       setTitle(found.name);
@@ -400,7 +400,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
                   <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
-                    Chọn nhanh từ danh mục hoặc nhập mã (VD: VT 0001, VT 0002...)
+                    Chọn nhanh từ danh mục hoặc nhập mã (VD: VT0001, VT0002...)
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -408,13 +408,13 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                       list="materials-datalist"
                       value={materialCode}
                       onChange={(e) => handleSelectMaterialCode(e.target.value)}
-                      placeholder="Gõ mã VT (VD: VT 0001) hoặc chọn..."
+                      placeholder="Gõ mã VT (VD: VT0001) hoặc chọn..."
                       className="flex-1 py-1.5 px-3 text-xs font-mono font-bold text-sky-400 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-sky-500 focus:outline-none uppercase"
                     />
                     <datalist id="materials-datalist">
                       {materials.map((m) => (
                         <option key={m.id} value={m.code}>
-                          {m.code} - {m.name} ({formatVND(m.unitPrice)}/{m.unit})
+                          {m.code} - {m.name} {m.unitPrice ? `(${formatVND(m.unitPrice)}/${m.unit})` : `(${m.unit})`}
                         </option>
                       ))}
                     </datalist>

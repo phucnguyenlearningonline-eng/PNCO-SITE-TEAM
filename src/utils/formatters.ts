@@ -1,7 +1,7 @@
 import { ExpenseCategory, ExpenseStatus, PriorityLevel, UserRole } from '../types';
 
-export function formatVND(amount: number): string {
-  if (isNaN(amount)) return '0 đ';
+export function formatVND(amount?: number | null): string {
+  if (amount === undefined || amount === null || isNaN(amount)) return '0 đ';
   return new Intl.NumberFormat('vi-VN').format(Math.round(amount)) + ' đ';
 }
 

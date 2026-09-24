@@ -8,10 +8,22 @@ export type PriorityLevel = 'normal' | 'high' | 'urgent';
 
 export type UserRole = 'director' | 'accountant' | 'supervisor' | 'site_engineer';
 
+export interface UserPermissions {
+  canApproveExpense?: boolean;
+  canCreateExpense?: boolean;
+  canManageMaterials?: boolean;
+  canManageSuppliers?: boolean;
+  canManageProjects?: boolean;
+  canManageUsers?: boolean; // Quyền phân quyền cho người khác
+  canExportReports?: boolean;
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
+  username?: string; // Tên đăng nhập (VD: Pncons)
+  password?: string; // Mật khẩu đăng nhập (VD: Minhatea1987@)
   role: UserRole;
   roleTitle: string;
   siteName: string;
@@ -19,6 +31,8 @@ export interface User {
   pin: string;
   phone: string;
   avatarColor: string;
+  isAuthorized: boolean; // Trạng thái phân quyền (chỉ Trần Anh Minh mặc định được phân quyền)
+  permissions?: UserPermissions;
 }
 
 export interface Project {
@@ -46,17 +60,18 @@ export interface Supplier {
 
 export interface MaterialItem {
   id: string;
-  code: string; // "VT 0001", "VT 0002", "VT 0003"...
-  name: string;
-  category: 'electrical' | 'fire_protection' | 'water' | 'hvac' | 'cable_tray' | 'other';
-  unit: string; // Mét, Cuộn, Cái, Bộ, Cây, Thùng...
-  unitPrice: number; // Đơn giá tham khảo (VNĐ)
+  code: string; // "VT0001", "VT0002", "VT0003"...
+  name: string; // Tên vật tư
+  stockQuantity: number; // Số lượng tồn kho
+  unit: string; // Đơn vị tính: Mét, Cuộn, Cái, Bộ, Cây, Thùng...
+  category?: 'electrical' | 'fire_protection' | 'water' | 'hvac' | 'cable_tray' | 'other';
+  imageUrl?: string; // Hình ảnh có thể chụp từ Snap Tool hoặc tải lên
+  catalogueUrl?: string; // Link Catalogue tài liệu kỹ thuật
+  supplier?: string; // Nhà Cung Cấp (không bắt buộc)
+  unitPrice?: number; // Giá Tiền (không bắt buộc)
   brand?: string; // CADIVI, Schneider, Hòa Phát, Viking...
   specifications?: string; // Quy cách kỹ thuật
-  imageUrl?: string; // Hình ảnh nhận dạng chụp từ snap tool hoặc tải lên
-  supplier?: string; // Nhà cung cấp tiêu chuẩn
-  warehouseLocation: string; // Tên kho đang tồn: "Kho Tổng Dĩ An (Bình Dương)", "Kho Công Trường VSIP II", etc.
-  stockQuantity: number; // Số lượng tồn kho hiện tại
+  warehouseLocation: string; // Tên kho đang tồn: "Kho Tổng Dĩ An", "Kho Site VSIP II"...
   minStock?: number; // Mức tồn an toàn tối thiểu
   shelfLocation?: string; // Vị trí kệ/khu vực lưu trữ
 }

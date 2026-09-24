@@ -25,6 +25,9 @@ import {
   UsersModal 
 } from './components/UsersModal';
 import { 
+  LoginModal 
+} from './components/LoginModal';
+import { 
   ProjectsView 
 } from './components/ProjectsView';
 import { 
@@ -93,6 +96,7 @@ const STORAGE_KEYS = {
   SUPPLIERS: 'phuc_nguyen_me_suppliers_v1',
   MATERIALS: 'phuc_nguyen_me_materials_v1',
   CURRENT_USER_ID: 'phuc_nguyen_me_current_user_v1',
+  IS_LOGGED_IN: 'phuc_nguyen_me_is_logged_in_v1',
 };
 
 export default function App() {
@@ -113,7 +117,46 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Chuẩn hóa và đồng bộ: Trần Anh Minh luôn có user: Pncons, pass: Minhatea1987@ và isAuthorized: true
+          return parsed.map((u: any) => {
+            const isMinh = u.id === 'u-1' || (u.name && u.name.toLowerCase().includes('trần anh minh')) || u.username === 'Pncons';
+            if (isMinh) {
+              return {
+                ...u,
+                name: 'Trần Anh Minh',
+                username: 'Pncons',
+                password: u.password || 'Minhatea1987@',
+                roleTitle: 'Quản Trị Hệ Thống & Chỉ Huy Trưởng Site',
+                isAuthorized: true,
+                permissions: u.permissions || {
+                  canApproveExpense: true,
+                  canCreateExpense: true,
+                  canManageMaterials: true,
+                  canManageSuppliers: true,
+                  canManageProjects: true,
+                  canManageUsers: true,
+                  canExportReports: true,
+                },
+              };
+            }
+            return {
+              ...u,
+              username: u.username || '',
+              password: u.password || '',
+              isAuthorized: u.isAuthorized !== undefined ? Boolean(u.isAuthorized) : false,
+              permissions: u.permissions || {
+                canApproveExpense: false,
+                canCreateExpense: false,
+                canManageMaterials: false,
+                canManageSuppliers: false,
+                canManageProjects: false,
+                canManageUsers: false,
+                canExportReports: false,
+              },
+            };
+          });
+        }
       } catch (e) { /* ignore */ }
     }
     return INITIAL_USERS;
@@ -148,9 +191,14 @@ export default function App() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map((item: any, idx: number) => {
-            const fallback = INITIAL_MATERIALS.find((m) => m.code === item.code) || INITIAL_MATERIALS[idx % INITIAL_MATERIALS.length];
+            const cleanCode = (item.code || '').replace(/\s+/g, '');
+            const fallback = INITIAL_MATERIALS.find((m) => m.code.replace(/\s+/g, '') === cleanCode) || INITIAL_MATERIALS[idx % INITIAL_MATERIALS.length];
             return {
               ...item,
+              code: cleanCode || `VT${String(idx + 1).padStart(4, '0')}`,
+              catalogueUrl: item.catalogueUrl || fallback?.catalogueUrl || '',
+              supplier: item.supplier || fallback?.supplier || '',
+              unitPrice: typeof item.unitPrice === 'number' ? item.unitPrice : fallback?.unitPrice,
               warehouseLocation: item.warehouseLocation || fallback?.warehouseLocation || 'Kho Tổng Dĩ An (Bình Dương)',
               stockQuantity: typeof item.stockQuantity === 'number' ? item.stockQuantity : (fallback?.stockQuantity ?? 50),
               minStock: typeof item.minStock === 'number' ? item.minStock : (fallback?.minStock ?? 10),
@@ -196,6 +244,24 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, currentUserId);
   }, [currentUserId]);
+
+  // Auth / Login state
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    return localStorage.getItem(STORAGE_KEYS.IS_LOGGED_IN) === 'true';
+  });
+
+  const handleLoginSuccess = (user: User) => {
+    setCurrentUserId(user.id);
+    setIsLoggedIn(true);
+    localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
+    showToast(`Đăng nhập thành công! Xin chào ${user.name}`);
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'false');
+    showToast('Đã đăng xuất khỏi hệ thống.');
+  };
 
   // UI state
   const [activeTab, setActiveTab] = useState<ActiveTab>('orders');
@@ -515,6 +581,11 @@ export default function App() {
     showToast(`Đã cấp quyền đăng nhập cho: ${newUser.name}`);
   };
 
+  const handleDeleteUser = (userId: string) => {
+    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    showToast('Đã xóa tài khoản nhân viên');
+  };
+
   // Material Handlers (Mã VT 0001+ & Snap Tool)
   const handleAddMaterial = (newMat: MaterialItem) => {
     setMaterials((prev) => [newMat, ...prev]);
@@ -651,6 +722,7 @@ export default function App() {
         onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
         isSupabaseConnected={isSupabaseConfigured()}
         onSwitchUser={handleSwitchUser}
+        onLogout={handleLogout}
         allUsers={users}
         projectsCount={projects.length}
       />
@@ -740,10 +812,10 @@ export default function App() {
                   createdByName: currentUser.name,
                   createdByRole: currentUser.roleTitle,
                   date: new Date().toISOString().split('T')[0],
-                  amount: mat.unitPrice,
+                  amount: mat.unitPrice || 0,
                   vatRate: 10,
-                  vatAmount: Math.round(mat.unitPrice * 0.1),
-                  totalAmount: Math.round(mat.unitPrice * 1.1),
+                  vatAmount: Math.round((mat.unitPrice || 0) * 0.1),
+                  totalAmount: Math.round((mat.unitPrice || 0) * 1.1),
                   priority: 'normal',
                   status: 'pending',
                   paymentMethod: 'transfer',
@@ -787,64 +859,139 @@ export default function App() {
               onDeleteProject={handleDeleteProject}
             />
           ) : activeTab === 'users' ? (
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
                 <div>
                   <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                     <ShieldCheck className="w-5 h-5 text-indigo-600" />
                     <span>QUẢN LÝ TÀI KHOẢN & PHÂN QUYỀN ĐĂNG NHẬP RIÊNG BIỆT</span>
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Hệ thống tài khoản phân tách độc lập: Kỹ thuật site, Giám sát, Kế toán kiểm tra và Ban giám đốc duyệt.
+                    Quản trị viên <strong className="text-sky-700">Trần Anh Minh (user: Pncons)</strong> được phân quyền sẵn. Các thành viên còn lại do Minh tự cấu hình &amp; cấp mật khẩu.
                   </p>
                 </div>
                 <button
                   onClick={() => setIsUsersModalOpen(true)}
-                  className="px-3.5 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm"
+                  className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
                 >
-                  <Users className="w-4 h-4" />
-                  <span>Quản lý phân quyền chi tiết</span>
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Cấu hình &amp; Phân quyền thành viên</span>
                 </button>
               </div>
 
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {users.map((u) => (
-                  <div
-                    key={u.id}
-                    className={`p-4 rounded-xl border transition-all ${
-                      u.id === currentUser.id
-                        ? 'border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-500'
-                        : 'border-slate-200 bg-white'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-9 h-9 rounded-full ${u.avatarColor} text-white font-bold flex items-center justify-center text-sm shadow-sm`}>
-                          {u.name.charAt(0)}
+              {/* Status summary banner */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
+                  <div className="text-slate-500 font-medium">Quản trị viên phân quyền:</div>
+                  <div className="font-bold text-slate-900 text-sm">Trần Anh Minh</div>
+                  <div className="font-mono text-sky-700 font-bold text-[11px]">User: Pncons | Mật khẩu: Minhatea1987@</div>
+                </div>
+                <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs space-y-1">
+                  <div className="text-emerald-700 font-medium">Tài khoản đã phân quyền:</div>
+                  <div className="font-black text-emerald-800 text-base">
+                    {users.filter(u => u.isAuthorized).length} / {users.length} tài khoản
+                  </div>
+                  <div className="text-[10px] text-emerald-600">Được phép đăng nhập hệ thống</div>
+                </div>
+                <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-1">
+                  <div className="text-amber-700 font-medium">Tài khoản chờ cấp quyền:</div>
+                  <div className="font-black text-amber-800 text-base">
+                    {users.filter(u => !u.isAuthorized).length} tài khoản
+                  </div>
+                  <div className="text-[10px] text-amber-600">Đang chờ Minh tạo user &amp; mật khẩu</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {users.map((u) => {
+                  const isMinh = u.username === 'Pncons' || u.name.toLowerCase().includes('trần anh minh');
+                  const isCurrent = u.id === currentUser.id;
+                  return (
+                    <div
+                      key={u.id}
+                      className={`p-4 rounded-xl border transition-all ${
+                        isCurrent
+                          ? 'border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-500 shadow-xs'
+                          : u.isAuthorized
+                          ? 'border-sky-200 bg-sky-50/10'
+                          : 'border-slate-200 bg-slate-50/40'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-10 h-10 rounded-xl ${u.avatarColor} text-white font-bold flex items-center justify-center text-sm shadow-sm shrink-0`}>
+                            {u.name.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5 flex-wrap">
+                              <span>{u.name}</span>
+                              {isMinh && (
+                                <span className="text-[10px] bg-sky-700 text-white px-1.5 py-0.2 rounded font-bold">
+                                  Admin
+                                </span>
+                              )}
+                              {isCurrent && (
+                                <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.2 rounded font-bold">
+                                  Hiện tại
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-600 font-medium">{u.roleTitle}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-bold text-slate-900 text-sm">{u.name}</div>
-                          <div className="text-[11px] text-sky-800 font-semibold">{u.roleTitle}</div>
+
+                        {u.isAuthorized || isMinh ? (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold border border-emerald-300 shrink-0">
+                            Đã Cấp Quyền
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold border border-amber-300 shrink-0">
+                            Chưa Cấp
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 text-xs text-slate-600 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Tên đăng nhập:</span>
+                          <span className="font-mono font-bold text-sky-800">
+                            {u.username ? u.username : <span className="text-slate-400 font-sans italic font-normal">Chưa cấp</span>}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Site phụ trách:</span>
+                          <span className="font-medium text-slate-800 truncate max-w-[170px]">{u.siteName}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Hạn mức chi:</span>
+                          <span className="font-mono font-semibold text-slate-900">{formatVND(u.monthlyLimit)}/tháng</span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleSwitchUser(u)}
-                        className={`text-xs px-2.5 py-1 rounded font-bold ${
-                          u.id === currentUser.id
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-slate-100 hover:bg-sky-600 hover:text-white text-slate-700'
-                        }`}
-                      >
-                        {u.id === currentUser.id ? 'Đang dùng' : 'Đăng nhập'}
-                      </button>
+
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <button
+                          onClick={() => setIsUsersModalOpen(true)}
+                          className="text-xs px-2.5 py-1 rounded-lg font-bold bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 transition-colors"
+                        >
+                          Phân Quyền
+                        </button>
+
+                        {(u.isAuthorized || isMinh) && (
+                          <button
+                            onClick={() => handleSwitchUser(u)}
+                            className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                              isCurrent
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-100 hover:bg-sky-600 hover:text-white text-slate-700'
+                            }`}
+                          >
+                            {isCurrent ? 'Đang dùng' : 'Đăng nhập'}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="mt-3 pt-2 border-t border-slate-100 text-xs text-slate-600 space-y-1">
-                      <div>Site: <strong className="text-slate-800">{u.siteName}</strong></div>
-                      <div>Hạn mức chi: <strong className="text-slate-800 font-mono">{new Intl.NumberFormat('vi-VN').format(u.monthlyLimit)} đ/tháng</strong></div>
-                      <div>Mã PIN: <span className="font-mono text-slate-500">•••• (Mặc định: {u.pin})</span></div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ) : (
@@ -913,6 +1060,14 @@ export default function App() {
         onUpdateUser={(updated) => {
           setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
         }}
+        onDeleteUser={handleDeleteUser}
+      />
+
+      {/* Login Gate Modal */}
+      <LoginModal
+        isOpen={!isLoggedIn}
+        users={users}
+        onLoginSuccess={handleLoginSuccess}
       />
 
       <BackupModal
