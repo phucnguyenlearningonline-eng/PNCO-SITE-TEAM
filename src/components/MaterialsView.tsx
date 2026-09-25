@@ -30,6 +30,7 @@ import {
 import { MaterialItem, ExpenseItem, Supplier } from '../types';
 import { formatVND } from '../utils/formatters';
 import { SnapToolModal } from './SnapToolModal';
+import { InlineImageCropper } from './InlineImageCropper';
 import { STANDARD_WAREHOUSES, PCCC_SUB_CATEGORIES, MNE_SUB_CATEGORIES } from '../data/materialsData';
 
 interface MaterialsViewProps {
@@ -1369,7 +1370,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                 </div>
               </div>
 
-              {/* HÀNG 4: NHÀ CUNG CẤP & ĐƠN GIÁ + DROPDOWN VAT (TIẾT KIỆM KHÔNG GIAN) */}
+              {/* HÀNG 4: NHÀ CUNG CẤP & THƯƠNG HIỆU / HÃNG (NGAY SAU NHÀ CUNG CẤP) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-2.5 bg-slate-50/80 rounded-xl border border-slate-200">
                 {/* Nhà Cung Cấp: Đúng 1 Text Box với Chức Năng Dropdown */}
                 <div>
@@ -1447,59 +1448,73 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                   </div>
                 </div>
 
-                {/* Đơn Giá & Dropdown VAT */}
+                {/* Thương Hiệu / Hãng: Đặt ngay sau Nhà Cung Cấp */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="font-bold text-slate-700 uppercase flex items-center gap-1 text-xs">
-                      <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Đơn Giá &amp; Thuế VAT</span>
-                    </label>
-                    <span className="text-[10px] text-emerald-700 font-semibold lowercase">
-                      (Dropdown VAT)
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-5 gap-1.5">
-                    <div className="col-span-3 relative">
-                      <input
-                        type="number"
-                        min={0}
-                        value={formUnitPrice}
-                        onChange={(e) => setFormUnitPrice(e.target.value)}
-                        placeholder="VD: 694000..."
-                        className="w-full py-1.5 pl-2.5 pr-8 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500 text-xs"
-                      />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px] pointer-events-none">
-                        VNĐ
-                      </span>
-                    </div>
-
-                    <div className="col-span-2">
-                      <select
-                        value={formVatRate}
-                        onChange={(e) => setFormVatRate(Number(e.target.value))}
-                        className="w-full py-1.5 px-2 border border-emerald-300 bg-emerald-50 rounded-lg font-bold text-emerald-900 text-xs focus:ring-2 focus:ring-emerald-500 cursor-pointer"
-                      >
-                        <option value={10}>VAT 10% (Chuẩn)</option>
-                        <option value={8}>VAT 8% (Ưu đãi)</option>
-                        <option value={0}>VAT 0% (Không thuế)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {formUnitPrice && Number(formUnitPrice) > 0 && (
-                    <div className="mt-1 text-[11px] text-emerald-700 font-medium flex items-center justify-between">
-                      <span>Gồm VAT ({formVatRate}%):</span>
-                      <span className="font-mono font-bold">
-                        {formatVND(Math.round(Number(formUnitPrice) * (1 + formVatRate / 100)))}
-                      </span>
-                    </div>
-                  )}
+                  <label className="block font-bold text-slate-700 uppercase mb-1">
+                    Thương Hiệu / Hãng
+                  </label>
+                  <input
+                    type="text"
+                    value={formBrand}
+                    onChange={(e) => setFormBrand(e.target.value)}
+                    placeholder="VD: CADIVI, Schneider, Viking, Tyco..."
+                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500 text-xs font-semibold text-slate-800"
+                  />
                 </div>
               </div>
 
-              {/* HÀNG 5: KHO LƯU TRỮ & VỊ TRÍ KỆ & THƯƠNG HIỆU */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-2.5 bg-amber-50/40 rounded-xl border border-amber-200/80">
+              {/* HÀNG 5: Ô GIÁ TIỀN & THUẾ VAT (ĐỂ BÊN DƯỚI) */}
+              <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-200/80">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700 uppercase flex items-center gap-1 text-xs">
+                    <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Đơn Giá &amp; Thuế VAT</span>
+                  </label>
+                  <span className="text-[10px] text-emerald-700 font-semibold lowercase">
+                    (Dropdown VAT)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                  <div className="sm:col-span-3 relative">
+                    <input
+                      type="number"
+                      min={0}
+                      value={formUnitPrice}
+                      onChange={(e) => setFormUnitPrice(e.target.value)}
+                      placeholder="VD: 694000 (để trống nếu báo giá sau)..."
+                      className="w-full py-1.5 pl-2.5 pr-8 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500 text-xs"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px] pointer-events-none">
+                      VNĐ
+                    </span>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <select
+                      value={formVatRate}
+                      onChange={(e) => setFormVatRate(Number(e.target.value))}
+                      className="w-full py-1.5 px-2 border border-emerald-300 bg-white rounded-lg font-bold text-emerald-900 text-xs focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                    >
+                      <option value={10}>VAT 10% (Chuẩn)</option>
+                      <option value={8}>VAT 8% (Ưu đãi)</option>
+                      <option value={0}>VAT 0% (Không thuế)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {formUnitPrice && Number(formUnitPrice) > 0 && (
+                  <div className="mt-1 text-[11px] text-emerald-700 font-medium flex items-center justify-between">
+                    <span>Gồm VAT ({formVatRate}%):</span>
+                    <span className="font-mono font-bold">
+                      {formatVND(Math.round(Number(formUnitPrice) * (1 + formVatRate / 100)))}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* HÀNG 6: KHO LƯU TRỮ & VỊ TRÍ KỆ / Ô BÃI */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-2.5 bg-amber-50/40 rounded-xl border border-amber-200/80">
                 <div>
                   <label className="block font-bold text-slate-700 uppercase mb-1 text-[11px]">
                     Kho Lưu Trữ <span className="text-rose-500">*</span>
@@ -1540,22 +1555,9 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                     className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500 text-xs"
                   />
                 </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 uppercase mb-1 text-[11px]">
-                    Thương Hiệu / Hãng
-                  </label>
-                  <input
-                    type="text"
-                    value={formBrand}
-                    onChange={(e) => setFormBrand(e.target.value)}
-                    placeholder="CADIVI, Schneider, Viking..."
-                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500 text-xs"
-                  />
-                </div>
               </div>
 
-              {/* HÀNG 6: LINK CATALOGUE & QUY CÁCH KỸ THUẬT */}
+              {/* HÀNG 7: LINK CATALOGUE & QUY CÁCH KỸ THUẬT */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
                   <label className="block font-bold text-slate-700 uppercase mb-1 text-[11px] flex items-center gap-1">
@@ -1598,57 +1600,13 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                 </div>
               </div>
 
-              {/* HÀNG 7: HÌNH ẢNH NHẬN DẠNG & SNAP TOOL (RẤT GỌN GÀNG) */}
-              <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-200">
-                <div className="flex items-center gap-2">
-                  {formImageUrl ? (
-                    <div className="relative w-9 h-9 rounded border border-slate-300 overflow-hidden bg-slate-900 shrink-0">
-                      <img src={formImageUrl} alt="" className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => setFormImageUrl('')}
-                        className="absolute inset-0 bg-black/60 text-white flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
-                        title="Xóa hình ảnh này"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-9 h-9 rounded border border-dashed border-slate-300 flex items-center justify-center text-slate-400 shrink-0 bg-white">
-                      <Scissors className="w-3.5 h-3.5" />
-                    </div>
-                  )}
-                  <div>
-                    <span className="font-bold text-slate-700 block text-[11px]">Hình Ảnh Nhận Dạng Vật Tư</span>
-                    <span className="text-[10px] text-slate-400">
-                      {formImageUrl ? 'Đã gán hình ảnh mẫu' : 'Chưa có ảnh (tùy chọn)'}
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSnapTargetMaterial({
-                      id: editingMaterial?.id || 'temp',
-                      code: formCode || 'VT0001',
-                      name: formName || 'Vật tư mới',
-                      category: formCategory,
-                      unit: formUnit,
-                      unitPrice: typeof formUnitPrice === 'number' ? formUnitPrice : undefined,
-                      imageUrl: formImageUrl,
-                      warehouseLocation: formWarehouse,
-                      stockQuantity: Number(formStockQuantity) || 0,
-                      shelfLocation: formShelfLocation,
-                    });
-                    setIsSnapModalOpen(true);
-                  }}
-                  className="text-xs text-sky-700 font-bold hover:text-sky-800 flex items-center gap-1 bg-white hover:bg-sky-50 px-2.5 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors shrink-0 cursor-pointer"
-                >
-                  <Scissors className="w-3.5 h-3.5 text-sky-600" />
-                  <span>Snap Tool (Chụp / Dán Ctrl+V)</span>
-                </button>
-              </div>
+              {/* HÀNG 8: CẮT HÌNH TRỰC TIẾP TẠI CỬA SỔ LUÔN (IN-WINDOW IMAGE CROPPER) */}
+              <InlineImageCropper
+                imageUrl={formImageUrl}
+                materialCode={formCode || 'VT0001'}
+                onChange={(url) => setFormImageUrl(url)}
+                isModalOpen={isFormModalOpen}
+              />
 
               <div className="flex justify-end gap-2 pt-3 border-t">
                 <button
