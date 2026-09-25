@@ -81,8 +81,8 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   // - Kho lưu trữ & Vị trí kệ
   const [formCode, setFormCode] = useState('');
   const [formName, setFormName] = useState('');
-  const [formStockQuantity, setFormStockQuantity] = useState<number | string>(100);
-  const [formUnit, setFormUnit] = useState('Mét');
+  const [formStockQuantity, setFormStockQuantity] = useState<number | string>(0);
+  const [formUnit, setFormUnit] = useState('Cái');
   const [formImageUrl, setFormImageUrl] = useState('');
   const [formCatalogueUrl, setFormCatalogueUrl] = useState('');
   const [formSupplier, setFormSupplier] = useState('');
@@ -92,10 +92,10 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   const [formSubCategory, setFormSubCategory] = useState('Sol Khí (Aerosol / FM200 / Novec)');
   const [formBrand, setFormBrand] = useState('');
   const [formSpecifications, setFormSpecifications] = useState('');
-  const [formWarehouse, setFormWarehouse] = useState(STANDARD_WAREHOUSES[0]);
+  const [formWarehouse, setFormWarehouse] = useState('Chưa phân kho (Tồn: 0)');
   const [formCustomWarehouse, setFormCustomWarehouse] = useState('');
   const [formShelfLocation, setFormShelfLocation] = useState('');
-  const [formMinStock, setFormMinStock] = useState<number | string>(15);
+  const [formMinStock, setFormMinStock] = useState<number | string>(0);
   const [isHangMucDropdownOpen, setIsHangMucDropdownOpen] = useState(false);
   const [isNccDropdownOpen, setIsNccDropdownOpen] = useState(false);
 
@@ -156,7 +156,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     setEditingMaterial(null);
     setFormCode(nextCode);
     setFormName('');
-    setFormStockQuantity(100);
+    setFormStockQuantity(0); // Luôn bắt đầu từ 0 khi thêm vật tư mới
     setFormUnit('Cái');
     setFormImageUrl('');
     setFormCatalogueUrl('');
@@ -167,10 +167,10 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     setFormSubCategory('Sol Khí (Aerosol / FM200 / Novec)');
     setFormBrand('');
     setFormSpecifications('');
-    setFormWarehouse(STANDARD_WAREHOUSES[0]);
+    setFormWarehouse('Chưa phân kho (Tồn: 0)');
     setFormCustomWarehouse('');
     setFormShelfLocation('');
-    setFormMinStock(15);
+    setFormMinStock(0);
     setIsHangMucDropdownOpen(false);
     setIsNccDropdownOpen(false);
     setIsFormModalOpen(true);
@@ -191,10 +191,10 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     setFormSubCategory(m.subCategory || '');
     setFormBrand(m.brand || '');
     setFormSpecifications(m.specifications || '');
-    setFormWarehouse(m.warehouseLocation || STANDARD_WAREHOUSES[0]);
+    setFormWarehouse(m.warehouseLocation || (m.stockQuantity === 0 ? 'Chưa phân kho (Tồn: 0)' : STANDARD_WAREHOUSES[0]));
     setFormCustomWarehouse('');
     setFormShelfLocation(m.shelfLocation || '');
-    setFormMinStock(m.minStock ?? 10);
+    setFormMinStock(m.minStock ?? 0);
     setIsHangMucDropdownOpen(false);
     setIsNccDropdownOpen(false);
     setIsFormModalOpen(true);
@@ -357,6 +357,9 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   };
 
   const getWarehouseBadgeClass = (warehouse: string) => {
+    if (!warehouse || warehouse.includes('Chưa phân kho') || warehouse.includes('Tồn: 0') || warehouse.includes('Chưa có')) {
+      return 'bg-slate-100 text-slate-500 border-slate-300';
+    }
     if (warehouse.includes('Kho Tổng') || warehouse.includes('Dĩ An')) {
       return 'bg-indigo-50 text-indigo-700 border-indigo-200';
     }
@@ -1200,15 +1203,55 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
               {/* HÀNG 1: MÃ VẬT TƯ & PHÂN LOẠI HỆ & HẠNG MỤC CHI TIẾT (DROPDOWN TIẾT KIỆM KHÔNG GIAN) */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
-                  <label className="block font-bold text-slate-700 uppercase mb-1">
-                    Mã Vật Tư <span className="text-rose-500">*</span>
+                  <label className="block font-bold text-slate-700 uppercase mb-1 flex items-center justify-between">
+                    <span>Mã Vật Tư <span className="text-rose-500">*</span></span>
+                    {formCode && materials.some((m) => m.code.replace(/\s+/g, '').toUpperCase() === formCode.trim().replace(/\s+/g, '').toUpperCase()) ? (
+                      <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300">
+                        Đã có trong bảng SP
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-500 font-medium">Mã mới</span>
+                    )}
                   </label>
                   <input
                     type="text"
                     required
                     value={formCode}
-                    onChange={(e) => setFormCode(e.target.value)}
-                    placeholder="VD: VT0001..."
+                    onChange={(e) => {
+                      const inputVal = e.target.value;
+                      setFormCode(inputVal);
+                      // Khi nhập mã vật tư mới thì số tồn kho phải là không (0),
+                      // chỉ khi nào vật tư có trong bảng sản phẩm thì mới thể hiện tồn kho
+                      if (!editingMaterial) {
+                        const clean = inputVal.trim().replace(/\s+/g, '').toUpperCase();
+                        const existing = materials.find(
+                          (m) => m.code.replace(/\s+/g, '').toUpperCase() === clean
+                        );
+                        if (existing) {
+                          setFormName(existing.name);
+                          setFormStockQuantity(existing.stockQuantity ?? 0);
+                          setFormUnit(existing.unit);
+                          setFormMinStock(existing.minStock ?? 0);
+                          if (existing.unitPrice !== undefined) setFormUnitPrice(existing.unitPrice);
+                          if (existing.vatRate !== undefined) setFormVatRate(existing.vatRate);
+                          if (existing.supplier) setFormSupplier(existing.supplier);
+                          if (existing.brand) setFormBrand(existing.brand);
+                          if (existing.specifications) setFormSpecifications(existing.specifications);
+                          if (existing.category) setFormCategory(existing.category);
+                          if (existing.subCategory) setFormSubCategory(existing.subCategory);
+                          if (existing.warehouseLocation) setFormWarehouse(existing.warehouseLocation);
+                          if (existing.shelfLocation) setFormShelfLocation(existing.shelfLocation);
+                          if (existing.imageUrl) setFormImageUrl(existing.imageUrl);
+                          if (existing.catalogueUrl) setFormCatalogueUrl(existing.catalogueUrl);
+                        } else {
+                          // Mã vật tư mới hoàn toàn -> số tồn kho phải là 0
+                          setFormStockQuantity(0);
+                          setFormMinStock(0);
+                          setFormWarehouse('Chưa phân kho (Tồn: 0)');
+                        }
+                      }
+                    }}
+                    placeholder="VD: VT0004..."
                     className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg font-mono font-bold text-sky-800 focus:ring-2 focus:ring-sky-500 uppercase bg-slate-50 focus:bg-white text-xs"
                   />
                 </div>
@@ -1327,8 +1370,17 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
               {/* HÀNG 3: TỒN KHO & ĐƠN VỊ TÍNH & CẢNH BÁO TỒN (GỌN GÀNG 3 CỘT) */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-sky-50/60 p-2.5 rounded-xl border border-sky-100">
                 <div>
-                  <label className="block font-bold text-slate-800 uppercase mb-1">
-                    Tồn Kho Ban Đầu <span className="text-rose-500">*</span>
+                  <label className="block font-bold text-slate-800 uppercase mb-1 flex items-center justify-between">
+                    <span>Tồn Kho Ban Đầu <span className="text-rose-500">*</span></span>
+                    {materials.some((m) => m.code.replace(/\s+/g, '').toUpperCase() === formCode.trim().replace(/\s+/g, '').toUpperCase()) ? (
+                      <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300">
+                        Đang có sẵn
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-500 font-bold bg-slate-200 px-1.5 py-0.2 rounded">
+                        Mã mới: Tồn = 0
+                      </span>
+                    )}
                   </label>
                   <input
                     type="number"
@@ -1336,9 +1388,14 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                     min={0}
                     value={formStockQuantity}
                     onChange={(e) => setFormStockQuantity(e.target.value)}
-                    placeholder="100..."
+                    placeholder="0"
                     className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500 text-xs"
                   />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    {Number(formStockQuantity) === 0
+                      ? 'Vật tư mới số tồn kho là 0 (chỉ tăng khi nhập kho)'
+                      : `Hiện đang có ${formStockQuantity} ${formUnit} trong kho`}
+                  </span>
                 </div>
 
                 <div>
@@ -1364,9 +1421,12 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                     min={0}
                     value={formMinStock}
                     onChange={(e) => setFormMinStock(e.target.value)}
-                    placeholder="10..."
+                    placeholder="0"
                     className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500 text-xs"
                   />
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Cảnh báo khi tồn kho &le; mức này
+                  </span>
                 </div>
               </div>
 
@@ -1524,7 +1584,8 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                     onChange={(e) => setFormWarehouse(e.target.value)}
                     className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500 font-medium text-xs"
                   >
-                    {existingWarehouses.map((wh) => (
+                    <option value="Chưa phân kho (Tồn: 0)">-- Chưa phân kho (Tồn: 0) --</option>
+                    {existingWarehouses.filter(w => w !== 'Chưa phân kho (Tồn: 0)').map((wh) => (
                       <option key={wh} value={wh}>
                         {wh}
                       </option>

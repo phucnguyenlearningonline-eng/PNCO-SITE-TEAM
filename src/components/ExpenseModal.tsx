@@ -753,8 +753,12 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                               <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
                                 {price > 0 ? formatVND(price) : <span className="text-slate-400 font-normal italic">Chưa có giá</span>}
                               </td>
-                              <td className="py-2 px-2.5 text-center font-mono text-slate-500">
-                                {mat.stockQuantity}
+                              <td className="py-2 px-2.5 text-center font-mono">
+                                {mat.stockQuantity && mat.stockQuantity > 0 ? (
+                                  <span className="font-bold text-slate-800">{mat.stockQuantity}</span>
+                                ) : (
+                                  <span className="text-slate-400 font-normal">0</span>
+                                )}
                               </td>
                             </tr>
                           );
