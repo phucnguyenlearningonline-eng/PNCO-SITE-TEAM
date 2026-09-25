@@ -331,18 +331,25 @@ export async function fetchUsersFromSupabase(): Promise<User[] | null> {
       return null;
     }
 
-    return (data || []).map((row: any): User => ({
-      id: row.id,
-      name: row.name,
-      email: row.email || '',
-      role: row.role || 'site_engineer',
-      roleTitle: row.role_title || '',
-      siteName: row.site_name || '',
-      monthlyLimit: Number(row.monthly_limit || 50000000),
-      pin: row.pin || '1234',
-      phone: row.phone || '',
-      avatarColor: row.avatar_color || 'bg-sky-600',
-    }));
+    return (data || []).map((row: any): User => {
+      const isMinh = row.id === 'u-1' || (row.name && row.name.toLowerCase().includes('trần anh minh')) || row.username === 'Pncons';
+      return {
+        id: row.id,
+        name: row.name,
+        email: row.email || '',
+        username: row.username || (isMinh ? 'Pncons' : ''),
+        password: row.password || (isMinh ? 'Minhatea1987@' : ''),
+        role: row.role || 'site_engineer',
+        roleTitle: row.role_title || '',
+        siteName: row.site_name || '',
+        monthlyLimit: Number(row.monthly_limit || 50000000),
+        pin: row.pin || '1234',
+        phone: row.phone || '',
+        avatarColor: row.avatar_color || 'bg-sky-600',
+        isAuthorized: row.is_authorized !== undefined ? Boolean(row.is_authorized) : isMinh,
+        permissions: row.permissions || undefined,
+      };
+    });
   } catch (err) {
     console.error('Failed to fetch users:', err);
     return null;
@@ -354,7 +361,7 @@ export async function upsertUserToSupabase(user: User): Promise<boolean> {
   if (!supabase) return false;
 
   try {
-    const payload = {
+    const payload: any = {
       id: user.id,
       name: user.name,
       email: user.email,
@@ -365,6 +372,10 @@ export async function upsertUserToSupabase(user: User): Promise<boolean> {
       pin: user.pin,
       phone: user.phone,
       avatar_color: user.avatarColor,
+      is_authorized: user.isAuthorized,
+      username: user.username,
+      password: user.password,
+      permissions: user.permissions,
     };
 
     const { error } = await supabase.from('site_users').upsert(payload);

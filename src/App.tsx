@@ -76,6 +76,7 @@ import {
   MaterialItem 
 } from './types';
 import { exportExpensesToExcel } from './utils/excelExport';
+import { formatVND } from './utils/formatters';
 import { 
   ShoppingCart, 
   Package, 

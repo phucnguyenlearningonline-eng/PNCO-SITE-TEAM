@@ -8,7 +8,6 @@ import {
   ShieldCheck, 
   AlertCircle, 
   CheckCircle2, 
-  Sparkles,
   ArrowRight,
   ShieldAlert
 } from 'lucide-react';
@@ -64,7 +63,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     // Kiểm tra trạng thái phân quyền
     if (!matchedUser.isAuthorized) {
       setErrorMessage(
-        `Tài khoản "${matchedUser.name}" chưa được phân quyền truy cập! Vui lòng liên hệ Quản trị viên Trần Anh Minh (User: Pncons) để được cấp quyền và mật khẩu.`
+        `Tài khoản "${matchedUser.name}" chưa được kích hoạt phân quyền! Vui lòng liên hệ Quản trị viên để được cấp quyền truy cập.`
       );
       setIsLoading(false);
       return;
@@ -85,12 +84,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setIsLoading(false);
       onLoginSuccess(matchedUser);
     }, 300);
-  };
-
-  const handleFillAdminCredentials = () => {
-    setUsername('Pncons');
-    setPassword('Minhatea1987@');
-    setErrorMessage(null);
   };
 
   return (
@@ -144,7 +137,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             {/* Username Input */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-                Tên Đăng Nhập / User Phân Quyền <span className="text-rose-500">*</span>
+                Tên Đăng Nhập / Email <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -154,7 +147,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Nhập user (VD: Pncons)"
+                  placeholder="Nhập tên đăng nhập hoặc email..."
                   required
                   autoFocus
                   className="w-full pl-9 pr-3 py-2.5 text-xs font-medium bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-sky-500 focus:outline-none transition-all placeholder:text-slate-400"
@@ -207,34 +200,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </button>
           </form>
 
-          {/* Hướng dẫn & Thông tin phân quyền mặc định */}
+          {/* Quy định bảo mật nội bộ */}
           <div className="pt-3 border-t border-slate-100">
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-              <div className="flex items-center gap-1.5 text-slate-800 font-bold text-xs">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>Tài Khoản Quản Trị &amp; Phân Quyền:</span>
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start gap-2.5 text-slate-600 text-xs">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="space-y-1 text-[11px] leading-relaxed">
+                <div className="font-semibold text-slate-800">Quy định truy cập nội bộ:</div>
+                <p className="text-slate-500">
+                  Tài khoản được phân quyền và cấp bảo mật bởi Quản trị viên hệ thống. Vui lòng liên hệ quản lý trực tiếp nếu bạn quên thông tin hoặc tài khoản chưa được kích hoạt.
+                </p>
               </div>
-
-              <div className="text-[11px] text-slate-600 bg-white p-2.5 rounded-lg border border-slate-200 font-mono space-y-1">
-                <div>Nhân viên: <strong className="text-slate-900 font-sans">Trần Anh Minh</strong></div>
-                <div className="flex items-center justify-between">
-                  <span>User: <strong className="text-sky-700 font-bold">Pncons</strong></span>
-                  <span>Pass: <strong className="text-emerald-700 font-bold">Minhatea1987@</strong></span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleFillAdminCredentials}
-                className="w-full py-1.5 px-2 rounded-lg bg-sky-100 hover:bg-sky-200 text-sky-900 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-sky-600" />
-                <span>Điền nhanh thông tin Quản trị viên (Pncons)</span>
-              </button>
-
-              <p className="text-[10px] text-slate-500 italic text-center pt-0.5">
-                * Chỉ Quản trị viên Trần Anh Minh được phân quyền sẵn. Các thành viên còn lại sẽ được Minh tự phân quyền trong hệ thống.
-              </p>
             </div>
           </div>
         </div>
