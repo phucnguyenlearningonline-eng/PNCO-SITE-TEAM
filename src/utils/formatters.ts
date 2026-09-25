@@ -116,3 +116,71 @@ export function getRoleLabel(role: UserRole): string {
       return 'Kỹ Thuật Viên Công Trường';
   }
 }
+
+const VIETNAMESE_DIGITS = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+
+function readGroupOfThree(threeDigits: string, showZeroHundred: boolean): string {
+  const [c1, c2, c3] = threeDigits.split('').map(Number);
+  let res = '';
+
+  if (c1 !== undefined) {
+    if (showZeroHundred || c1 > 0) {
+      res += `${VIETNAMESE_DIGITS[c1]} trăm `;
+    }
+  }
+
+  if (c2 !== undefined) {
+    if (c2 === 0) {
+      if (c3 !== 0 && (showZeroHundred || c1 > 0)) {
+        res += 'lẻ ';
+      }
+    } else if (c2 === 1) {
+      res += 'mười ';
+    } else {
+      res += `${VIETNAMESE_DIGITS[c2]} mươi `;
+    }
+  }
+
+  if (c3 !== undefined && c3 !== 0) {
+    if (c3 === 1 && c2 !== undefined && c2 > 1) {
+      res += 'mốt ';
+    } else if (c3 === 5 && c2 !== undefined && c2 > 0) {
+      res += 'lăm ';
+    } else {
+      res += `${VIETNAMESE_DIGITS[c3]} `;
+    }
+  }
+
+  return res.trim();
+}
+
+export function numberToWordsVN(total: number): string {
+  if (!total || isNaN(total) || total === 0) return 'Không đồng';
+  const num = Math.abs(Math.round(total));
+  const numStr = num.toString();
+  const groups: string[] = [];
+
+  for (let i = numStr.length; i > 0; i -= 3) {
+    groups.unshift(numStr.substring(Math.max(0, i - 3), i));
+  }
+
+  const scales = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ', 'triệu tỷ'];
+  let result = '';
+
+  groups.forEach((group, index) => {
+    const scaleIndex = groups.length - 1 - index;
+    const groupVal = parseInt(group, 10);
+    if (groupVal > 0) {
+      const showZero = index > 0;
+      const groupText = readGroupOfThree(group.padStart(3, '0'), showZero);
+      const scaleText = scales[scaleIndex] || '';
+      result += `${groupText} ${scaleText} `;
+    }
+  });
+
+  result = result.trim().replace(/\s+/g, ' ');
+  if (!result) return 'Không đồng';
+  const capitalized = result.charAt(0).toUpperCase() + result.slice(1);
+  return `${capitalized} đồng chẵn.`;
+}
+

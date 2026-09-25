@@ -122,6 +122,44 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       // Load selected items if available
       if (initialData.items && initialData.items.length > 0) {
         setSelectedOrderItems(initialData.items);
+      } else if (initialData.type === 'po' && initialData.subDescription && (initialData.subDescription.includes(';') || initialData.subDescription.includes('VT'))) {
+        const parts = initialData.subDescription.split(';').map((p) => p.trim()).filter(Boolean);
+        const parsedLines: OrderItemLine[] = [];
+        parts.forEach((part) => {
+          const codeMatch = part.match(/(VT\s*\d+)/i);
+          const code = codeMatch ? codeMatch[1].replace(/\s+/g, '').toUpperCase() : '';
+          const qtyMatch = part.match(/\(x\s*(\d+(?:\.\d+)?)\s*([^)]*)\)/i);
+          const quantity = qtyMatch ? parseFloat(qtyMatch[1]) : 1;
+          const parsedUnit = qtyMatch && qtyMatch[2] ? qtyMatch[2].trim() : '';
+
+          let name = part;
+          if (codeMatch) {
+            name = part.substring(part.indexOf(codeMatch[0]) + codeMatch[0].length).replace(/^[:\s-]+/, '');
+          }
+          if (qtyMatch) {
+            name = name.substring(0, name.indexOf(qtyMatch[0])).trim();
+          }
+          name = name.replace(/[,;]+$/, '').trim();
+
+          const matched = materials.find((m) => m.code.replace(/\s+/g, '').toUpperCase() === code);
+          const finalName = name || matched?.name || (code ? `Vật tư ${code}` : 'Sản phẩm M&E');
+          const finalUnit = parsedUnit || matched?.unit || 'Cái';
+          const unitPrice = typeof matched?.unitPrice === 'number' ? matched.unitPrice : 0;
+          parsedLines.push({
+            materialId: matched?.id,
+            code: code || matched?.code || 'VT',
+            name: finalName,
+            unit: finalUnit,
+            quantity,
+            unitPrice,
+            total: quantity * unitPrice,
+          });
+        });
+        if (parsedLines.length > 0) {
+          setSelectedOrderItems(parsedLines);
+        } else {
+          setSelectedOrderItems([]);
+        }
       } else if (initialData.type === 'po' && initialData.materialCode) {
         const found = materials.find(
           (m) => m.code.replace(/\s+/g, '').toLowerCase() === initialData.materialCode?.replace(/\s+/g, '').toLowerCase()

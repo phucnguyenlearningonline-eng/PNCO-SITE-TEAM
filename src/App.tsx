@@ -1142,7 +1142,9 @@ export default function App() {
         item={viewingReceipt}
         onClose={() => setViewingReceipt(null)}
         currentUser={currentUser}
+        materials={materials}
         onApprove={handleApprove}
+        onEdit={(item) => setEditingExpense(item)}
       />
 
       <UsersModal
