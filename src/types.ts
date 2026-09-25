@@ -78,14 +78,25 @@ export interface MaterialItem {
   shelfLocation?: string; // Vị trí kệ/khu vực lưu trữ
 }
 
+export interface OrderItemLine {
+  materialId?: string;
+  code: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
 export interface ExpenseItem {
   id: string;
-  code: string; // PO-2026-0224, EXP-2026-0105
+  code: string; // DH 0001, PO-2026-0224, EXP-2026-0105
   type: ExpenseType;
   category: ExpenseCategory;
   materialCode?: string; // VT 0001, VT 0002...
   title: string;
   subDescription?: string;
+  items?: OrderItemLine[]; // Danh sách sản phẩm mua hàng (cho đơn hàng PO)
   projectId: string;
   projectName: string;
   supplier: string;

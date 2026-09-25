@@ -116,38 +116,80 @@ export const ReceiptViewModal: React.FC<ReceiptViewModalProps> = ({
 
           {/* Line item details */}
           <div className="border border-slate-300 rounded-lg overflow-hidden text-xs">
-            <table className="w-full text-left">
-              <thead className="bg-slate-100 font-bold text-slate-700 border-b border-slate-300">
-                <tr>
-                  <th className="py-2.5 px-3">Nội dung chi tiết / Quy cách</th>
-                  <th className="py-2.5 px-3 text-right">Tiền hàng (trước VAT)</th>
-                  <th className="py-2.5 px-3 text-right">Thuế VAT ({item.vatRate}%)</th>
-                  <th className="py-2.5 px-3 text-right">Tổng thanh toán</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="py-3 px-3">
-                    <div className="font-bold text-slate-900">{item.title}</div>
-                    {item.subDescription && (
-                      <div className="text-slate-500 text-[11px] mt-0.5">{item.subDescription}</div>
-                    )}
-                    {item.notes && (
-                      <div className="text-slate-600 text-[11px] mt-1 bg-amber-50 p-1.5 rounded border border-amber-200">
-                        Ghi chú: {item.notes}
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-3 px-3 text-right font-mono font-medium">{formatVND(item.amount)}</td>
-                  <td className="py-3 px-3 text-right font-mono text-rose-600 font-medium">
-                    {formatVND(item.vatAmount)}
-                  </td>
-                  <td className="py-3 px-3 text-right font-mono font-bold text-slate-950 text-sm">
-                    {formatVND(item.totalAmount)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            {item.items && item.items.length > 0 ? (
+              <table className="w-full text-left">
+                <thead className="bg-slate-100 font-bold text-slate-700 border-b border-slate-300 text-[11px] uppercase">
+                  <tr>
+                    <th className="py-2.5 px-3 text-center w-10">STT</th>
+                    <th className="py-2.5 px-3">Mã VT & Tên Sản Phẩm</th>
+                    <th className="py-2.5 px-2 text-center w-16">ĐVT</th>
+                    <th className="py-2.5 px-2 text-center w-16">Số lượng</th>
+                    <th className="py-2.5 px-3 text-right">Đơn giá</th>
+                    <th className="py-2.5 px-3 text-right">Thành tiền</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {item.items.map((line, idx) => (
+                    <tr key={idx}>
+                      <td className="py-2 px-3 text-center font-mono text-slate-500">{idx + 1}</td>
+                      <td className="py-2 px-3 font-semibold text-slate-900">
+                        <span className="font-mono font-bold text-sky-800 mr-1.5">[{line.code}]</span>
+                        {line.name}
+                      </td>
+                      <td className="py-2 px-2 text-center text-slate-600">{line.unit}</td>
+                      <td className="py-2 px-2 text-center font-mono font-bold text-slate-800">{line.quantity}</td>
+                      <td className="py-2 px-3 text-right font-mono text-slate-700">{formatVND(line.unitPrice)}</td>
+                      <td className="py-2 px-3 text-right font-mono font-bold text-emerald-800">{formatVND(line.total)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-slate-50 font-medium">
+                    <td colSpan={4} className="py-2 px-3 text-right text-slate-600">Tiền hàng (chưa VAT):</td>
+                    <td colSpan={2} className="py-2 px-3 text-right font-mono font-bold">{formatVND(item.amount)}</td>
+                  </tr>
+                  <tr className="bg-slate-50 font-medium">
+                    <td colSpan={4} className="py-2 px-3 text-right text-rose-600">Thuế VAT ({item.vatRate}%):</td>
+                    <td colSpan={2} className="py-2 px-3 text-right font-mono font-bold text-rose-600">{formatVND(item.vatAmount)}</td>
+                  </tr>
+                  <tr className="bg-slate-100 font-bold border-t border-slate-300">
+                    <td colSpan={4} className="py-2.5 px-3 text-right uppercase text-slate-900">Tổng thanh toán:</td>
+                    <td colSpan={2} className="py-2.5 px-3 text-right font-mono font-black text-emerald-800 text-sm">{formatVND(item.totalAmount)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            ) : (
+              <table className="w-full text-left">
+                <thead className="bg-slate-100 font-bold text-slate-700 border-b border-slate-300">
+                  <tr>
+                    <th className="py-2.5 px-3">Nội dung chi tiết / Quy cách</th>
+                    <th className="py-2.5 px-3 text-right">Tiền hàng (trước VAT)</th>
+                    <th className="py-2.5 px-3 text-right">Thuế VAT ({item.vatRate}%)</th>
+                    <th className="py-2.5 px-3 text-right">Tổng thanh toán</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="py-3 px-3">
+                      <div className="font-bold text-slate-900">{item.title}</div>
+                      {item.subDescription && (
+                        <div className="text-slate-500 text-[11px] mt-0.5">{item.subDescription}</div>
+                      )}
+                      {item.notes && (
+                        <div className="text-slate-600 text-[11px] mt-1 bg-amber-50 p-1.5 rounded border border-amber-200">
+                          Ghi chú: {item.notes}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono font-medium">{formatVND(item.amount)}</td>
+                    <td className="py-3 px-3 text-right font-mono text-rose-600 font-medium">
+                      {formatVND(item.vatAmount)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono font-bold text-slate-950 text-sm">
+                      {formatVND(item.totalAmount)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
           </div>
 
           {/* Signatures */}

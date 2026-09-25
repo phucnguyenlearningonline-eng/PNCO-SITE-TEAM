@@ -16,7 +16,8 @@ import {
   ExpenseTable 
 } from './components/ExpenseTable';
 import { 
-  ExpenseModal 
+  ExpenseModal,
+  getNextOrderCode 
 } from './components/ExpenseModal';
 import { 
   ReceiptViewModal 
@@ -875,21 +876,31 @@ export default function App() {
               onEditMaterial={handleEditMaterial}
               onDeleteMaterial={handleDeleteMaterial}
               onSelectMaterialForPO={(mat) => {
+                const nextCode = getNextOrderCode(expenses);
                 const vatRate = typeof mat.vatRate === 'number' ? mat.vatRate : 10;
                 const unitPrice = mat.unitPrice || 0;
                 const vatAmount = Math.round(unitPrice * (vatRate / 100));
                 const totalAmount = unitPrice + vatAmount;
                 setEditingExpense({
-                  id: `exp-${Date.now()}`,
-                  code: `PO-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+                  id: `po-${Date.now()}`,
+                  code: nextCode,
                   type: 'po',
                   category: 'material',
                   materialCode: mat.code,
-                  title: mat.name,
-                  subDescription: [mat.subCategory, mat.specifications].filter(Boolean).join(' - '),
+                  title: `${mat.name} (x1 ${mat.unit})`,
+                  subDescription: `${mat.code}: ${mat.name} (x1 ${mat.unit})`,
+                  items: [{
+                    materialId: mat.id,
+                    code: mat.code,
+                    name: mat.name,
+                    unit: mat.unit,
+                    quantity: 1,
+                    unitPrice: unitPrice,
+                    total: unitPrice,
+                  }],
                   projectId: projects[0]?.id || '',
                   projectName: projects[0]?.name || '',
-                  supplier: mat.supplier || '',
+                  supplier: mat.supplier || 'Nhà cung cấp vật tư Phúc Nguyên',
                   createdById: currentUser.id,
                   createdByName: currentUser.name,
                   createdByRole: currentUser.roleTitle,
@@ -1122,7 +1133,9 @@ export default function App() {
         suppliers={suppliers}
         currentUser={currentUser}
         materials={materials}
+        expenses={expenses}
         onUpdateMaterialImage={handleUpdateMaterialImage}
+        defaultType={activeTab === 'orders' ? 'po' : 'expense'}
       />
 
       <ReceiptViewModal

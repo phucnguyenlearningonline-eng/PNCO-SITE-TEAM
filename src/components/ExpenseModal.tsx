@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, 
   Save, 
@@ -10,14 +10,47 @@ import {
   Utensils, 
   FileText,
   AlertTriangle,
-  Upload,
   Scissors,
-  Sparkles,
-  ZoomIn
+  Search,
+  Check,
+  CheckSquare,
+  Square,
+  Plus,
+  Minus,
+  Trash2,
+  ShoppingCart,
+  Layers,
+  ArrowRight
 } from 'lucide-react';
-import { ExpenseCategory, ExpenseItem, ExpenseType, PriorityLevel, Project, Supplier, User, MaterialItem } from '../types';
+import { 
+  ExpenseCategory, 
+  ExpenseItem, 
+  ExpenseType, 
+  PriorityLevel, 
+  Project, 
+  Supplier, 
+  User, 
+  MaterialItem,
+  OrderItemLine 
+} from '../types';
 import { formatVND } from '../utils/formatters';
 import { SnapToolModal } from './SnapToolModal';
+
+export const getNextOrderCode = (allExpenses: ExpenseItem[] = []): string => {
+  let maxNum = 0;
+  allExpenses.forEach((exp) => {
+    const code = exp.code || '';
+    const match = code.match(/DH\s*-?\s*(\d+)/i);
+    if (match && match[1]) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  });
+  const nextNum = maxNum + 1;
+  return `DH ${String(nextNum).padStart(4, '0')}`;
+};
 
 interface ExpenseModalProps {
   isOpen: boolean;
@@ -28,7 +61,9 @@ interface ExpenseModalProps {
   suppliers: Supplier[];
   currentUser: User;
   materials?: MaterialItem[];
+  expenses?: ExpenseItem[];
   onUpdateMaterialImage?: (materialCode: string, imageUrl: string) => void;
+  defaultType?: 'expense' | 'po';
 }
 
 export const ExpenseModal: React.FC<ExpenseModalProps> = ({
@@ -40,10 +75,12 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   suppliers,
   currentUser,
   materials = [],
+  expenses = [],
   onUpdateMaterialImage,
+  defaultType = 'po',
 }) => {
   const [code, setCode] = useState('');
-  const [type, setType] = useState<ExpenseType>('expense');
+  const [type, setType] = useState<ExpenseType>('po');
   const [category, setCategory] = useState<ExpenseCategory>('material');
   const [materialCode, setMaterialCode] = useState('');
   const [title, setTitle] = useState('');
@@ -54,10 +91,15 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   const [amount, setAmount] = useState<number>(0);
   const [vatRate, setVatRate] = useState<number>(10);
   const [priority, setPriority] = useState<PriorityLevel>('normal');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'advance_fund'>('advance_fund');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'advance_fund'>('transfer');
   const [notes, setNotes] = useState('');
   const [receiptImage, setReceiptImage] = useState('');
   const [isSnapModalOpen, setIsSnapModalOpen] = useState(false);
+
+  // Danh sách sản phẩm mua hàng (cho đơn hàng PO)
+  const [selectedOrderItems, setSelectedOrderItems] = useState<OrderItemLine[]>([]);
+  const [productSearch, setProductSearch] = useState('');
+  const [productCategoryFilter, setProductCategoryFilter] = useState<string>('all');
 
   useEffect(() => {
     if (initialData) {
@@ -76,11 +118,33 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       setPaymentMethod(initialData.paymentMethod);
       setNotes(initialData.notes || '');
       setReceiptImage(initialData.receiptImage || '');
+
+      // Load selected items if available
+      if (initialData.items && initialData.items.length > 0) {
+        setSelectedOrderItems(initialData.items);
+      } else if (initialData.type === 'po' && initialData.materialCode) {
+        const found = materials.find(
+          (m) => m.code.replace(/\s+/g, '').toLowerCase() === initialData.materialCode?.replace(/\s+/g, '').toLowerCase()
+        );
+        if (found) {
+          const price = typeof found.unitPrice === 'number' ? found.unitPrice : initialData.amount;
+          setSelectedOrderItems([{
+            materialId: found.id,
+            code: found.code,
+            name: found.name,
+            unit: found.unit,
+            quantity: 1,
+            unitPrice: price,
+            total: price,
+          }]);
+        }
+      } else {
+        setSelectedOrderItems([]);
+      }
     } else {
-      // Default new expense
-      const randomNum = Math.floor(1000 + Math.random() * 9000);
-      setCode(type === 'po' ? `PO-2026-${randomNum}` : `EXP-2026-${randomNum}`);
-      setType('expense');
+      // Default: tạo mới đơn hàng PO
+      const targetType = defaultType || 'po';
+      setType(targetType);
       setCategory('material');
       setMaterialCode('');
       setTitle('');
@@ -91,25 +155,141 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       setAmount(0);
       setVatRate(10);
       setPriority('normal');
-      setPaymentMethod('advance_fund');
+      setPaymentMethod('transfer');
       setNotes('');
       setReceiptImage('');
+      setSelectedOrderItems([]);
+
+      if (targetType === 'po') {
+        setCode(getNextOrderCode(expenses));
+      } else {
+        const randomNum = Math.floor(1000 + Math.random() * 9000);
+        setCode(`EXP-2026-${randomNum}`);
+      }
     }
-  }, [initialData, isOpen, projects]);
+  }, [initialData, isOpen, projects, expenses, defaultType]);
 
-  if (!isOpen) return null;
+  // Danh sách sản phẩm hiển thị khi lọc
+  const filteredMaterialsForOrder = useMemo(() => {
+    return materials.filter((m) => {
+      const matchCat = productCategoryFilter === 'all' || m.category === productCategoryFilter;
+      const q = productSearch.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        m.code.toLowerCase().includes(q) ||
+        m.name.toLowerCase().includes(q) ||
+        (m.subCategory && m.subCategory.toLowerCase().includes(q)) ||
+        (m.brand && m.brand.toLowerCase().includes(q));
+      return matchCat && matchSearch;
+    });
+  }, [materials, productCategoryFilter, productSearch]);
 
-  const vatAmount = Math.round((amount * vatRate) / 100);
-  const totalAmount = amount + vatAmount;
+  // Toggle tick chọn / bỏ chọn sản phẩm vào đơn hàng
+  const handleToggleProduct = (material: MaterialItem) => {
+    const isSelected = selectedOrderItems.some(
+      (item) => item.code.replace(/\s+/g, '').toLowerCase() === material.code.replace(/\s+/g, '').toLowerCase()
+    );
+
+    if (isSelected) {
+      setSelectedOrderItems((prev) =>
+        prev.filter(
+          (item) => item.code.replace(/\s+/g, '').toLowerCase() !== material.code.replace(/\s+/g, '').toLowerCase()
+        )
+      );
+    } else {
+      const price = typeof material.unitPrice === 'number' ? material.unitPrice : 0;
+      const newLine: OrderItemLine = {
+        materialId: material.id,
+        code: material.code,
+        name: material.name,
+        unit: material.unit || 'Cái',
+        quantity: 1,
+        unitPrice: price,
+        total: price * 1,
+      };
+      setSelectedOrderItems((prev) => [...prev, newLine]);
+    }
+  };
+
+  // Cập nhật số lượng của sản phẩm đã chọn
+  const handleUpdateQuantity = (code: string, newQty: number) => {
+    const safeQty = Math.max(1, isNaN(newQty) ? 1 : newQty);
+    setSelectedOrderItems((prev) =>
+      prev.map((item) => {
+        if (item.code === code) {
+          return {
+            ...item,
+            quantity: safeQty,
+            total: safeQty * item.unitPrice,
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  // Xóa sản phẩm khỏi đơn hàng
+  const handleRemoveItem = (code: string) => {
+    setSelectedOrderItems((prev) => prev.filter((item) => item.code !== code));
+  };
+
+  // Chọn tất cả sản phẩm đang lọc
+  const handleSelectAllFiltered = () => {
+    const allFilteredCodes = new Set(
+      filteredMaterialsForOrder.map((m) => m.code.replace(/\s+/g, '').toLowerCase())
+    );
+    const isAllSelected =
+      filteredMaterialsForOrder.length > 0 &&
+      filteredMaterialsForOrder.every((m) =>
+        selectedOrderItems.some(
+          (item) => item.code.replace(/\s+/g, '').toLowerCase() === m.code.replace(/\s+/g, '').toLowerCase()
+        )
+      );
+
+    if (isAllSelected) {
+      setSelectedOrderItems((prev) =>
+        prev.filter((item) => !allFilteredCodes.has(item.code.replace(/\s+/g, '').toLowerCase()))
+      );
+    } else {
+      const newItems: OrderItemLine[] = [...selectedOrderItems];
+      filteredMaterialsForOrder.forEach((m) => {
+        const cleanCode = m.code.replace(/\s+/g, '').toLowerCase();
+        if (!newItems.some((item) => item.code.replace(/\s+/g, '').toLowerCase() === cleanCode)) {
+          const price = typeof m.unitPrice === 'number' ? m.unitPrice : 0;
+          newItems.push({
+            materialId: m.id,
+            code: m.code,
+            name: m.name,
+            unit: m.unit || 'Cái',
+            quantity: 1,
+            unitPrice: price,
+            total: price * 1,
+          });
+        }
+      });
+      setSelectedOrderItems(newItems);
+    }
+  };
+
+  // Tính toán tiền hàng của Đơn hàng PO từ các sản phẩm đã tick chọn
+  const orderSubtotal = useMemo(() => {
+    return selectedOrderItems.reduce((sum, item) => sum + item.total, 0);
+  }, [selectedOrderItems]);
+
+  const orderVatAmount = Math.round((orderSubtotal * vatRate) / 100);
+  const orderTotalPayment = orderSubtotal + orderVatAmount;
+
+  // Tính toán tiền của Phiếu chi site thông thường
+  const expenseVatAmount = Math.round((amount * vatRate) / 100);
+  const expenseTotalPayment = amount + expenseVatAmount;
 
   const selectedProject = projects.find((p) => p.id === projectId) || projects[0];
 
-  // Tìm vật tư tương ứng khi người dùng nhập hoặc chọn mã VT
+  // Tìm vật tư tương ứng khi dùng form Phiếu chi thường
   const matchedMaterial = materials.find(
     (m) => m.code.replace(/\s+/g, '').toLowerCase() === materialCode.replace(/\s+/g, '').toLowerCase()
   );
 
-  // Khi người dùng chọn mã vật tư từ dropdown / datalist
   const handleSelectMaterialCode = (inputCode: string) => {
     setMaterialCode(inputCode);
     const found = materials.find(
@@ -124,44 +304,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() || amount <= 0) {
-      alert('Vui lòng nhập tên hạng mục/khoản chi và số tiền lớn hơn 0.');
-      return;
-    }
-
-    const newExpense: ExpenseItem = {
-      id: initialData?.id || `exp-${Date.now()}`,
-      code: code || `EXP-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      type,
-      category,
-      materialCode: materialCode.trim() || undefined,
-      title: title.trim(),
-      subDescription: subDescription.trim(),
-      projectId: selectedProject?.id || '',
-      projectName: selectedProject?.name || 'Công trình Phúc Nguyên',
-      supplier: supplier.trim() || 'Nhà cung cấp tại site',
-      createdById: initialData?.createdById || currentUser.id,
-      createdByName: initialData?.createdByName || currentUser.name,
-      createdByRole: initialData?.createdByRole || currentUser.roleTitle,
-      date,
-      amount,
-      vatRate,
-      vatAmount,
-      totalAmount,
-      priority,
-      status: initialData?.status || 'pending',
-      paymentMethod,
-      notes: notes.trim(),
-      receiptImage: receiptImage || matchedMaterial?.imageUrl || undefined,
-    };
-
-    onSave(newExpense);
-    onClose();
-  };
-
-  // Quick fill preset templates for user convenience
+  // Quick preset cho phiếu chi site
   const handleApplyPreset = (presetType: 'material' | 'transport' | 'meal') => {
     if (presetType === 'transport') {
       setCategory('transport');
@@ -190,18 +333,137 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
     }
   };
 
+  // Submit Handler
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (type === 'po') {
+      // Xử lý lưu Đơn Hàng Mua Vật Tư (PO)
+      if (!projectId) {
+        alert('Vui lòng chọn Dự Án Thi Công.');
+        return;
+      }
+      if (!code.trim()) {
+        alert('Vui lòng nhập Mã Đơn Hàng.');
+        return;
+      }
+      if (selectedOrderItems.length === 0) {
+        alert('Vui lòng tick chọn ít nhất một sản phẩm vào đơn hàng mua.');
+        return;
+      }
+
+      // Tạo tiêu đề tự động tóm tắt các sản phẩm đã chọn
+      const firstItemsNames = selectedOrderItems.slice(0, 2).map((i) => i.name).join(', ');
+      const titleSummary =
+        selectedOrderItems.length === 1
+          ? `${selectedOrderItems[0].name} (x${selectedOrderItems[0].quantity} ${selectedOrderItems[0].unit})`
+          : `Đơn hàng [${code.trim()}]: ${selectedOrderItems.length} mặt hàng (${firstItemsNames}${
+              selectedOrderItems.length > 2 ? '...' : ''
+            })`;
+
+      const subDesc = selectedOrderItems
+        .map((i) => `${i.code}: ${i.name} (x${i.quantity} ${i.unit})`)
+        .join('; ');
+
+      // Nhà cung cấp: lấy từ sản phẩm đầu tiên hoặc mặc định
+      const firstMat = materials.find(
+        (m) => m.code.replace(/\s+/g, '').toLowerCase() === selectedOrderItems[0].code.replace(/\s+/g, '').toLowerCase()
+      );
+      const supplierName = firstMat?.supplier || 'Nhà cung cấp vật tư Phúc Nguyên';
+
+      const newOrder: ExpenseItem = {
+        id: initialData?.id || `po-${Date.now()}`,
+        code: code.trim(),
+        type: 'po',
+        category: 'material',
+        materialCode: selectedOrderItems[0]?.code,
+        title: titleSummary,
+        subDescription: subDesc,
+        items: selectedOrderItems,
+        projectId: selectedProject?.id || '',
+        projectName: selectedProject?.name || 'Công trình Phúc Nguyên',
+        supplier: supplierName,
+        createdById: initialData?.createdById || currentUser.id,
+        createdByName: initialData?.createdByName || currentUser.name,
+        createdByRole: initialData?.createdByRole || currentUser.roleTitle,
+        date: date || new Date().toISOString().split('T')[0],
+        amount: orderSubtotal,
+        vatRate,
+        vatAmount: orderVatAmount,
+        totalAmount: orderTotalPayment,
+        priority: 'normal',
+        status: initialData?.status || 'pending',
+        paymentMethod: 'transfer',
+        notes: notes.trim(),
+        receiptImage: firstMat?.imageUrl || undefined,
+      };
+
+      onSave(newOrder);
+      onClose();
+    } else {
+      // Xử lý lưu Phiếu Chi Site thông thường
+      if (!title.trim() || amount <= 0) {
+        alert('Vui lòng nhập tên hạng mục/khoản chi và số tiền lớn hơn 0.');
+        return;
+      }
+
+      const newExpense: ExpenseItem = {
+        id: initialData?.id || `exp-${Date.now()}`,
+        code: code || `EXP-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+        type: 'expense',
+        category,
+        materialCode: materialCode.trim() || undefined,
+        title: title.trim(),
+        subDescription: subDescription.trim(),
+        projectId: selectedProject?.id || '',
+        projectName: selectedProject?.name || 'Công trình Phúc Nguyên',
+        supplier: supplier.trim() || 'Nhà cung cấp tại site',
+        createdById: initialData?.createdById || currentUser.id,
+        createdByName: initialData?.createdByName || currentUser.name,
+        createdByRole: initialData?.createdByRole || currentUser.roleTitle,
+        date,
+        amount,
+        vatRate,
+        vatAmount: expenseVatAmount,
+        totalAmount: expenseTotalPayment,
+        priority,
+        status: initialData?.status || 'pending',
+        paymentMethod,
+        notes: notes.trim(),
+        receiptImage: receiptImage || matchedMaterial?.imageUrl || undefined,
+      };
+
+      onSave(newExpense);
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-150">
         {/* Modal Header */}
         <div className="bg-[#102742] text-white px-5 py-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-base sm:text-lg font-bold">
-              {initialData ? 'Chỉnh Sửa Khoản Chi Tiêu / PO' : 'Tạo Khoản Chi Tiêu Mới Tại Site'}
-            </h3>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Nhập chi phí vật tư, chi phí xe vận chuyển/cẩu hoặc chi phí đồ ăn tăng ca của kỹ sư/thợ site.
-            </p>
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30">
+              {type === 'po' ? <ShoppingCart className="w-5 h-5 text-amber-400" /> : <FileText className="w-5 h-5 text-sky-400" />}
+            </div>
+            <div>
+              <h3 className="text-base sm:text-lg font-bold flex items-center gap-2">
+                <span>{initialData ? (type === 'po' ? 'Chỉnh Sửa Đơn Hàng' : 'Chỉnh Sửa Phiếu Chi') : (type === 'po' ? 'Lập Đơn Hàng Mua Vật Tư (PO)' : 'Tạo Khoản Chi Tiêu Mới Tại Site')}</span>
+                {type === 'po' && (
+                  <span className="text-[10px] bg-amber-500 text-slate-950 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    Mã Đơn: {code || 'DH 0001'}
+                  </span>
+                )}
+              </h3>
+              <p className="text-xs text-slate-300 mt-0.5">
+                {type === 'po'
+                  ? 'Chọn dự án, mã đơn hàng tự động tăng từ DH 0001, tick chọn sản phẩm từ bảng giá danh mục.'
+                  : 'Nhập chi phí vật tư, chi phí xe vận chuyển/cẩu hoặc chi phí đồ ăn tăng ca của kỹ sư/thợ site.'}
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -211,197 +473,565 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
           </button>
         </div>
 
-        {/* Quick Template Presets */}
-        <div className="bg-slate-50 border-b border-slate-200 px-5 py-2.5 flex items-center gap-2 overflow-x-auto">
-          <span className="text-xs font-bold text-slate-600 uppercase flex-shrink-0">Mẫu gợi ý nhanh:</span>
-          <button
-            type="button"
-            onClick={() => handleApplyPreset('material')}
-            className="text-xs px-2.5 py-1 rounded bg-blue-100 text-blue-800 font-semibold hover:bg-blue-200 transition-colors flex items-center gap-1 flex-shrink-0"
-          >
-            <Package className="w-3.5 h-3.5" />
-            + Vật tư M&E
-          </button>
-          <button
-            type="button"
-            onClick={() => handleApplyPreset('transport')}
-            className="text-xs px-2.5 py-1 rounded bg-amber-100 text-amber-800 font-semibold hover:bg-amber-200 transition-colors flex items-center gap-1 flex-shrink-0"
-          >
-            <Truck className="w-3.5 h-3.5" />
-            + Vận chuyển / Xe cẩu
-          </button>
-          <button
-            type="button"
-            onClick={() => handleApplyPreset('meal')}
-            className="text-xs px-2.5 py-1 rounded bg-emerald-100 text-emerald-800 font-semibold hover:bg-emerald-200 transition-colors flex items-center gap-1 flex-shrink-0"
-          >
-            <Utensils className="w-3.5 h-3.5" />
-            + Cơm ca đêm / Đồ ăn
-          </button>
+        {/* Chuyển đổi loại hồ sơ (Tabs) */}
+        <div className="bg-slate-100/90 border-b border-slate-200 px-5 py-2.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase">
+            <span>Phân Loại Hồ Sơ:</span>
+            <div className="inline-flex bg-white rounded-lg p-0.5 border border-slate-300 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setType('po');
+                  if (!code.startsWith('DH ')) {
+                    setCode(getNextOrderCode(expenses));
+                  }
+                }}
+                className={`py-1.5 px-3.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 ${
+                  type === 'po'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <ShoppingCart className="w-3.5 h-3.5" />
+                <span>Đơn Hàng (PO)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setType('expense');
+                  if (code.startsWith('DH ')) {
+                    setCode(`EXP-2026-${Math.floor(1000 + Math.random() * 9000)}`);
+                  }
+                }}
+                className={`py-1.5 px-3.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 ${
+                  type === 'expense'
+                    ? 'bg-sky-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Phiếu Chi Site</span>
+              </button>
+            </div>
+          </div>
+
+          {type === 'po' && (
+            <div className="text-xs text-slate-600 font-medium hidden sm:flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Đã chọn <strong className="text-amber-700 font-bold font-mono">{selectedOrderItems.length}</strong> sản phẩm</span>
+            </div>
+          )}
         </div>
 
         {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Loại giao dịch & Mã */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Phân Loại Hồ Sơ
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setType('expense');
-                    if (code.startsWith('PO-')) setCode(code.replace('PO-', 'EXP-'));
-                  }}
-                  className={`py-2 px-3 text-xs font-bold rounded-lg border text-center transition-all ${
-                    type === 'expense'
-                      ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
-                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
-                  Phiếu Chi Site
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setType('po');
-                    if (code.startsWith('EXP-')) setCode(code.replace('EXP-', 'PO-'));
-                  }}
-                  className={`py-2 px-3 text-xs font-bold rounded-lg border text-center transition-all ${
-                    type === 'po'
-                      ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
-                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
-                  Đơn Hàng (PO)
-                </button>
-              </div>
-            </div>
-
-            {/* Mã Phiếu */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Mã Phiếu / Mã PO
-              </label>
-              <input
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                required
-                className="w-full py-2 px-3 text-xs font-mono font-bold rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 uppercase bg-slate-50"
-              />
-            </div>
-          </div>
-
-          {/* Phân loại danh mục chi tiêu */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-              Danh Mục Chi Tiêu Tại Site <span className="text-rose-500">*</span>
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
-                category === 'material' ? 'bg-blue-50 border-blue-400 font-bold text-blue-900 shadow-2xs' : 'bg-white border-slate-200 text-slate-700'
-              }`}>
-                <input
-                  type="radio"
-                  name="category"
-                  value="material"
-                  checked={category === 'material'}
-                  onChange={() => setCategory('material')}
-                  className="text-blue-600 focus:ring-blue-500"
-                />
-                <Package className="w-4 h-4 text-blue-600" />
-                <span className="text-xs">Vật tư thi công</span>
-              </label>
-
-              <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
-                category === 'transport' ? 'bg-amber-50 border-amber-400 font-bold text-amber-900 shadow-2xs' : 'bg-white border-slate-200 text-slate-700'
-              }`}>
-                <input
-                  type="radio"
-                  name="category"
-                  value="transport"
-                  checked={category === 'transport'}
-                  onChange={() => setCategory('transport')}
-                  className="text-amber-600 focus:ring-amber-500"
-                />
-                <Truck className="w-4 h-4 text-amber-600" />
-                <span className="text-xs">Vận chuyển / Cẩu</span>
-              </label>
-
-              <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
-                category === 'overtime_meal' ? 'bg-emerald-50 border-emerald-400 font-bold text-emerald-900 shadow-2xs' : 'bg-white border-slate-200 text-slate-700'
-              }`}>
-                <input
-                  type="radio"
-                  name="category"
-                  value="overtime_meal"
-                  checked={category === 'overtime_meal'}
-                  onChange={() => setCategory('overtime_meal')}
-                  className="text-emerald-600 focus:ring-emerald-500"
-                />
-                <Utensils className="w-4 h-4 text-emerald-600" />
-                <span className="text-xs">Đồ ăn tăng ca</span>
-              </label>
-
-              <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
-                category === 'labor_sub' ? 'bg-purple-50 border-purple-400 font-bold text-purple-900 shadow-2xs' : 'bg-white border-slate-200 text-slate-700'
-              }`}>
-                <input
-                  type="radio"
-                  name="category"
-                  value="labor_sub"
-                  checked={category === 'labor_sub'}
-                  onChange={() => setCategory('labor_sub')}
-                  className="text-purple-600 focus:ring-purple-500"
-                />
-                <span className="text-xs">Nhân công phụ</span>
-              </label>
-
-              <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
-                category === 'other' ? 'bg-slate-100 border-slate-400 font-bold text-slate-900 shadow-2xs' : 'bg-white border-slate-200 text-slate-700'
-              }`}>
-                <input
-                  type="radio"
-                  name="category"
-                  value="other"
-                  checked={category === 'other'}
-                  onChange={() => setCategory('other')}
-                  className="text-slate-600 focus:ring-slate-500"
-                />
-                <span className="text-xs">Chi phí khác</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Nhập Mã Vật Tư & Hình Ảnh Nhận Dạng Snap Tool */}
-          {category === 'material' && (
-            <div className="p-3.5 bg-slate-900 text-white rounded-xl border border-sky-500/50 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse" />
-                  <span className="text-xs font-bold text-sky-300 uppercase tracking-wide">
-                    Nhập Mã Vật Tư M&E (Mã VT 0001+) & Nhận Dạng Snap Tool
-                  </span>
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[76vh] overflow-y-auto">
+          {type === 'po' ? (
+            /* ============================================================== */
+            /* FORM ĐƠN HÀNG (PO) THEO YÊU CẦU ĐẶC BIỆT CỦA USER               */
+            /* 1. Chọn Dự Án (Ref danh sách Dự Án)                            */
+            /* 2. Mã Đơn Hàng (Code từ DH 0001 và tăng theo)                  */
+            /* 3. Tick chọn nhiều sản phẩm trong bảng sản phẩm                */
+            /*    Đơn giá theo bảng sản phẩm, còn lại không cần               */
+            /* ============================================================== */
+            <div className="space-y-4">
+              {/* HÀNG 1 & HÀNG 2: DỰ ÁN THI CÔNG & MÃ ĐƠN HÀNG (DH 0001+) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                {/* 1. TÊN DỰ ÁN THI CÔNG (REF DANH SÁCH DỰ ÁN) */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 uppercase mb-1 flex items-center gap-1.5">
+                    <Building className="w-3.5 h-3.5 text-sky-600" />
+                    <span>1. Chọn Tên Dự Án Thi Công <span className="text-rose-500">*</span></span>
+                  </label>
+                  <select
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value)}
+                    required
+                    className="w-full py-2.5 px-3 text-xs font-semibold rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 bg-white shadow-2xs"
+                  >
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.code})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+                    <span>Chủ đầu tư:</span>
+                    <strong className="text-slate-700">{selectedProject?.client || 'Chủ đầu tư công trình'}</strong>
+                  </div>
                 </div>
 
+                {/* 2. MÃ ĐƠN HÀNG (TĂNG TỰ ĐỘNG TỪ DH 0001) & NGÀY ĐẶT */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 uppercase mb-1 flex items-center justify-between">
+                      <span>2. Mã Đơn Hàng <span className="text-rose-500">*</span></span>
+                    </label>
+                    <input
+                      type="text"
+                      value={code}
+                      onChange={(e) => setCode(e.target.value.toUpperCase())}
+                      placeholder="DH 0001"
+                      required
+                      className="w-full py-2.5 px-3 text-xs font-mono font-black text-amber-700 bg-amber-50/60 rounded-lg border border-amber-300 focus:ring-2 focus:ring-amber-500 uppercase tracking-wider shadow-2xs"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      Tự tăng từ <strong>DH 0001+</strong>
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 uppercase mb-1 flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-slate-500" />
+                      <span>Ngày Đặt Hàng <span className="text-rose-500">*</span></span>
+                    </label>
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      required
+                      className="w-full py-2.5 px-2.5 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 bg-white shadow-2xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. MỤC CHỌN DANH SÁCH MUA HÀNG: TICK CHỌN NHIỀU SẢN PHẨM TRONG BẢNG SẢN PHẨM */}
+              <div className="border border-sky-300 rounded-xl bg-white shadow-xs overflow-hidden">
+                <div className="bg-sky-50/90 border-b border-sky-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1 rounded bg-sky-600 text-white">
+                      <Package className="w-3.5 h-3.5" />
+                    </span>
+                    <span className="text-xs font-bold text-sky-950 uppercase tracking-wide">
+                      Mục Chọn Danh Sách Mua Hàng (Tick Chọn Nhiều Sản Phẩm)
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={handleSelectAllFiltered}
+                      className="px-2.5 py-1 rounded-lg bg-sky-100 hover:bg-sky-200 text-sky-800 font-semibold border border-sky-300 flex items-center gap-1 transition-colors text-[11px]"
+                    >
+                      <CheckSquare className="w-3.5 h-3.5" />
+                      <span>Chọn Tất Cả Đang Lọc ({filteredMaterialsForOrder.length})</span>
+                    </button>
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
+                      Đã tick: {selectedOrderItems.length} SP
+                    </span>
+                  </div>
+                </div>
+
+                {/* Thanh tìm kiếm & Lọc danh mục sản phẩm */}
+                <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center gap-2">
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      placeholder="Tìm mã VT (VT0001...), tên sản phẩm, hãng..."
+                      className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 bg-white"
+                    />
+                    {productSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setProductSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Lọc hệ thống */}
+                  <select
+                    value={productCategoryFilter}
+                    onChange={(e) => setProductCategoryFilter(e.target.value)}
+                    className="py-1.5 px-2.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-700 font-medium"
+                  >
+                    <option value="all">Tất cả hệ thống</option>
+                    <option value="electrical">⚡ Điện & MSB</option>
+                    <option value="fire_protection">🔥 PCCC Cứu Hỏa</option>
+                    <option value="water">💧 Cấp Thoát Nước</option>
+                    <option value="hvac">❄️ HVAC Thông Gió</option>
+                    <option value="cable_tray">📦 Máng & Thang</option>
+                  </select>
+                </div>
+
+                {/* BẢNG DANH MỤC SẢN PHẨM ĐỂ TICK CHỌN */}
+                <div className="max-h-[220px] overflow-y-auto divide-y divide-slate-100 text-xs">
+                  {filteredMaterialsForOrder.length === 0 ? (
+                    <div className="p-6 text-center text-slate-400 text-xs">
+                      Không tìm thấy sản phẩm nào khớp với từ khóa tìm kiếm.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left border-collapse">
+                      <thead className="bg-slate-100/90 text-slate-700 font-bold text-[11px] sticky top-0 z-10 uppercase border-b border-slate-200">
+                        <tr>
+                          <th className="py-2 px-3 w-10 text-center">Tick</th>
+                          <th className="py-2 px-2.5 w-24">Mã VT</th>
+                          <th className="py-2 px-3">Tên Sản Phẩm / Vật Tư M&E</th>
+                          <th className="py-2 px-2 w-16 text-center">ĐVT</th>
+                          <th className="py-2 px-3 text-right w-28">Đơn Giá (Theo Bảng)</th>
+                          <th className="py-2 px-2.5 text-center w-20">Tồn Kho</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredMaterialsForOrder.map((mat) => {
+                          const isChecked = selectedOrderItems.some(
+                            (item) => item.code.replace(/\s+/g, '').toLowerCase() === mat.code.replace(/\s+/g, '').toLowerCase()
+                          );
+                          const price = typeof mat.unitPrice === 'number' ? mat.unitPrice : 0;
+
+                          return (
+                            <tr
+                              key={mat.id}
+                              onClick={() => handleToggleProduct(mat)}
+                              className={`cursor-pointer transition-colors ${
+                                isChecked ? 'bg-amber-50/80 hover:bg-amber-100/80' : 'hover:bg-slate-50'
+                              }`}
+                            >
+                              <td className="py-2 px-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {}} // Đã được xử lý bởi tr onClick
+                                  className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                                />
+                              </td>
+                              <td className="py-2 px-2.5 font-mono font-bold text-sky-800">
+                                {mat.code}
+                              </td>
+                              <td className="py-2 px-3">
+                                <div className="font-semibold text-slate-900">{mat.name}</div>
+                                {mat.brand && (
+                                  <div className="text-[10px] text-slate-400">Hãng: {mat.brand}</div>
+                                )}
+                              </td>
+                              <td className="py-2 px-2 text-center text-slate-600 font-medium">
+                                {mat.unit}
+                              </td>
+                              <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                                {price > 0 ? formatVND(price) : <span className="text-slate-400 font-normal italic">Chưa có giá</span>}
+                              </td>
+                              <td className="py-2 px-2.5 text-center font-mono text-slate-500">
+                                {mat.stockQuantity}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* BẢNG CÁC SẢN PHẨM ĐÃ CHỌN ĐẶT HÀNG & NHẬP SỐ LƯỢNG */}
+              <div className="border border-amber-300 rounded-xl bg-amber-50/40 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShoppingCart className="w-4 h-4 text-amber-700" />
+                    <span className="text-xs font-bold text-amber-950 uppercase tracking-wide">
+                      Danh Sách Sản Phẩm Đã Tick Chọn ({selectedOrderItems.length} mặt hàng)
+                    </span>
+                  </div>
+                  {selectedOrderItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOrderItems([])}
+                      className="text-[11px] text-rose-600 hover:text-rose-800 font-semibold"
+                    >
+                      Bỏ chọn tất cả
+                    </button>
+                  )}
+                </div>
+
+                {selectedOrderItems.length === 0 ? (
+                  <div className="p-4 bg-white rounded-lg border border-dashed border-amber-300 text-center text-slate-500 text-xs">
+                    👉 Hãy <strong className="text-amber-700">tick chọn các sản phẩm</strong> ở bảng danh mục phía trên để lập đơn hàng mua.
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-2xs">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead className="bg-[#102742] text-white font-bold text-[11px] uppercase">
+                        <tr>
+                          <th className="py-2 px-2.5 text-center w-10">STT</th>
+                          <th className="py-2 px-2.5 w-24">Mã VT</th>
+                          <th className="py-2 px-3">Tên Sản Phẩm</th>
+                          <th className="py-2 px-2 w-16 text-center">ĐVT</th>
+                          <th className="py-2 px-3 text-right w-28">Đơn Giá</th>
+                          <th className="py-2 px-2 text-center w-28">Số Lượng</th>
+                          <th className="py-2 px-3 text-right w-32">Thành Tiền</th>
+                          <th className="py-2 px-2 text-center w-10">Xóa</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {selectedOrderItems.map((item, idx) => (
+                          <tr key={item.code} className="hover:bg-slate-50">
+                            <td className="py-2 px-2.5 text-center font-mono text-slate-400">
+                              {idx + 1}
+                            </td>
+                            <td className="py-2 px-2.5 font-mono font-bold text-sky-800">
+                              {item.code}
+                            </td>
+                            <td className="py-2 px-3 font-semibold text-slate-900">
+                              {item.name}
+                            </td>
+                            <td className="py-2 px-2 text-center text-slate-600 font-medium">
+                              {item.unit}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono font-medium text-slate-700">
+                              {formatVND(item.unitPrice)}
+                            </td>
+                            <td className="py-1 px-2 text-center">
+                              <div className="inline-flex items-center border border-slate-300 rounded-lg overflow-hidden bg-white shadow-2xs">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateQuantity(item.code, item.quantity - 1)}
+                                  className="p-1 hover:bg-slate-100 text-slate-600"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={item.quantity}
+                                  onChange={(e) => handleUpdateQuantity(item.code, parseInt(e.target.value, 10))}
+                                  className="w-12 text-center font-mono font-bold text-xs py-1 border-x border-slate-300 focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateQuantity(item.code, item.quantity + 1)}
+                                  className="p-1 hover:bg-slate-100 text-slate-600"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                              {formatVND(item.total)}
+                            </td>
+                            <td className="py-2 px-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(item.code)}
+                                className="text-slate-400 hover:text-rose-600 transition-colors p-1"
+                                title="Bỏ mặt hàng này"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* TÍNH TOÁN TIỀN HÀNG, VAT & TỔNG THANH TOÁN ĐƠN HÀNG */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Thuế Suất VAT (%)
+                  </label>
+                  <select
+                    value={vatRate}
+                    onChange={(e) => setVatRate(Number(e.target.value))}
+                    className="w-full py-2.5 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 bg-white font-medium"
+                  >
+                    <option value={10}>10% (Vật tư, thiết bị M&E tiêu chuẩn)</option>
+                    <option value={8}>8% (Vận chuyển, dịch vụ ưu đãi)</option>
+                    <option value={0}>0% (Không chịu thuế / Hóa đơn trực tiếp)</option>
+                  </select>
+
+                  <div className="mt-2.5">
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                      Ghi Chú Đơn Hàng (Nếu có)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Ghi chú giao hàng tới công trường, thời gian cấp hàng..."
+                      className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-900 text-white rounded-xl border border-amber-500/40 space-y-2 shadow-sm">
+                  <div className="flex items-center justify-between text-xs text-slate-300 border-b border-slate-800 pb-2">
+                    <span>Tổng tiền hàng ({selectedOrderItems.length} mặt hàng):</span>
+                    <span className="font-mono font-bold text-slate-100">{formatVND(orderSubtotal)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-rose-300 border-b border-slate-800 pb-2">
+                    <span>Tiền thuế VAT ({vatRate}%):</span>
+                    <span className="font-mono font-bold">{formatVND(orderVatAmount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <div>
+                      <div className="text-[11px] uppercase font-bold text-amber-400">TỔNG THANH TOÁN ĐƠN HÀNG</div>
+                      <div className="text-[10px] text-slate-400">Mã đơn: {code || 'DH 0001'}</div>
+                    </div>
+                    <div className="text-xl sm:text-2xl font-mono font-black text-emerald-400">
+                      {formatVND(orderTotalPayment)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Thông tin người lập */}
+              <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex items-center justify-between">
+                <span>Người lập đơn hàng: <strong className="text-slate-800">{currentUser.name}</strong> ({currentUser.roleTitle})</span>
+                <span>Công trình: <strong className="text-sky-700">{selectedProject?.name}</strong></span>
+              </div>
+            </div>
+          ) : (
+            /* ============================================================== */
+            /* FORM PHIẾU CHI SITE THÔNG THƯỜNG (DÀNH CHO CHI TIÊU SITE)      */
+            /* ============================================================== */
+            <div className="space-y-4">
+              {/* Quick Template Presets */}
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex items-center gap-2 overflow-x-auto">
+                <span className="text-xs font-bold text-slate-600 uppercase flex-shrink-0">Mẫu nhanh:</span>
                 <button
                   type="button"
-                  onClick={() => setIsSnapModalOpen(true)}
-                  className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                  onClick={() => handleApplyPreset('material')}
+                  className="text-xs px-2.5 py-1 rounded bg-blue-100 text-blue-800 font-semibold hover:bg-blue-200 transition-colors flex items-center gap-1 flex-shrink-0"
                 >
-                  <Scissors className="w-3.5 h-3.5 text-white" />
-                  <span>Mở Snap Tool (Dán Ctrl+V / Chụp)</span>
+                  <Package className="w-3.5 h-3.5" />
+                  + Vật tư M&E
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('transport')}
+                  className="text-xs px-2.5 py-1 rounded bg-amber-100 text-amber-800 font-semibold hover:bg-amber-200 transition-colors flex items-center gap-1 flex-shrink-0"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  + Vận chuyển / Xe cẩu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('meal')}
+                  className="text-xs px-2.5 py-1 rounded bg-emerald-100 text-emerald-800 font-semibold hover:bg-emerald-200 transition-colors flex items-center gap-1 flex-shrink-0"
+                >
+                  <Utensils className="w-3.5 h-3.5" />
+                  + Cơm ca đêm / Đồ ăn
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
-                    Chọn nhanh từ danh mục hoặc nhập mã (VD: VT0001, VT0002...)
+              {/* Mã Phiếu Chi */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Mã Phiếu Chi Site
+                </label>
+                <input
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  required
+                  className="w-full py-2 px-3 text-xs font-mono font-bold rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 uppercase bg-slate-50"
+                />
+              </div>
+
+              {/* Danh Mục Chi Tiêu Tại Site */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                  Danh Mục Chi Tiêu Tại Site <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                    category === 'material' ? 'bg-blue-50 border-blue-400 font-bold text-blue-900 shadow-2xs' : 'bg-white border-slate-200 text-slate-700'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="category"
+                      value="material"
+                      checked={category === 'material'}
+                      onChange={() => setCategory('material')}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                    <Package className="w-4 h-4 text-blue-600" />
+                    <span className="text-xs">Vật tư thi công</span>
                   </label>
+
+                  <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                    category === 'transport' ? 'bg-amber-50 border-amber-400 font-bold text-amber-900 shadow-2xs' : 'bg-white border-slate-200 text-slate-700'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="category"
+                      value="transport"
+                      checked={category === 'transport'}
+                      onChange={() => setCategory('transport')}
+                      className="text-amber-600 focus:ring-amber-500"
+                    />
+                    <Truck className="w-4 h-4 text-amber-600" />
+                    <span className="text-xs">Vận chuyển / Cẩu</span>
+                  </label>
+
+                  <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                    category === 'overtime_meal' ? 'bg-emerald-50 border-emerald-400 font-bold text-emerald-900 shadow-2xs' : 'bg-white border-slate-200 text-slate-700'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="category"
+                      value="overtime_meal"
+                      checked={category === 'overtime_meal'}
+                      onChange={() => setCategory('overtime_meal')}
+                      className="text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <Utensils className="w-4 h-4 text-emerald-600" />
+                    <span className="text-xs">Đồ ăn tăng ca</span>
+                  </label>
+
+                  <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                    category === 'labor_sub' ? 'bg-purple-50 border-purple-400 font-bold text-purple-900 shadow-2xs' : 'bg-white border-slate-200 text-slate-700'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="category"
+                      value="labor_sub"
+                      checked={category === 'labor_sub'}
+                      onChange={() => setCategory('labor_sub')}
+                      className="text-purple-600 focus:ring-purple-500"
+                    />
+                    <span className="text-xs">Nhân công phụ</span>
+                  </label>
+
+                  <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                    category === 'other' ? 'bg-slate-100 border-slate-400 font-bold text-slate-900 shadow-2xs' : 'bg-white border-slate-200 text-slate-700'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="category"
+                      value="other"
+                      checked={category === 'other'}
+                      onChange={() => setCategory('other')}
+                      className="text-slate-600 focus:ring-slate-500"
+                    />
+                    <span className="text-xs">Chi phí khác</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Mã VT & Nhận dạng Snap Tool */}
+              {category === 'material' && (
+                <div className="p-3 bg-slate-900 text-white rounded-xl border border-sky-500/50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-sky-300 uppercase">
+                      Chọn nhanh mã VT từ bảng danh mục
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsSnapModalOpen(true)}
+                      className="px-2 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-bold flex items-center gap-1"
+                    >
+                      <Scissors className="w-3 h-3" />
+                      <span>Snap Tool Cắt Ảnh</span>
+                    </button>
+                  </div>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -409,248 +1039,202 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                       value={materialCode}
                       onChange={(e) => handleSelectMaterialCode(e.target.value)}
                       placeholder="Gõ mã VT (VD: VT0001) hoặc chọn..."
-                      className="flex-1 py-1.5 px-3 text-xs font-mono font-bold text-sky-400 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-sky-500 focus:outline-none uppercase"
+                      className="flex-1 py-1.5 px-3 text-xs font-mono font-bold text-sky-400 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-sky-500 uppercase"
                     />
                     <datalist id="materials-datalist">
                       {materials.map((m) => (
                         <option key={m.id} value={m.code}>
-                          {m.code} - {m.name} {m.unitPrice ? `(${formatVND(m.unitPrice)}/${m.unit})` : `(${m.unit})`}
+                          {m.code} - {m.name}
                         </option>
                       ))}
                     </datalist>
-
-                    <select
-                      value={materialCode}
-                      onChange={(e) => handleSelectMaterialCode(e.target.value)}
-                      className="py-1.5 px-2 text-xs bg-slate-800 text-slate-200 border border-slate-700 rounded-lg focus:ring-2 focus:ring-sky-500 max-w-[140px]"
-                    >
-                      <option value="">-- Danh mục VT --</option>
-                      {materials.map((m) => (
-                        <option key={m.id} value={m.code}>
-                          {m.code} - {m.name.slice(0, 18)}...
-                        </option>
-                      ))}
-                    </select>
                   </div>
                 </div>
+              )}
 
-                {/* Box Hình Ảnh Nhận Dạng Vật Tư */}
-                <div className="flex items-center gap-2.5 bg-slate-800/80 p-2 rounded-lg border border-slate-700">
-                  {matchedMaterial?.imageUrl || receiptImage ? (
-                    <div className="relative w-14 h-14 bg-slate-950 rounded border border-sky-400 overflow-hidden shrink-0 flex items-center justify-center">
-                      <img
-                        src={receiptImage || matchedMaterial?.imageUrl}
-                        alt="Ảnh nhận dạng"
-                        className="w-full h-full object-contain"
-                      />
-                      <span className="absolute bottom-0 inset-x-0 bg-black/85 text-[8px] text-white font-mono text-center">
-                        {materialCode || 'VT'}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="w-14 h-14 bg-slate-950 border border-dashed border-slate-600 rounded flex flex-col items-center justify-center text-slate-500 shrink-0">
-                      <Package className="w-5 h-5 text-slate-600" />
-                      <span className="text-[8px] mt-0.5">Chưa ảnh</span>
-                    </div>
-                  )}
+              {/* Tên Khoản Chi & Quy Cách */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Tên Khoản Chi / Hạng Mục / Vật Tư <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="VD: Cáp đồng CADIVI CXV 3x120, Xe cẩu 15 tấn, Cơm hộp 35 suất..."
+                  required
+                  className="w-full py-2 px-3 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500"
+                />
+              </div>
 
-                  <div className="text-[11px] leading-tight">
-                    <div className="font-bold text-sky-400">Hình ảnh nhận dạng</div>
-                    <div className="text-slate-400 text-[10px] mt-0.5">
-                      {matchedMaterial ? 'Đã nhận dạng mã VT' : 'Dùng Snap Tool dán ảnh'}
-                    </div>
-                    {matchedMaterial && matchedMaterial.warehouseLocation && (
-                      <div className="text-emerald-400 text-[10px] font-medium mt-1">
-                        Tồn: {matchedMaterial.stockQuantity ?? 0} {matchedMaterial.unit} tại {matchedMaterial.warehouseLocation}
-                      </div>
-                    )}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Quy Cách Kỹ Thuật / Diễn Giải Chi Tiết
+                </label>
+                <input
+                  type="text"
+                  value={subDescription}
+                  onChange={(e) => setSubDescription(e.target.value)}
+                  placeholder="Quy cách theo bản vẽ, số giờ cẩu, số suất ăn..."
+                  className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500"
+                />
+              </div>
+
+              {/* Dự án & Nhà cung cấp */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Công Trình / Dự Án Thi Công <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value)}
+                    required
+                    className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 bg-white"
+                  >
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Nhà Cung Cấp / Nhà Xe / Quán Cơm
+                  </label>
+                  <input
+                    type="text"
+                    value={supplier}
+                    onChange={(e) => setSupplier(e.target.value)}
+                    list="suppliers-list"
+                    placeholder="Chọn hoặc nhập tên đơn vị..."
+                    className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500"
+                  />
+                  <datalist id="suppliers-list">
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.name} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+
+              {/* Ngày chi & Tiền hàng & VAT */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Ngày Thực Hiện <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    required
+                    className="w-full py-2 px-3 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Tiền Chi Phí Trước VAT (VNĐ) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1000"
+                    value={amount || ''}
+                    onChange={(e) => setAmount(Number(e.target.value))}
+                    placeholder="0"
+                    required
+                    className="w-full py-2 px-3 text-xs font-mono font-bold rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Thuế Suất VAT (%)
+                  </label>
+                  <select
+                    value={vatRate}
+                    onChange={(e) => setVatRate(Number(e.target.value))}
+                    className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 bg-white"
+                  >
+                    <option value={0}>0% (Ăn uống, nhân công, hóa đơn trực tiếp)</option>
+                    <option value={8}>8% (Vận chuyển, dịch vụ giảm thuế)</option>
+                    <option value={10}>10% (Vật tư, thiết bị tiêu chuẩn)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Khung tổng hợp tiền chi */}
+              <div className="p-3.5 bg-slate-100 rounded-lg border border-slate-300 flex items-center justify-between">
+                <div className="text-xs text-slate-600">
+                  <div>Tiền trước thuế: <span className="font-mono font-semibold">{formatVND(amount)}</span></div>
+                  <div className="text-rose-600">Thuế VAT ({vatRate}%): <span className="font-mono font-semibold">{formatVND(expenseVatAmount)}</span></div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[11px] text-slate-500 uppercase font-bold">Tổng thanh toán</div>
+                  <div className="text-lg sm:text-xl font-mono font-black text-emerald-800">
+                    {formatVND(expenseTotalPayment)}
                   </div>
                 </div>
+              </div>
+
+              {/* Hình thức thanh toán & Mức độ ưu tiên */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Hình Thức Thanh Toán
+                  </label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value as any)}
+                    className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 bg-white"
+                  >
+                    <option value="advance_fund">💰 Tạm ứng quỹ site (Kỹ sư chi trước)</option>
+                    <option value="transfer">🏦 Chuyển khoản công ty</option>
+                    <option value="cash">💵 Tiền mặt thanh toán ngay</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Mức Độ Ưu Tiên
+                  </label>
+                  <select
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value as any)}
+                    className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 bg-white font-medium"
+                  >
+                    <option value="normal">Thường</option>
+                    <option value="high">Ưu tiên</option>
+                    <option value="urgent">Khẩn cấp</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Ghi chú */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Ghi Chú Kế Toán / Diễn Giải
+                </label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Ghi chú thêm về chứng từ, phiếu giao nhận..."
+                  className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500"
+                />
+              </div>
+
+              {/* Người lập */}
+              <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex items-center justify-between">
+                <span>Người lập phiếu: <strong className="text-slate-800">{currentUser.name}</strong> ({currentUser.roleTitle})</span>
+                <span>Site: <strong>{currentUser.siteName}</strong></span>
               </div>
             </div>
           )}
-
-          {/* Tên hạng mục & Mô tả */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Tên Khoản Chi / Hạng Mục / Vật Tư <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="VD: Cáp đồng CADIVI CXV 3x120, Xe cẩu 15 tấn nâng thiết bị, Cơm hộp 35 suất ca đêm..."
-              required
-              className="w-full py-2 px-3 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Quy Cách Kỹ Thuật / Diễn Giải Chi Tiết
-            </label>
-            <input
-              type="text"
-              value={subDescription}
-              onChange={(e) => setSubDescription(e.target.value)}
-              placeholder="Quy cách theo bản vẽ, số giờ cẩu kéo, số lượng thợ thi công ca..."
-              className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500"
-            />
-          </div>
-
-          {/* Dự án thi công & Nhà cung cấp */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Công Trình / Dự Án Thi Công <span className="text-rose-500">*</span>
-              </label>
-              <select
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-                required
-                className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 bg-white"
-              >
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Nhà Cung Cấp / Nhà Xe / Quán Cơm
-              </label>
-              <input
-                type="text"
-                value={supplier}
-                onChange={(e) => setSupplier(e.target.value)}
-                list="suppliers-list"
-                placeholder="Chọn hoặc nhập tên đơn vị..."
-                className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500"
-              />
-              <datalist id="suppliers-list">
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.name} />
-                ))}
-              </datalist>
-            </div>
-          </div>
-
-          {/* Ngày chi & Tiền hàng & VAT */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Ngày Thực Hiện <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-                className="w-full py-2 px-3 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Tiền Hàng / Chi Phí Trước VAT (VNĐ) <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="1000"
-                value={amount || ''}
-                onChange={(e) => setAmount(Number(e.target.value))}
-                placeholder="0"
-                required
-                className="w-full py-2 px-3 text-xs font-mono font-bold rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Thuế Suất VAT (%)
-              </label>
-              <select
-                value={vatRate}
-                onChange={(e) => setVatRate(Number(e.target.value))}
-                className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 bg-white"
-              >
-                <option value={0}>0% (Ăn uống, nhân công, hóa đơn trực tiếp)</option>
-                <option value={8}>8% (Vận chuyển, dịch vụ giảm thuế)</option>
-                <option value={10}>10% (Vật tư, thiết bị tiêu chuẩn)</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Calculation Box */}
-          <div className="p-3.5 bg-slate-100 rounded-lg border border-slate-300 flex items-center justify-between">
-            <div className="text-xs text-slate-600">
-              <div>Tiền trước thuế: <span className="font-mono font-semibold">{formatVND(amount)}</span></div>
-              <div className="text-rose-600">Thuế VAT ({vatRate}%): <span className="font-mono font-semibold">{formatVND(vatAmount)}</span></div>
-            </div>
-            <div className="text-right">
-              <div className="text-[11px] text-slate-500 uppercase font-bold">Tổng thanh toán</div>
-              <div className="text-lg sm:text-xl font-mono font-black text-emerald-800">
-                {formatVND(totalAmount)}
-              </div>
-            </div>
-          </div>
-
-          {/* Payment Method & Priority */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Hình Thức Thanh Toán
-              </label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 bg-white"
-              >
-                <option value="advance_fund">💰 Tạm ứng quỹ site (Kỹ sư chi trước)</option>
-                <option value="transfer">🏦 Chuyển khoản công ty</option>
-                <option value="cash">💵 Tiền mặt thanh toán ngay</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Mức Độ Ưu Tiên
-              </label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as any)}
-                className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 bg-white font-medium"
-              >
-                <option value="normal">Thường</option>
-                <option value="high">Ưu tiên</option>
-                <option value="urgent">Khẩn cấp</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Ghi chú & Đính kèm chứng từ */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Ghi Chú Kế Toán / Diễn Giải
-            </label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="VD: Đã thanh toán tạm ứng cho bác xe cẩu, phiếu giao nhận đầy đủ chữ ký giám sát..."
-              className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500"
-            />
-          </div>
-
-          {/* Người lập tự động ghi nhận */}
-          <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex items-center justify-between">
-            <span>Người lập phiếu: <strong className="text-slate-800">{currentUser.name}</strong> ({currentUser.roleTitle})</span>
-            <span>Site: <strong>{currentUser.siteName}</strong></span>
-          </div>
 
           {/* Modal Footer Actions */}
           <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
@@ -663,10 +1247,18 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-all shadow-sm flex items-center gap-1.5"
+              className={`px-5 py-2 text-xs font-bold text-white rounded-lg transition-all shadow-sm flex items-center gap-1.5 ${
+                type === 'po'
+                  ? 'bg-amber-600 hover:bg-amber-500'
+                  : 'bg-emerald-600 hover:bg-emerald-500'
+              }`}
             >
               <Save className="w-4 h-4" />
-              <span>{initialData ? 'Lưu Thay Đổi' : 'Tạo Phiếu Chi Tiêu'}</span>
+              <span>
+                {initialData
+                  ? (type === 'po' ? 'Lưu Thay Đổi Đơn Hàng' : 'Lưu Thay Đổi Phiếu Chi')
+                  : (type === 'po' ? `Tạo Đơn Hàng (${code || 'DH 0001'})` : 'Tạo Phiếu Chi Tiêu')}
+              </span>
             </button>
           </div>
         </form>
@@ -674,7 +1266,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
         {/* Snap Tool Modal */}
         {isSnapModalOpen && (
           <SnapToolModal
-            materialCode={materialCode || 'VT 0001'}
+            materialCode={materialCode || 'VT0001'}
             materialName={title || matchedMaterial?.name || 'Vật tư thi công site'}
             currentImage={receiptImage || matchedMaterial?.imageUrl}
             isOpen={isSnapModalOpen}
