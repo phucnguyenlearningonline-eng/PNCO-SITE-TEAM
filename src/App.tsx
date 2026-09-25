@@ -693,11 +693,15 @@ export default function App() {
     projects: Project[];
     suppliers: Supplier[];
     users: User[];
+    materials?: MaterialItem[];
   }) => {
     setExpenses(data.expenses);
     setProjects(data.projects);
     setSuppliers(data.suppliers);
     setUsers(data.users);
+    if (data.materials && Array.isArray(data.materials)) {
+      setMaterials(data.materials);
+    }
     showToast('Đã phục hồi dữ liệu từ bản sao lưu thành công');
   };
 
@@ -1155,6 +1159,7 @@ export default function App() {
         projects={projects}
         suppliers={suppliers}
         users={users}
+        materials={materials}
         onRestoreData={handleRestoreData}
         onResetDefaults={handleResetDefaults}
       />

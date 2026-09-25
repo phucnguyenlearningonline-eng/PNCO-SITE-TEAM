@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { X, Download, Upload, RefreshCw, Database, Check } from 'lucide-react';
-import { ExpenseItem, Project, Supplier, User } from '../types';
+import { ExpenseItem, Project, Supplier, User, MaterialItem } from '../types';
 
 interface BackupModalProps {
   isOpen: boolean;
@@ -9,11 +9,13 @@ interface BackupModalProps {
   projects: Project[];
   suppliers: Supplier[];
   users: User[];
+  materials?: MaterialItem[];
   onRestoreData: (data: {
     expenses: ExpenseItem[];
     projects: Project[];
     suppliers: Supplier[];
     users: User[];
+    materials?: MaterialItem[];
   }) => void;
   onResetDefaults: () => void;
 }
@@ -25,6 +27,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   projects,
   suppliers,
   users,
+  materials = [],
   onRestoreData,
   onResetDefaults,
 }) => {
@@ -41,6 +44,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       projects,
       suppliers,
       users,
+      materials,
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -68,6 +72,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
             projects: parsed.projects || projects,
             suppliers: parsed.suppliers || suppliers,
             users: parsed.users || users,
+            materials: Array.isArray(parsed.materials) ? parsed.materials : materials,
           });
           alert('Khôi phục dữ liệu từ tệp sao lưu thành công!');
           onClose();
@@ -105,7 +110,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
               <div>
                 <div className="font-bold text-slate-900 text-sm">Xuất Tệp Sao Lưu (JSON)</div>
                 <div className="text-slate-500 mt-0.5">
-                  Bao gồm {expenses.length} giao dịch, {projects.length} dự án, {users.length} nhân viên.
+                  Bao gồm {expenses.length} giao dịch, {projects.length} dự án, {users.length} nhân viên, {materials.length} vật tư & sản phẩm M&E.
                 </div>
               </div>
               <button

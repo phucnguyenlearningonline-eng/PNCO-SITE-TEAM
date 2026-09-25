@@ -387,7 +387,7 @@ END $$;`;
                   <span>Đồng Bộ Dữ Liệu Hiện Tại Lên Supabase (1-Click Sync)</span>
                 </h4>
                 <p className="text-slate-600 text-xs mt-0.5">
-                  Đẩy toàn bộ {expenses.length} khoản chi, {projects.length} công trình và {users.length} nhân viên hiện có lên cơ sở dữ liệu Supabase.
+                  Đẩy toàn bộ {expenses.length} khoản chi, {projects.length} công trình, {suppliers.length} nhà cung cấp, {users.length} nhân viên và {materials.length} vật tư & sản phẩm M&E lên cơ sở dữ liệu Supabase.
                 </p>
               </div>
               <button
