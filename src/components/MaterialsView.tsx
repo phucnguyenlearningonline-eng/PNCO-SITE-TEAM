@@ -24,6 +24,8 @@ import {
   Percent,
   Flame,
   Tag,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import { MaterialItem, ExpenseItem, Supplier } from '../types';
 import { formatVND } from '../utils/formatters';
@@ -93,6 +95,8 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   const [formCustomWarehouse, setFormCustomWarehouse] = useState('');
   const [formShelfLocation, setFormShelfLocation] = useState('');
   const [formMinStock, setFormMinStock] = useState<number | string>(15);
+  const [isHangMucDropdownOpen, setIsHangMucDropdownOpen] = useState(false);
+  const [isNccDropdownOpen, setIsNccDropdownOpen] = useState(false);
 
   // Zoom image state
   const [zoomImage, setZoomImage] = useState<{ url: string; code: string; name: string } | null>(null);
@@ -166,6 +170,8 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     setFormCustomWarehouse('');
     setFormShelfLocation('');
     setFormMinStock(15);
+    setIsHangMucDropdownOpen(false);
+    setIsNccDropdownOpen(false);
     setIsFormModalOpen(true);
   };
 
@@ -188,6 +194,8 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     setFormCustomWarehouse('');
     setFormShelfLocation(m.shelfLocation || '');
     setFormMinStock(m.minStock ?? 10);
+    setIsHangMucDropdownOpen(false);
+    setIsNccDropdownOpen(false);
     setIsFormModalOpen(true);
   };
 
@@ -1187,27 +1195,26 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
-              {/* MÃ VẬT TƯ & PHÂN LOẠI HỆ */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <form onSubmit={handleFormSubmit} className="p-4 space-y-3 text-xs overflow-y-auto flex-1">
+              {/* HÀNG 1: MÃ VẬT TƯ & PHÂN LOẠI HỆ & HẠNG MỤC CHI TIẾT (DROPDOWN TIẾT KIỆM KHÔNG GIAN) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
                   <label className="block font-bold text-slate-700 uppercase mb-1">
-                    Mã Vật Tư (Từ VT0001 đếm lên) <span className="text-rose-500">*</span>
+                    Mã Vật Tư <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
                     value={formCode}
                     onChange={(e) => setFormCode(e.target.value)}
-                    placeholder="VD: VT0001, VT0015..."
-                    className="w-full py-2 px-3 border border-slate-300 rounded-lg font-mono font-bold text-sky-800 focus:ring-2 focus:ring-sky-500 uppercase bg-slate-50 focus:bg-white"
+                    placeholder="VD: VT0001..."
+                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg font-mono font-bold text-sky-800 focus:ring-2 focus:ring-sky-500 uppercase bg-slate-50 focus:bg-white text-xs"
                   />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">Hệ thống tự động đánh số tăng dần</span>
                 </div>
 
                 <div>
                   <label className="block font-bold text-slate-700 uppercase mb-1">
-                    Phân Loại Hệ M&amp;E
+                    Phân Loại Hệ M&amp;E <span className="text-rose-500">*</span>
                   </label>
                   <select
                     value={formCategory}
@@ -1215,99 +1222,93 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                       const newCat = e.target.value as any;
                       setFormCategory(newCat);
                       const defaults = MNE_SUB_CATEGORIES[newCat] || [];
-                      if (defaults.length > 0 && !formSubCategory) {
+                      if (defaults.length > 0) {
                         setFormSubCategory(defaults[0]);
                       }
                     }}
-                    className="w-full py-2 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 font-semibold bg-white"
+                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 font-semibold bg-white text-xs"
                   >
                     <option value="fire_protection">🔥 Hệ PCCC Cứu hỏa</option>
                     <option value="electrical">⚡ Hệ Điện &amp; MSB</option>
                     <option value="cable_tray">📦 Thang Máng Cáp</option>
                     <option value="water">💧 Cấp Thoát Nước</option>
-                    <option value="hvac">❄️ Hệ Thống HVAC / Thông Gió</option>
+                    <option value="hvac">❄️ Hệ Thống HVAC</option>
                     <option value="other">Cơ điện khác</option>
                   </select>
                 </div>
-              </div>
 
-              {/* HẠNG MỤC HỆ THỐNG / TIỂU MỤC (PCCC: SOL KHÍ, THOÁT HIỂM, HÚT KHÓI, SPRINKLER, VÁCH TƯỜNG...) */}
-              <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-200 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="font-bold text-slate-800 uppercase flex items-center gap-1.5 text-xs">
-                    <Tag className="w-3.5 h-3.5 text-rose-600" />
-                    <span>Hạng Mục Chi Tiết {formCategory === 'fire_protection' ? '(PCCC Đa Hạng Mục)' : ''}</span>
+                {/* ĐÚNG 1 TEXT BOX LÀ HẠNG MỤC VÀ CHỨC NĂNG DROPDOWN */}
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase mb-1">
+                    Hạng Mục
                   </label>
-                  <span className="text-[10px] text-rose-700 font-bold bg-white px-2 py-0.5 rounded border border-rose-200">
-                    Sol Khí • Thoát Hiểm • Hút Khói • Sprinkler • Vách Tường
-                  </span>
-                </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      list="hang-muc-datalist"
+                      value={formSubCategory}
+                      onChange={(e) => setFormSubCategory(e.target.value)}
+                      onFocus={() => setIsHangMucDropdownOpen(true)}
+                      placeholder="Gõ hoặc chọn: Sol Khí, Thoát Hiểm, Sprinkler..."
+                      className="w-full py-1.5 pl-2.5 pr-7 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 shadow-2xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsHangMucDropdownOpen((prev) => !prev)}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+                      title="Mở danh sách hạng mục"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
 
-                {/* Dropdown danh mục chuẩn */}
-                <select
-                  value={
-                    (MNE_SUB_CATEGORIES[formCategory || 'fire_protection'] || []).includes(formSubCategory)
-                      ? formSubCategory
-                      : formSubCategory ? '__custom__' : ''
-                  }
-                  onChange={(e) => {
-                    if (e.target.value !== '__custom__') {
-                      setFormSubCategory(e.target.value);
-                    }
-                  }}
-                  className="w-full py-2 px-3 border border-slate-300 rounded-lg font-medium text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 text-xs"
-                >
-                  <option value="">-- Chọn hạng mục từ danh mục hệ thống --</option>
-                  {(MNE_SUB_CATEGORIES[formCategory || 'fire_protection'] || PCCC_SUB_CATEGORIES).map((sub) => (
-                    <option key={sub} value={sub}>
-                      {sub}
-                    </option>
-                  ))}
-                  <option value="__custom__">+ Nhập hạng mục tùy chỉnh / Tự gõ...</option>
-                </select>
+                    <datalist id="hang-muc-datalist">
+                      {PCCC_SUB_CATEGORIES.map((sub) => (
+                        <option key={`dl-pccc-${sub}`} value={sub} />
+                      ))}
+                      {Object.values(MNE_SUB_CATEGORIES)
+                        .flat()
+                        .map((sub) => (
+                          <option key={`dl-mne-${sub}`} value={sub} />
+                        ))}
+                    </datalist>
 
-                {/* Quick Selection Chips cho PCCC */}
-                {formCategory === 'fire_protection' && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {[
-                      { label: '🔥 Sol Khí', val: 'Sol Khí (Aerosol / FM200 / Novec)' },
-                      { label: '🚪 Hệ Thống Thoát Hiểm', val: 'Hệ Thống Thoát Hiểm' },
-                      { label: '💨 Hút Khói & Tăng Áp', val: 'Hút Khói & Tăng Áp' },
-                      { label: '💦 Sprinkler', val: 'Sprinkler (Đầu phun & Van Alarm)' },
-                      { label: '🚒 Họng Nước Vách Tường', val: 'Họng Nước Vách Tường' },
-                      { label: '🔔 Báo Cháy Tự Động', val: 'Báo Cháy Tự Động' },
-                      { label: '🧯 Bình Chữa Cháy', val: 'Bình Chữa Cháy' },
-                    ].map((item) => {
-                      const isSelected = formSubCategory === item.val;
-                      return (
-                        <button
-                          key={item.val}
-                          type="button"
-                          onClick={() => setFormSubCategory(item.val)}
-                          className={`text-[10px] px-2 py-1 rounded-md font-bold transition-all cursor-pointer ${
-                            isSelected
-                              ? 'bg-rose-600 text-white shadow-2xs'
-                              : 'bg-white text-slate-700 border border-slate-300 hover:bg-rose-50 hover:text-rose-700'
-                          }`}
-                        >
-                          {item.label}
-                        </button>
-                      );
-                    })}
+                    {isHangMucDropdownOpen && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-slate-300 rounded-lg shadow-xl text-xs py-1 divide-y divide-slate-100">
+                        <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase bg-slate-50 flex items-center justify-between">
+                          <span>Danh mục Hạng Mục</span>
+                          <button
+                            type="button"
+                            onClick={() => setIsHangMucDropdownOpen(false)}
+                            className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <div className="py-0.5">
+                          {(MNE_SUB_CATEGORIES[formCategory || 'fire_protection'] || PCCC_SUB_CATEGORIES).map((sub) => (
+                            <button
+                              key={sub}
+                              type="button"
+                              onClick={() => {
+                                setFormSubCategory(sub);
+                                setIsHangMucDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-1.5 hover:bg-sky-50 hover:text-sky-700 transition-colors flex items-center justify-between cursor-pointer ${
+                                formSubCategory === sub ? 'bg-sky-100/60 text-sky-800 font-bold' : 'text-slate-700'
+                              }`}
+                            >
+                              <span>{sub}</span>
+                              {formSubCategory === sub && <Check className="w-3.5 h-3.5 text-sky-600" />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-
-                {/* Trường nhập / điều chỉnh text hạng mục */}
-                <input
-                  type="text"
-                  value={formSubCategory}
-                  onChange={(e) => setFormSubCategory(e.target.value)}
-                  placeholder="Hoặc gõ tên hạng mục: Sol Khí, Thoát Hiểm, Hút Khói, Sprinkler, Vách Tường..."
-                  className="w-full py-1.5 px-3 border border-slate-300 rounded-lg bg-white text-xs text-slate-900 focus:ring-2 focus:ring-sky-500 font-medium"
-                />
+                </div>
               </div>
 
-              {/* TÊN SẢN PHẨM / VẬT TƯ (BẮT BUỘC) */}
+              {/* HÀNG 2: TÊN SẢN PHẨM / VẬT TƯ */}
               <div>
                 <label className="block font-bold text-slate-700 uppercase mb-1">
                   Tên Sản Phẩm / Vật Tư <span className="text-rose-500">*</span>
@@ -1317,16 +1318,16 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                   required
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder="VD: Đèn cảnh báo xả khí, CẤM VÀO / Đầu phun Sprinkler..."
-                  className="w-full py-2 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 text-sm font-semibold"
+                  placeholder="VD: Đèn cảnh báo xả khí, CẤM VÀO / Đầu phun Sprinkler Tyco / Cáp đồng..."
+                  className="w-full py-1.5 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 text-xs font-semibold"
                 />
               </div>
 
-              {/* SETTING LÀ SỐ LƯỢNG & ĐƠN VỊ TÍNH (BẮT BUỘC) */}
-              <div className="grid grid-cols-2 gap-3 bg-sky-50/70 p-3 rounded-xl border border-sky-200">
+              {/* HÀNG 3: TỒN KHO & ĐƠN VỊ TÍNH & CẢNH BÁO TỒN (GỌN GÀNG 3 CỘT) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-sky-50/60 p-2.5 rounded-xl border border-sky-100">
                 <div>
                   <label className="block font-bold text-slate-800 uppercase mb-1">
-                    Setting Số Lượng Tồn Kho <span className="text-rose-500">*</span>
+                    Tồn Kho Ban Đầu <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -1334,10 +1335,9 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                     min={0}
                     value={formStockQuantity}
                     onChange={(e) => setFormStockQuantity(e.target.value)}
-                    placeholder="VD: 100, 250..."
-                    className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500"
+                    placeholder="100..."
+                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500 text-xs"
                   />
-                  <span className="text-[10px] text-slate-500 mt-0.5 block">Số lượng nhập tồn kho ban đầu</span>
                 </div>
 
                 <div>
@@ -1349,35 +1349,233 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                     required
                     value={formUnit}
                     onChange={(e) => setFormUnit(e.target.value)}
-                    placeholder="VD: Cái, Bộ, Mét, Cuộn, Cây, Thùng..."
-                    className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white font-bold text-slate-800 focus:ring-2 focus:ring-sky-500"
+                    placeholder="Cái, Bộ, Mét, Cuộn..."
+                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 text-xs"
                   />
-                  <span className="text-[10px] text-slate-500 mt-0.5 block">Đơn vị đo lường thi công</span>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 uppercase mb-1">
+                    Cảnh Báo Tồn Tối Thiểu
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={formMinStock}
+                    onChange={(e) => setFormMinStock(e.target.value)}
+                    placeholder="10..."
+                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500 text-xs"
+                  />
                 </div>
               </div>
 
-              {/* LINK CATALOGUE & NHÀ CUNG CẤP & GIÁ TIỀN & VAT */}
-              <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                {/* Link Catalogue */}
+              {/* HÀNG 4: NHÀ CUNG CẤP & ĐƠN GIÁ + DROPDOWN VAT (TIẾT KIỆM KHÔNG GIAN) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-2.5 bg-slate-50/80 rounded-xl border border-slate-200">
+                {/* Nhà Cung Cấp: Đúng 1 Text Box với Chức Năng Dropdown */}
                 <div>
-                  <label className="block font-bold text-slate-700 uppercase mb-1 flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-sky-600" />
-                    <span>Link Catalogue (Tài liệu / PDF / Datasheet)</span>
+                  <label className="block font-bold text-slate-700 uppercase mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Store className="w-3.5 h-3.5 text-sky-600" />
+                      <span>Nhà Cung Cấp</span>
+                    </span>
+                  </label>
+
+                  <div className="relative">
+                    <input
+                      type="text"
+                      list="ncc-datalist"
+                      value={formSupplier}
+                      onChange={(e) => setFormSupplier(e.target.value)}
+                      onFocus={() => setIsNccDropdownOpen(true)}
+                      placeholder="Gõ hoặc chọn từ bảng Nhà Cung Cấp..."
+                      className="w-full py-1.5 pl-2.5 pr-7 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 shadow-2xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsNccDropdownOpen((prev) => !prev)}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+                      title="Mở danh sách Nhà Cung Cấp"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+
+                    <datalist id="ncc-datalist">
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.name} />
+                      ))}
+                    </datalist>
+
+                    {isNccDropdownOpen && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-slate-300 rounded-lg shadow-xl text-xs py-1 divide-y divide-slate-100">
+                        <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase bg-slate-50 flex items-center justify-between">
+                          <span>Chọn từ bảng NCC ({suppliers.length})</span>
+                          <button
+                            type="button"
+                            onClick={() => setIsNccDropdownOpen(false)}
+                            className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <div className="py-0.5">
+                          {suppliers.map((s) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => {
+                                setFormSupplier(s.name);
+                                setIsNccDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-1.5 hover:bg-sky-50 hover:text-sky-700 transition-colors flex items-center justify-between cursor-pointer ${
+                                formSupplier === s.name ? 'bg-sky-100/60 text-sky-800 font-bold' : 'text-slate-700'
+                              }`}
+                            >
+                              <div>
+                                <div className="font-semibold">🏢 {s.name}</div>
+                                {s.contactPerson && (
+                                  <div className="text-[10px] text-slate-400">
+                                    {s.contactPerson} {s.phone ? `• ${s.phone}` : ''}
+                                  </div>
+                                )}
+                              </div>
+                              {formSupplier === s.name && <Check className="w-3.5 h-3.5 text-sky-600 shrink-0" />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Đơn Giá & Dropdown VAT */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-slate-700 uppercase flex items-center gap-1 text-xs">
+                      <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Đơn Giá &amp; Thuế VAT</span>
+                    </label>
+                    <span className="text-[10px] text-emerald-700 font-semibold lowercase">
+                      (Dropdown VAT)
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-5 gap-1.5">
+                    <div className="col-span-3 relative">
+                      <input
+                        type="number"
+                        min={0}
+                        value={formUnitPrice}
+                        onChange={(e) => setFormUnitPrice(e.target.value)}
+                        placeholder="VD: 694000..."
+                        className="w-full py-1.5 pl-2.5 pr-8 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500 text-xs"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px] pointer-events-none">
+                        VNĐ
+                      </span>
+                    </div>
+
+                    <div className="col-span-2">
+                      <select
+                        value={formVatRate}
+                        onChange={(e) => setFormVatRate(Number(e.target.value))}
+                        className="w-full py-1.5 px-2 border border-emerald-300 bg-emerald-50 rounded-lg font-bold text-emerald-900 text-xs focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                      >
+                        <option value={10}>VAT 10% (Chuẩn)</option>
+                        <option value={8}>VAT 8% (Ưu đãi)</option>
+                        <option value={0}>VAT 0% (Không thuế)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {formUnitPrice && Number(formUnitPrice) > 0 && (
+                    <div className="mt-1 text-[11px] text-emerald-700 font-medium flex items-center justify-between">
+                      <span>Gồm VAT ({formVatRate}%):</span>
+                      <span className="font-mono font-bold">
+                        {formatVND(Math.round(Number(formUnitPrice) * (1 + formVatRate / 100)))}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* HÀNG 5: KHO LƯU TRỮ & VỊ TRÍ KỆ & THƯƠNG HIỆU */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-2.5 bg-amber-50/40 rounded-xl border border-amber-200/80">
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase mb-1 text-[11px]">
+                    Kho Lưu Trữ <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={formWarehouse}
+                    onChange={(e) => setFormWarehouse(e.target.value)}
+                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500 font-medium text-xs"
+                  >
+                    {existingWarehouses.map((wh) => (
+                      <option key={wh} value={wh}>
+                        {wh}
+                      </option>
+                    ))}
+                    <option value="__custom__">+ Nhập kho mới...</option>
+                  </select>
+                  {formWarehouse === '__custom__' && (
+                    <input
+                      type="text"
+                      required
+                      value={formCustomWarehouse}
+                      onChange={(e) => setFormCustomWarehouse(e.target.value)}
+                      placeholder="Tên kho mới..."
+                      className="w-full mt-1 py-1 px-2.5 border border-sky-400 bg-white rounded-lg text-xs"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase mb-1 text-[11px]">
+                    Vị Trí Kệ / Ô Bãi
+                  </label>
+                  <input
+                    type="text"
+                    value={formShelfLocation}
+                    onChange={(e) => setFormShelfLocation(e.target.value)}
+                    placeholder="Kệ A1-04, Bãi C1..."
+                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500 text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase mb-1 text-[11px]">
+                    Thương Hiệu / Hãng
+                  </label>
+                  <input
+                    type="text"
+                    value={formBrand}
+                    onChange={(e) => setFormBrand(e.target.value)}
+                    placeholder="CADIVI, Schneider, Viking..."
+                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500 text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* HÀNG 6: LINK CATALOGUE & QUY CÁCH KỸ THUẬT */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase mb-1 text-[11px] flex items-center gap-1">
+                    <FileText className="w-3 h-3 text-sky-600" />
+                    <span>Link Catalogue / Datasheet</span>
                   </label>
                   <div className="relative">
                     <input
                       type="url"
                       value={formCatalogueUrl}
                       onChange={(e) => setFormCatalogueUrl(e.target.value)}
-                      placeholder="https://... (Link tải catalogue hoặc datasheet)"
-                      className="w-full py-2 pl-3 pr-8 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 bg-white"
+                      placeholder="https://... (link tài liệu / PDF)"
+                      className="w-full py-1.5 pl-2.5 pr-7 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 bg-white text-xs"
                     />
                     {formCatalogueUrl && (
                       <a
                         href={formCatalogueUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sky-600 hover:text-sky-800"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-sky-600 hover:text-sky-800"
                         title="Mở thử liên kết"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
@@ -1386,258 +1584,70 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Nhà Cung Cấp: Rê từ bảng Nhà Cung Cấp */}
-                  <div>
-                    <label className="block font-bold text-slate-700 uppercase mb-1 flex items-center justify-between">
-                      <span className="flex items-center gap-1">
-                        <Store className="w-3.5 h-3.5 text-sky-600" />
-                        <span>Nhà Cung Cấp</span>
-                      </span>
-                      <span className="text-[10px] font-semibold text-sky-700 lowercase">(chọn từ bảng NCC)</span>
-                    </label>
-
-                    {/* Dropdown chọn từ bảng nhà cung cấp */}
-                    <select
-                      value={suppliers.some((s) => s.name === formSupplier) ? formSupplier : formSupplier ? '__custom__' : ''}
-                      onChange={(e) => {
-                        if (e.target.value !== '__custom__') {
-                          setFormSupplier(e.target.value);
-                        }
-                      }}
-                      className="w-full py-2 px-2.5 mb-1.5 border border-slate-300 rounded-lg bg-white font-medium text-slate-800 text-xs focus:ring-2 focus:ring-sky-500"
-                    >
-                      <option value="">-- Chọn từ bảng NCC ({suppliers.length} đối tác) --</option>
-                      {suppliers.map((s) => (
-                        <option key={s.id} value={s.name}>
-                          🏢 {s.name} {s.contactPerson ? `(${s.contactPerson})` : ''}
-                        </option>
-                      ))}
-                      <option value="__custom__">+ Tự gõ tên nhà cung cấp khác...</option>
-                    </select>
-
-                    <div className="relative">
-                      <input
-                        type="text"
-                        list="suppliers-datalist"
-                        value={formSupplier}
-                        onChange={(e) => setFormSupplier(e.target.value)}
-                        placeholder="Hoặc gõ tìm NCC (CADIVI, Fisa, Schneider...)"
-                        className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500 text-xs font-medium"
-                      />
-                      <datalist id="suppliers-datalist">
-                        {suppliers.map((s) => (
-                          <option key={s.id} value={s.name} />
-                        ))}
-                      </datalist>
-                    </div>
-                  </div>
-
-                  {/* Giá Tiền & Chọn Thuế VAT 0%, 8%, 10% */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block font-bold text-slate-700 uppercase flex items-center gap-1">
-                        <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Giá Tiền (VNĐ)</span>
-                      </label>
-
-                      {/* Chọn VAT 0%, 8%, 10% */}
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] font-bold text-slate-600">VAT:</span>
-                        {[0, 8, 10].map((rate) => (
-                          <button
-                            key={rate}
-                            type="button"
-                            onClick={() => setFormVatRate(rate)}
-                            className={`text-[10px] px-1.5 py-0.5 rounded font-extrabold transition-all cursor-pointer ${
-                              formVatRate === rate
-                                ? 'bg-emerald-600 text-white shadow-2xs'
-                                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                            }`}
-                          >
-                            {rate}%
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min={0}
-                        value={formUnitPrice}
-                        onChange={(e) => setFormUnitPrice(e.target.value)}
-                        placeholder="VD: 694000 (để trống nếu liên hệ)"
-                        className="w-full py-2 pl-3 pr-10 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs pointer-events-none">
-                        VNĐ
-                      </span>
-                    </div>
-
-                    {/* Hiển thị tính toán sau VAT */}
-                    {formUnitPrice && Number(formUnitPrice) > 0 && (
-                      <div className="mt-1.5 p-2 bg-emerald-50 rounded-lg border border-emerald-200 text-[11px] space-y-0.5">
-                        <div className="flex items-center justify-between text-slate-600">
-                          <span>Thuế VAT ({formVatRate}%):</span>
-                          <span className="font-mono font-semibold text-emerald-700">
-                            +{formatVND(Math.round(Number(formUnitPrice) * (formVatRate / 100)))}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between font-bold text-slate-900 border-t border-emerald-200/60 pt-0.5">
-                          <span>Tổng gồm VAT:</span>
-                          <span className="font-mono text-emerald-700 font-extrabold">
-                            {formatVND(Math.round(Number(formUnitPrice) * (1 + formVatRate / 100)))}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* KHO LƯU TRỮ & VỊ TRÍ KỆ (ĐANG TỒN Ở ĐÂU) */}
-              <div className="p-3 bg-amber-50/50 border border-amber-200 rounded-xl space-y-3">
-                <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
-                  <Warehouse className="w-4 h-4 text-amber-600" />
-                  <span>KHO LƯU TRỮ &amp; ĐIỂM TỒN KHO</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 uppercase mb-1">
-                      Kho Đang Lưu Trữ <span className="text-rose-500">*</span>
-                    </label>
-                    <select
-                      value={formWarehouse}
-                      onChange={(e) => setFormWarehouse(e.target.value)}
-                      className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500 font-medium"
-                    >
-                      {existingWarehouses.map((wh) => (
-                        <option key={wh} value={wh}>
-                          {wh}
-                        </option>
-                      ))}
-                      <option value="__custom__">+ Nhập kho công trường mới...</option>
-                    </select>
-
-                    {formWarehouse === '__custom__' && (
-                      <input
-                        type="text"
-                        required
-                        value={formCustomWarehouse}
-                        onChange={(e) => setFormCustomWarehouse(e.target.value)}
-                        placeholder="Nhập tên kho mới (VD: Kho Site Nhà Bè)..."
-                        className="w-full mt-2 py-1.5 px-3 border border-sky-400 bg-white rounded-lg focus:ring-2 focus:ring-sky-500"
-                      />
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 uppercase mb-1">
-                      Vị Trí Kệ / Ô Bãi Trong Kho
-                    </label>
-                    <input
-                      type="text"
-                      value={formShelfLocation}
-                      onChange={(e) => setFormShelfLocation(e.target.value)}
-                      placeholder="VD: Kệ A1-04, Bãi Cáp Lô C1..."
-                      className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 uppercase mb-1">
-                      Mức Cảnh Báo Tồn Tối Thiểu
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={formMinStock}
-                      onChange={(e) => setFormMinStock(e.target.value)}
-                      className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 uppercase mb-1">
-                      Thương Hiệu / Hãng
-                    </label>
-                    <input
-                      type="text"
-                      value={formBrand}
-                      onChange={(e) => setFormBrand(e.target.value)}
-                      placeholder="VD: CADIVI, Schneider, Viking..."
-                      className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* QUY CÁCH KỸ THUẬT */}
-              <div>
-                <label className="block font-bold text-slate-700 uppercase mb-1">
-                  Quy Cách &amp; Tiêu Chuẩn Kỹ Thuật
-                </label>
-                <textarea
-                  rows={2}
-                  value={formSpecifications}
-                  onChange={(e) => setFormSpecifications(e.target.value)}
-                  placeholder="Quy cách, thông số, cấp điện áp, tiêu chuẩn kiểm định..."
-                  className="w-full py-2 px-3 border border-slate-300 rounded-lg resize-none"
-                />
-              </div>
-
-              {/* HÌNH ẢNH CÓ THỂ CHỤP TỪ SNAP TOOL */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-bold text-slate-700 uppercase flex items-center gap-1.5">
-                    <Scissors className="w-3.5 h-3.5 text-sky-600" />
-                    <span>Hình Ảnh Nhận Dạng (Chụp từ Snap Tool)</span>
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase mb-1 text-[11px]">
+                    Quy Cách &amp; Tiêu Chuẩn Kỹ Thuật
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSnapTargetMaterial({
-                        id: editingMaterial?.id || 'temp',
-                        code: formCode || 'VT0001',
-                        name: formName || 'Vật tư mới',
-                        category: formCategory,
-                        unit: formUnit,
-                        unitPrice: typeof formUnitPrice === 'number' ? formUnitPrice : undefined,
-                        imageUrl: formImageUrl,
-                        warehouseLocation: formWarehouse,
-                        stockQuantity: Number(formStockQuantity) || 0,
-                        shelfLocation: formShelfLocation,
-                      });
-                      setIsSnapModalOpen(true);
-                    }}
-                    className="text-xs text-sky-700 font-bold hover:text-sky-800 flex items-center gap-1 bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-md border border-sky-200 transition-colors"
-                  >
-                    <Scissors className="w-3.5 h-3.5" />
-                    <span>Mở Snap Tool (Chụp / Dán Ctrl+V)</span>
-                  </button>
+                  <input
+                    type="text"
+                    value={formSpecifications}
+                    onChange={(e) => setFormSpecifications(e.target.value)}
+                    placeholder="Thông số, cấp điện áp, kiểm định..."
+                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+              </div>
+
+              {/* HÀNG 7: HÌNH ẢNH NHẬN DẠNG & SNAP TOOL (RẤT GỌN GÀNG) */}
+              <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="flex items-center gap-2">
+                  {formImageUrl ? (
+                    <div className="relative w-9 h-9 rounded border border-slate-300 overflow-hidden bg-slate-900 shrink-0">
+                      <img src={formImageUrl} alt="" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setFormImageUrl('')}
+                        className="absolute inset-0 bg-black/60 text-white flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                        title="Xóa hình ảnh này"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-9 h-9 rounded border border-dashed border-slate-300 flex items-center justify-center text-slate-400 shrink-0 bg-white">
+                      <Scissors className="w-3.5 h-3.5" />
+                    </div>
+                  )}
+                  <div>
+                    <span className="font-bold text-slate-700 block text-[11px]">Hình Ảnh Nhận Dạng Vật Tư</span>
+                    <span className="text-[10px] text-slate-400">
+                      {formImageUrl ? 'Đã gán hình ảnh mẫu' : 'Chưa có ảnh (tùy chọn)'}
+                    </span>
+                  </div>
                 </div>
 
-                {formImageUrl ? (
-                  <div className="relative rounded-lg overflow-hidden border border-slate-300 bg-slate-900 max-h-36 flex items-center justify-center">
-                    <img src={formImageUrl} alt="Nhận dạng" className="max-h-36 object-contain" />
-                    <button
-                      type="button"
-                      onClick={() => setFormImageUrl('')}
-                      className="absolute top-2 right-2 bg-rose-600 text-white rounded p-1 text-xs hover:bg-rose-500 shadow"
-                      title="Xóa hình ảnh này"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="border border-dashed border-slate-300 rounded-lg p-3 text-center bg-slate-50 text-slate-500 text-xs">
-                    Chưa có hình ảnh. Bấm nút <strong>"Mở Snap Tool (Chụp / Dán Ctrl+V)"</strong> ở trên để chụp màn hình catalogue hoặc camera hiện trường.
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSnapTargetMaterial({
+                      id: editingMaterial?.id || 'temp',
+                      code: formCode || 'VT0001',
+                      name: formName || 'Vật tư mới',
+                      category: formCategory,
+                      unit: formUnit,
+                      unitPrice: typeof formUnitPrice === 'number' ? formUnitPrice : undefined,
+                      imageUrl: formImageUrl,
+                      warehouseLocation: formWarehouse,
+                      stockQuantity: Number(formStockQuantity) || 0,
+                      shelfLocation: formShelfLocation,
+                    });
+                    setIsSnapModalOpen(true);
+                  }}
+                  className="text-xs text-sky-700 font-bold hover:text-sky-800 flex items-center gap-1 bg-white hover:bg-sky-50 px-2.5 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition-colors shrink-0 cursor-pointer"
+                >
+                  <Scissors className="w-3.5 h-3.5 text-sky-600" />
+                  <span>Snap Tool (Chụp / Dán Ctrl+V)</span>
+                </button>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t">
