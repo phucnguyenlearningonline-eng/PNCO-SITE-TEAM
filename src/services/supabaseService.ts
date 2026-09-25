@@ -1,5 +1,5 @@
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
-import { ExpenseItem, Project, Supplier, User } from '../types';
+import { ExpenseItem, Project, Supplier, User, MaterialItem } from '../types';
 
 // ==============================================================
 // EXPENSES SERVICE
@@ -387,6 +387,109 @@ export async function upsertUserToSupabase(user: User): Promise<boolean> {
 }
 
 // ==============================================================
+// MATERIALS SERVICE
+// ==============================================================
+export function mapRowToMaterial(row: any): MaterialItem {
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    category: row.category || 'fire_protection',
+    subCategory: row.sub_category || undefined,
+    unit: row.unit || 'Cái',
+    unitPrice: row.unit_price !== null && row.unit_price !== undefined ? Number(row.unit_price) : undefined,
+    vatRate: row.vat_rate !== null && row.vat_rate !== undefined ? Number(row.vat_rate) : 10,
+    stockQuantity: Number(row.stock_quantity || 0),
+    minStock: Number(row.min_stock || 10),
+    warehouseLocation: row.warehouse_location || 'Kho Tổng Dĩ An (Bình Dương)',
+    shelfLocation: row.shelf_location || undefined,
+    brand: row.brand || undefined,
+    supplier: row.supplier || undefined,
+    catalogueUrl: row.catalogue_url || undefined,
+    specifications: row.specifications || undefined,
+    imageUrl: row.image_url || undefined,
+  };
+}
+
+export async function fetchMaterialsFromSupabase(): Promise<MaterialItem[] | null> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('materials')
+      .select('*')
+      .order('code', { ascending: true });
+
+    if (error) {
+      console.warn('Supabase fetch materials warning (có thể bảng materials chưa được tạo):', error.message);
+      return null;
+    }
+
+    if (!data) return [];
+    return data.map(mapRowToMaterial);
+  } catch (err) {
+    console.error('Failed to load materials from Supabase:', err);
+    return null;
+  }
+}
+
+export async function upsertMaterialToSupabase(item: MaterialItem): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+
+  try {
+    const payload = {
+      id: item.id,
+      code: item.code,
+      name: item.name,
+      category: item.category || 'fire_protection',
+      sub_category: item.subCategory || null,
+      unit: item.unit,
+      unit_price: item.unitPrice !== undefined ? item.unitPrice : null,
+      vat_rate: item.vatRate !== undefined ? item.vatRate : 10,
+      stock_quantity: item.stockQuantity,
+      min_stock: item.minStock !== undefined ? item.minStock : 10,
+      warehouse_location: item.warehouseLocation || 'Kho Tổng Dĩ An (Bình Dương)',
+      shelf_location: item.shelfLocation || null,
+      brand: item.brand || null,
+      supplier: item.supplier || null,
+      catalogue_url: item.catalogueUrl || null,
+      specifications: item.specifications || null,
+      image_url: item.imageUrl || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from('materials').upsert(payload);
+    if (error) {
+      console.error('Supabase upsert material error:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to upsert material:', err);
+    return false;
+  }
+}
+
+export async function deleteMaterialFromSupabase(id: string): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase.from('materials').delete().eq('id', id);
+    if (error) {
+      console.error('Supabase delete material error:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to delete material:', err);
+    return false;
+  }
+}
+
+// ==============================================================
 // MIGRATE ALL LOCAL DATA TO SUPABASE (1-CLICK SYNC)
 // ==============================================================
 export async function syncAllLocalDataToSupabase(data: {
@@ -394,6 +497,7 @@ export async function syncAllLocalDataToSupabase(data: {
   suppliers: Supplier[];
   users: User[];
   expenses: ExpenseItem[];
+  materials?: MaterialItem[];
 }): Promise<{ success: boolean; message: string; count: number }> {
   const supabase = getSupabaseClient();
   if (!supabase) {
@@ -402,7 +506,6 @@ export async function syncAllLocalDataToSupabase(data: {
 
   try {
     let failedCount = 0;
-    let lastError = '';
 
     // 1. Projects
     for (const p of data.projects) {
@@ -428,18 +531,27 @@ export async function syncAllLocalDataToSupabase(data: {
       if (!ok) failedCount++;
     }
 
+    // 5. Materials (Vật tư thi công & sản phẩm)
+    if (data.materials && data.materials.length > 0) {
+      for (const m of data.materials) {
+        const ok = await upsertMaterialToSupabase(m);
+        if (!ok) failedCount++;
+      }
+    }
+
     if (failedCount > 0) {
       return {
         success: false,
-        message: `Có ${failedCount} bản ghi không thể ghi vào Supabase. Vui lòng kiểm tra lại URL và Anon Key.`,
-        count: data.expenses.length - failedCount,
+        message: `Có ${failedCount} bản ghi không thể ghi vào Supabase. Vui lòng kiểm tra xem bạn đã tạo bảng 'materials' và cấp quyền RLS chưa.`,
+        count: (data.expenses.length + (data.materials?.length || 0)) - failedCount,
       };
     }
 
+    const matMsg = data.materials?.length ? `, ${data.materials.length} vật tư` : '';
     return {
       success: true,
-      message: `Đồng bộ thành công ${data.expenses.length} khoản chi, ${data.projects.length} dự án, ${data.suppliers.length} đối tác lên Supabase!`,
-      count: data.expenses.length,
+      message: `Đồng bộ thành công ${data.expenses.length} khoản chi, ${data.projects.length} dự án, ${data.suppliers.length} đối tác${matMsg} lên Supabase!`,
+      count: data.expenses.length + (data.materials?.length || 0),
     };
   } catch (err: any) {
     return {

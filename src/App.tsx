@@ -56,6 +56,9 @@ import {
   upsertSupplierToSupabase,
   deleteSupplierFromSupabase,
   fetchUsersFromSupabase,
+  fetchMaterialsFromSupabase,
+  upsertMaterialToSupabase,
+  deleteMaterialFromSupabase,
   subscribeToExpensesRealtime
 } from './services/supabaseService';
 import { ClientsView } from './components/ClientsView';
@@ -299,11 +302,12 @@ export default function App() {
   const loadDataFromSupabase = async () => {
     if (!isSupabaseConfigured()) return;
     try {
-      const [remoteExpenses, remoteProjects, remoteSuppliers, remoteUsers] = await Promise.all([
+      const [remoteExpenses, remoteProjects, remoteSuppliers, remoteUsers, remoteMaterials] = await Promise.all([
         fetchExpensesFromSupabase(),
         fetchProjectsFromSupabase(),
         fetchSuppliersFromSupabase(),
         fetchUsersFromSupabase(),
+        fetchMaterialsFromSupabase(),
       ]);
 
       // If remote expenses exist (even empty array after deletions), sync it
@@ -312,6 +316,7 @@ export default function App() {
       }
       if (remoteProjects && remoteProjects.length > 0) setProjects(remoteProjects);
       if (remoteSuppliers && remoteSuppliers.length > 0) setSuppliers(remoteSuppliers);
+      if (remoteMaterials && remoteMaterials.length > 0) setMaterials(remoteMaterials);
       if (remoteUsers && remoteUsers.length > 0) {
         const normalized = remoteUsers.map((u) => {
           const isMinh = u.id === 'u-1' || (u.name && u.name.toLowerCase().includes('minh')) || (u.email && u.email.toLowerCase().includes('minh.ta')) || u.username === 'Pncons';
@@ -640,30 +645,45 @@ export default function App() {
   };
 
   // Material Handlers (Mã VT 0001+ & Snap Tool)
-  const handleAddMaterial = (newMat: MaterialItem) => {
+  const handleAddMaterial = async (newMat: MaterialItem) => {
     setMaterials((prev) => [newMat, ...prev]);
+    if (isSupabaseConfigured()) {
+      await upsertMaterialToSupabase(newMat);
+    }
     showToast(`Đã thêm vật tư mới [${newMat.code}]: ${newMat.name}`);
   };
 
-  const handleEditMaterial = (updatedMat: MaterialItem) => {
+  const handleEditMaterial = async (updatedMat: MaterialItem) => {
     setMaterials((prev) => prev.map((m) => (m.id === updatedMat.id ? updatedMat : m)));
+    if (isSupabaseConfigured()) {
+      await upsertMaterialToSupabase(updatedMat);
+    }
     showToast(`Đã cập nhật vật tư [${updatedMat.code}]`);
   };
 
-  const handleDeleteMaterial = (materialId: string) => {
+  const handleDeleteMaterial = async (materialId: string) => {
     const target = materials.find((m) => m.id === materialId);
     setMaterials((prev) => prev.filter((m) => m.id !== materialId));
+    if (isSupabaseConfigured()) {
+      await deleteMaterialFromSupabase(materialId);
+    }
     showToast(`Đã xóa vật tư [${target?.code || materialId}]`);
   };
 
-  const handleUpdateMaterialImage = (materialCode: string, imageUrl: string) => {
+  const handleUpdateMaterialImage = async (materialCode: string, imageUrl: string) => {
+    let targetUpdated: MaterialItem | undefined;
     setMaterials((prev) =>
-      prev.map((m) =>
-        m.code.toLowerCase().trim() === materialCode.toLowerCase().trim()
-          ? { ...m, imageUrl }
-          : m
-      )
+      prev.map((m) => {
+        if (m.code.toLowerCase().trim() === materialCode.toLowerCase().trim()) {
+          targetUpdated = { ...m, imageUrl };
+          return targetUpdated;
+        }
+        return m;
+      })
     );
+    if (targetUpdated && isSupabaseConfigured()) {
+      await upsertMaterialToSupabase(targetUpdated);
+    }
     showToast(`Đã cập nhật ảnh nhận dạng cho [${materialCode}] từ Snap Tool!`);
   };
 
@@ -1146,6 +1166,7 @@ export default function App() {
         projects={projects}
         suppliers={suppliers}
         users={users}
+        materials={materials}
         onRefreshDataFromSupabase={loadDataFromSupabase}
       />
     </div>

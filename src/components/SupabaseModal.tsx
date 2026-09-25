@@ -21,7 +21,7 @@ import {
   SupabaseConfig 
 } from '../lib/supabase';
 import { syncAllLocalDataToSupabase } from '../services/supabaseService';
-import { ExpenseItem, Project, Supplier, User } from '../types';
+import { ExpenseItem, Project, Supplier, User, MaterialItem } from '../types';
 
 interface SupabaseModalProps {
   isOpen: boolean;
@@ -30,6 +30,7 @@ interface SupabaseModalProps {
   projects: Project[];
   suppliers: Supplier[];
   users: User[];
+  materials?: MaterialItem[];
   onRefreshDataFromSupabase: () => void;
 }
 
@@ -40,6 +41,7 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
   projects,
   suppliers,
   users,
+  materials = [],
   onRefreshDataFromSupabase,
 }) => {
   const [url, setUrl] = useState('');
@@ -51,11 +53,42 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
   const [copiedEnv, setCopiedEnv] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
 
-  const FIX_SQL = `-- CẤP TOÀN QUYỀN ĐỌC, GHI, SỬA, XÓA & KÍCH HOẠT REALTIME ĐA THIẾT BỊ
+  const FIX_SQL = `-- ================================================================
+-- 1. TẠO BẢNG VẬT TƯ THI CÔNG & SẢN PHẨM M&E (NẾU CHƯA CÓ)
+-- ================================================================
+CREATE TABLE IF NOT EXISTS public.materials (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    category TEXT DEFAULT 'fire_protection',
+    sub_category TEXT,
+    unit TEXT NOT NULL,
+    unit_price BIGINT,
+    vat_rate NUMERIC DEFAULT 10,
+    stock_quantity NUMERIC DEFAULT 0,
+    min_stock NUMERIC DEFAULT 10,
+    warehouse_location TEXT DEFAULT 'Kho Tổng Dĩ An (Bình Dương)',
+    shelf_location TEXT,
+    brand TEXT,
+    supplier TEXT,
+    catalogue_url TEXT,
+    specifications TEXT,
+    image_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+CREATE INDEX IF NOT EXISTS idx_materials_code ON public.materials(code);
+CREATE INDEX IF NOT EXISTS idx_materials_category ON public.materials(category);
+
+-- ================================================================
+-- 2. CẤP TOÀN QUYỀN ĐỌC, GHI, SỬA, XÓA CHO TẤT CẢ CÁC BẢNG (RLS POLICIES)
+-- ================================================================
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.materials ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Public Read Expenses" ON public.expenses;
 DROP POLICY IF EXISTS "Public Insert/Update Expenses" ON public.expenses;
@@ -77,6 +110,14 @@ DROP POLICY IF EXISTS "Public Insert/Update Users" ON public.site_users;
 DROP POLICY IF EXISTS "Allow All Users" ON public.site_users;
 CREATE POLICY "Allow All Users" ON public.site_users FOR ALL USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Public Read Materials" ON public.materials;
+DROP POLICY IF EXISTS "Public Insert/Update Materials" ON public.materials;
+DROP POLICY IF EXISTS "Allow All Materials" ON public.materials;
+CREATE POLICY "Allow All Materials" ON public.materials FOR ALL USING (true) WITH CHECK (true);
+
+-- ================================================================
+-- 3. KÍCH HOẠT ĐỒNG BỘ REALTIME ĐA THIẾT BỊ
+-- ================================================================
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'expenses') THEN
@@ -90,6 +131,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'site_users') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.site_users;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'materials') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.materials;
   END IF;
 END $$;`;
 
@@ -149,6 +193,7 @@ END $$;`;
       projects,
       suppliers,
       users,
+      materials,
     });
     setSyncResult(res);
     setIsSyncing(false);

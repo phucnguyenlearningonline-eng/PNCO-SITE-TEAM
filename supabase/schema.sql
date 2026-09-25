@@ -74,11 +74,36 @@ CREATE TABLE IF NOT EXISTS public.expenses (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
+-- 5. BẢNG DANH MỤC VẬT TƯ THI CÔNG & SẢN PHẨM M&E (MATERIALS)
+CREATE TABLE IF NOT EXISTS public.materials (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    category TEXT DEFAULT 'fire_protection',
+    sub_category TEXT,
+    unit TEXT NOT NULL,
+    unit_price BIGINT,
+    vat_rate NUMERIC DEFAULT 10,
+    stock_quantity NUMERIC DEFAULT 0,
+    min_stock NUMERIC DEFAULT 10,
+    warehouse_location TEXT DEFAULT 'Kho Tổng Dĩ An (Bình Dương)',
+    shelf_location TEXT,
+    brand TEXT,
+    supplier TEXT,
+    catalogue_url TEXT,
+    specifications TEXT,
+    image_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
 -- TẠO CHỈ MỤC TĂNG TỐC ĐỘ TRUY VẤN
 CREATE INDEX IF NOT EXISTS idx_expenses_date ON public.expenses(date);
 CREATE INDEX IF NOT EXISTS idx_expenses_category ON public.expenses(category);
 CREATE INDEX IF NOT EXISTS idx_expenses_status ON public.expenses(status);
 CREATE INDEX IF NOT EXISTS idx_expenses_project_id ON public.expenses(project_id);
+CREATE INDEX IF NOT EXISTS idx_materials_code ON public.materials(code);
+CREATE INDEX IF NOT EXISTS idx_materials_category ON public.materials(category);
 
 -- ================================================================
 -- CẤU HÌNH BẢO MẬT & QUYỀN TRUY CẬP (TOÀN QUYỀN ĐỌC, GHI, SỬA, XÓA)
@@ -87,6 +112,7 @@ ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.materials ENABLE ROW LEVEL SECURITY;
 
 -- Xóa các policy cũ để tránh trùng lặp
 DROP POLICY IF EXISTS "Public Read Projects" ON public.projects;
@@ -108,6 +134,11 @@ DROP POLICY IF EXISTS "Public Read Expenses" ON public.expenses;
 DROP POLICY IF EXISTS "Public Insert/Update Expenses" ON public.expenses;
 DROP POLICY IF EXISTS "Allow All Expenses" ON public.expenses;
 CREATE POLICY "Allow All Expenses" ON public.expenses FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public Read Materials" ON public.materials;
+DROP POLICY IF EXISTS "Public Insert/Update Materials" ON public.materials;
+DROP POLICY IF EXISTS "Allow All Materials" ON public.materials;
+CREATE POLICY "Allow All Materials" ON public.materials FOR ALL USING (true) WITH CHECK (true);
 
 -- ================================================================
 -- KÍCH HOẠT ĐỒNG BỘ REALTIME TỨC THỜI CHO CÁC MÁY TÍNH & ĐIỆN THOẠI
@@ -140,6 +171,13 @@ BEGIN
     WHERE pubname = 'supabase_realtime' AND tablename = 'site_users'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.site_users;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'materials'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.materials;
   END IF;
 END $$;
 
