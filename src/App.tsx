@@ -199,6 +199,8 @@ export default function App() {
               code: cleanCode || `VT${String(idx + 1).padStart(4, '0')}`,
               catalogueUrl: item.catalogueUrl || fallback?.catalogueUrl || '',
               supplier: item.supplier || fallback?.supplier || '',
+              subCategory: item.subCategory || fallback?.subCategory || '',
+              vatRate: typeof item.vatRate === 'number' ? item.vatRate : (fallback?.vatRate ?? 10),
               unitPrice: typeof item.unitPrice === 'number' ? item.unitPrice : fallback?.unitPrice,
               warehouseLocation: item.warehouseLocation || fallback?.warehouseLocation || 'Kho Tổng Dĩ An (Bình Dương)',
               stockQuantity: typeof item.stockQuantity === 'number' ? item.stockQuantity : (fallback?.stockQuantity ?? 50),
@@ -310,7 +312,57 @@ export default function App() {
       }
       if (remoteProjects && remoteProjects.length > 0) setProjects(remoteProjects);
       if (remoteSuppliers && remoteSuppliers.length > 0) setSuppliers(remoteSuppliers);
-      if (remoteUsers && remoteUsers.length > 0) setUsers(remoteUsers);
+      if (remoteUsers && remoteUsers.length > 0) {
+        const normalized = remoteUsers.map((u) => {
+          const isMinh = u.id === 'u-1' || (u.name && u.name.toLowerCase().includes('minh')) || (u.email && u.email.toLowerCase().includes('minh.ta')) || u.username === 'Pncons';
+          const isDirector = u.role === 'director' || (u.email && u.email.toLowerCase().includes('phucnguyen'));
+          if (isMinh) {
+            return {
+              ...u,
+              name: u.name || 'Trần Anh Minh',
+              username: 'Pncons',
+              password: u.password || 'Minhatea1987@',
+              pin: u.pin || '1234',
+              isAuthorized: true,
+              permissions: {
+                canApproveExpense: true,
+                canCreateExpense: true,
+                canManageMaterials: true,
+                canManageSuppliers: true,
+                canManageProjects: true,
+                canManageUsers: true,
+                canExportReports: true,
+              },
+            };
+          }
+          if (isDirector) {
+            return {
+              ...u,
+              username: u.username || 'phucnguyen',
+              password: u.password || '1234',
+              pin: u.pin || '1234',
+              isAuthorized: true,
+              permissions: {
+                canApproveExpense: true,
+                canCreateExpense: true,
+                canManageMaterials: true,
+                canManageSuppliers: true,
+                canManageProjects: true,
+                canManageUsers: true,
+                canExportReports: true,
+              },
+            };
+          }
+          return {
+            ...u,
+            username: u.username || (u.email ? u.email.split('@')[0] : ''),
+            password: u.password || u.pin || '1234',
+            pin: u.pin || '1234',
+            isAuthorized: u.isAuthorized !== undefined ? Boolean(u.isAuthorized) : true,
+          };
+        });
+        setUsers(normalized);
+      }
       showToast('Đã nạp dữ liệu đồng bộ thời gian thực từ Supabase');
     } catch (e) {
       console.warn('Could not sync with Supabase on startup:', e);
@@ -793,11 +845,16 @@ export default function App() {
           {activeTab === 'materials' ? (
             <MaterialsView
               materials={materials}
+              suppliers={suppliers}
               expenses={expenses}
               onAddMaterial={handleAddMaterial}
               onEditMaterial={handleEditMaterial}
               onDeleteMaterial={handleDeleteMaterial}
               onSelectMaterialForPO={(mat) => {
+                const vatRate = typeof mat.vatRate === 'number' ? mat.vatRate : 10;
+                const unitPrice = mat.unitPrice || 0;
+                const vatAmount = Math.round(unitPrice * (vatRate / 100));
+                const totalAmount = unitPrice + vatAmount;
                 setEditingExpense({
                   id: `exp-${Date.now()}`,
                   code: `PO-2026-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -805,7 +862,7 @@ export default function App() {
                   category: 'material',
                   materialCode: mat.code,
                   title: mat.name,
-                  subDescription: mat.specifications || '',
+                  subDescription: [mat.subCategory, mat.specifications].filter(Boolean).join(' - '),
                   projectId: projects[0]?.id || '',
                   projectName: projects[0]?.name || '',
                   supplier: mat.supplier || '',
@@ -813,10 +870,10 @@ export default function App() {
                   createdByName: currentUser.name,
                   createdByRole: currentUser.roleTitle,
                   date: new Date().toISOString().split('T')[0],
-                  amount: mat.unitPrice || 0,
-                  vatRate: 10,
-                  vatAmount: Math.round((mat.unitPrice || 0) * 0.1),
-                  totalAmount: Math.round((mat.unitPrice || 0) * 1.1),
+                  amount: unitPrice,
+                  vatRate: vatRate,
+                  vatAmount: vatAmount,
+                  totalAmount: totalAmount,
                   priority: 'normal',
                   status: 'pending',
                   paymentMethod: 'transfer',

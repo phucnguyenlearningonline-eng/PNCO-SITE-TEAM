@@ -65,10 +65,12 @@ export interface MaterialItem {
   stockQuantity: number; // Số lượng tồn kho
   unit: string; // Đơn vị tính: Mét, Cuộn, Cái, Bộ, Cây, Thùng...
   category?: 'electrical' | 'fire_protection' | 'water' | 'hvac' | 'cable_tray' | 'other';
+  subCategory?: string; // Hạng mục chi tiết: Sol Khí, Hệ Thống Thoát Hiểm, Hút Khói, Sprinkler, Vách Tường...
   imageUrl?: string; // Hình ảnh có thể chụp từ Snap Tool hoặc tải lên
   catalogueUrl?: string; // Link Catalogue tài liệu kỹ thuật
-  supplier?: string; // Nhà Cung Cấp (không bắt buộc)
-  unitPrice?: number; // Giá Tiền (không bắt buộc)
+  supplier?: string; // Nhà Cung Cấp (chọn từ danh sách NCC hoặc tự nhập)
+  unitPrice?: number; // Giá Tiền chưa VAT (không bắt buộc)
+  vatRate?: number; // Thuế suất VAT: 0, 8, 10 (%)
   brand?: string; // CADIVI, Schneider, Hòa Phát, Viking...
   specifications?: string; // Quy cách kỹ thuật
   warehouseLocation: string; // Tên kho đang tồn: "Kho Tổng Dĩ An", "Kho Site VSIP II"...

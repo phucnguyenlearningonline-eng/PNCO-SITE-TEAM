@@ -35,14 +35,70 @@ export const STANDARD_WAREHOUSES = [
   'Kho Trung Chuyển Q.9 (TP.HCM)',
 ];
 
+export const PCCC_SUB_CATEGORIES = [
+  'Sol Khí (Aerosol / FM200 / Novec)',
+  'Hệ Thống Thoát Hiểm',
+  'Hút Khói & Tăng Áp',
+  'Sprinkler (Đầu phun & Van Alarm)',
+  'Họng Nước Vách Tường',
+  'Báo Cháy Tự Động',
+  'Bình Chữa Cháy',
+  'Bơm Chữa Cháy',
+  'Vật Tư Phụ PCCC',
+];
+
+export const MNE_SUB_CATEGORIES: Record<string, string[]> = {
+  fire_protection: [
+    'Sol Khí (Aerosol / FM200 / Novec)',
+    'Hệ Thống Thoát Hiểm',
+    'Hút Khói & Tăng Áp',
+    'Sprinkler (Đầu phun & Van Alarm)',
+    'Họng Nước Vách Tường',
+    'Báo Cháy Tự Động',
+    'Bình Chữa Cháy',
+    'Bơm Chữa Cháy',
+    'Vật Tư Phụ PCCC',
+  ],
+  electrical: [
+    'Tủ Điện & MSB / DB',
+    'Cáp Điện Động Lực',
+    'Ống Luồn Dây Điện & Phụ Kiện',
+    'Thiết Bị Đóng Cắt (MCB/MCCB/ACB)',
+    'Chiếu Sáng & Ổ Cắm',
+    'Tiếp Địa & Chống Sét',
+  ],
+  cable_tray: [
+    'Thang Cáp (Cable Ladder)',
+    'Máng Cáp (Cable Trunking)',
+    'Khay Cáp (Cable Tray)',
+    'Phụ Kiện Co / Tê / Nối',
+  ],
+  water: [
+    'Ống & Phụ Kiện PPR / HDPE / PVC',
+    'Van & Phụ Kiện Đường Ống',
+    'Máy Bơm & Thiết Bị Cấp Nước',
+    'Hố Ga & Thoát Nước',
+    'Thiết Bị Vệ Sinh',
+  ],
+  hvac: [
+    'Máy Lạnh Trung Tâm / VRV / Chiller',
+    'Ống Gió & Miệng Gió',
+    'Quạt Thông Gió & Cấp Khí Tươi',
+    'Bảo Ôn Cách Nhiệt & Ống Đồng',
+  ],
+  other: ['Cơ điện khác'],
+};
+
 export const INITIAL_MATERIALS: MaterialItem[] = [
   {
     id: 'mat-0001',
     code: 'VT0001',
     name: 'Cáp đồng hạ thế CADIVI CXV 3x120+1x70 mm2',
     category: 'electrical',
+    subCategory: 'Cáp Điện Động Lực',
     unit: 'Mét',
     unitPrice: 1050000,
+    vatRate: 10,
     brand: 'CADIVI',
     specifications: '0.6/1kV, Cu/XLPE/PVC, ruột đồng ép chặt bện tròn, theo TCVN 5935-1 / IEC 60502-1',
     imageUrl: createTechnicalSvg('VT0001', 'Cáp đồng CADIVI CXV 3x120+1x70', 'Hệ Điện Động Lực', '#38bdf8', '⚡ CXV'),
@@ -58,8 +114,10 @@ export const INITIAL_MATERIALS: MaterialItem[] = [
     code: 'VT0002',
     name: 'Đầu phun chữa cháy tự động Sprinkler Viking VK102 Cuộn 68°C',
     category: 'fire_protection',
+    subCategory: 'Sprinkler (Đầu phun & Van Alarm)',
     unit: 'Cái',
     unitPrice: 98000,
+    vatRate: 10,
     brand: 'Viking (USA)',
     specifications: 'Hệ số K=5.6 (80.6), Ren 1/2" NPT, phản ứng tiêu chuẩn, nhiệt độ nổ 68°C (Đỏ), kiểm định PCCC',
     imageUrl: createTechnicalSvg('VT0002', 'Đầu phun Sprinkler Viking VK102', 'Hệ Phòng Cháy Chữa Cháy', '#ef4444', '🔥 SPK'),

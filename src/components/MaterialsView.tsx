@@ -21,14 +21,18 @@ import {
   Link as LinkIcon,
   Store,
   Layers,
+  Percent,
+  Flame,
+  Tag,
 } from 'lucide-react';
-import { MaterialItem, ExpenseItem } from '../types';
+import { MaterialItem, ExpenseItem, Supplier } from '../types';
 import { formatVND } from '../utils/formatters';
 import { SnapToolModal } from './SnapToolModal';
-import { STANDARD_WAREHOUSES } from '../data/materialsData';
+import { STANDARD_WAREHOUSES, PCCC_SUB_CATEGORIES, MNE_SUB_CATEGORIES } from '../data/materialsData';
 
 interface MaterialsViewProps {
   materials: MaterialItem[];
+  suppliers?: Supplier[];
   expenses: ExpenseItem[];
   onAddMaterial: (material: MaterialItem) => void;
   onEditMaterial: (material: MaterialItem) => void;
@@ -38,6 +42,7 @@ interface MaterialsViewProps {
 
 export const MaterialsView: React.FC<MaterialsViewProps> = ({
   materials,
+  suppliers = [],
   expenses,
   onAddMaterial,
   onEditMaterial,
@@ -46,6 +51,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string>('all');
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'in_stock'>('all');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
@@ -63,9 +69,11 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   // - Tên (Bắt buộc)
   // - Setting là Số lượng (Bắt buộc)
   // - Đơn vị (Bắt buộc)
+  // - Hạng mục (Sol Khí, Thoát Hiểm, Hút Khói, Sprinkler, Vách Tường...)
+  // - Thuế VAT (0%, 8%, 10%)
   // - Hình ảnh (chụp từ Snap Tool)
   // - Link Catalogue
-  // - Nhà Cung Cấp (không bắt buộc)
+  // - Nhà Cung Cấp (rê từ bảng NCC)
   // - Giá Tiền (không bắt buộc)
   // - Kho lưu trữ & Vị trí kệ
   const [formCode, setFormCode] = useState('');
@@ -76,7 +84,9 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   const [formCatalogueUrl, setFormCatalogueUrl] = useState('');
   const [formSupplier, setFormSupplier] = useState('');
   const [formUnitPrice, setFormUnitPrice] = useState<number | string>('');
-  const [formCategory, setFormCategory] = useState<MaterialItem['category']>('electrical');
+  const [formVatRate, setFormVatRate] = useState<number>(10);
+  const [formCategory, setFormCategory] = useState<MaterialItem['category']>('fire_protection');
+  const [formSubCategory, setFormSubCategory] = useState('Sol Khí (Aerosol / FM200 / Novec)');
   const [formBrand, setFormBrand] = useState('');
   const [formSpecifications, setFormSpecifications] = useState('');
   const [formWarehouse, setFormWarehouse] = useState(STANDARD_WAREHOUSES[0]);
@@ -142,12 +152,14 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     setFormCode(nextCode);
     setFormName('');
     setFormStockQuantity(100);
-    setFormUnit('Mét');
+    setFormUnit('Cái');
     setFormImageUrl('');
     setFormCatalogueUrl('');
     setFormSupplier('');
     setFormUnitPrice('');
-    setFormCategory('electrical');
+    setFormVatRate(10);
+    setFormCategory('fire_protection');
+    setFormSubCategory('Sol Khí (Aerosol / FM200 / Novec)');
     setFormBrand('');
     setFormSpecifications('');
     setFormWarehouse(STANDARD_WAREHOUSES[0]);
@@ -167,7 +179,9 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     setFormCatalogueUrl(m.catalogueUrl || '');
     setFormSupplier(m.supplier || '');
     setFormUnitPrice(m.unitPrice !== undefined ? m.unitPrice : '');
-    setFormCategory(m.category || 'electrical');
+    setFormVatRate(m.vatRate !== undefined ? m.vatRate : 10);
+    setFormCategory(m.category || 'fire_protection');
+    setFormSubCategory(m.subCategory || '');
     setFormBrand(m.brand || '');
     setFormSpecifications(m.specifications || '');
     setFormWarehouse(m.warehouseLocation || STANDARD_WAREHOUSES[0]);
@@ -213,6 +227,8 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
         ? 10
         : Number(formMinStock);
 
+    const parsedVat = typeof formVatRate === 'number' ? formVatRate : Number(formVatRate) || 0;
+
     if (editingMaterial) {
       const updated: MaterialItem = {
         ...editingMaterial,
@@ -224,7 +240,9 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
         catalogueUrl: formCatalogueUrl.trim() || undefined,
         supplier: formSupplier.trim() || undefined,
         unitPrice: parsedPrice,
+        vatRate: parsedVat,
         category: formCategory,
+        subCategory: formSubCategory.trim() || undefined,
         brand: formBrand.trim() || undefined,
         specifications: formSpecifications.trim() || undefined,
         warehouseLocation: finalWarehouse || 'Kho Tổng Dĩ An (Bình Dương)',
@@ -243,7 +261,9 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
         catalogueUrl: formCatalogueUrl.trim() || undefined,
         supplier: formSupplier.trim() || undefined,
         unitPrice: parsedPrice,
+        vatRate: parsedVat,
         category: formCategory,
+        subCategory: formSubCategory.trim() || undefined,
         brand: formBrand.trim() || undefined,
         specifications: formSpecifications.trim() || undefined,
         warehouseLocation: finalWarehouse || 'Kho Tổng Dĩ An (Bình Dương)',
@@ -278,6 +298,9 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   const filteredMaterials = useMemo(() => {
     return materials.filter((m) => {
       const matchCategory = selectedCategory === 'all' || m.category === selectedCategory;
+      const matchSubCategory =
+        selectedSubCategory === 'all' ||
+        (m.subCategory && m.subCategory.toLowerCase().includes(selectedSubCategory.toLowerCase()));
       const matchWarehouse =
         selectedWarehouse === 'all' ||
         (m.warehouseLocation && m.warehouseLocation.toLowerCase() === selectedWarehouse.toLowerCase());
@@ -296,15 +319,16 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
         !q ||
         m.code.toLowerCase().includes(q) ||
         m.name.toLowerCase().includes(q) ||
+        (m.subCategory && m.subCategory.toLowerCase().includes(q)) ||
         (m.brand && m.brand.toLowerCase().includes(q)) ||
         (m.supplier && m.supplier.toLowerCase().includes(q)) ||
         (m.warehouseLocation && m.warehouseLocation.toLowerCase().includes(q)) ||
         (m.shelfLocation && m.shelfLocation.toLowerCase().includes(q)) ||
         (m.specifications && m.specifications.toLowerCase().includes(q));
 
-      return matchCategory && matchWarehouse && matchStock && matchSearch;
+      return matchCategory && matchSubCategory && matchWarehouse && matchStock && matchSearch;
     });
-  }, [materials, selectedCategory, selectedWarehouse, stockFilter, search]);
+  }, [materials, selectedCategory, selectedSubCategory, selectedWarehouse, stockFilter, search]);
 
   const getCategoryBadge = (category?: MaterialItem['category']) => {
     switch (category) {
@@ -541,7 +565,10 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-semibold pt-1 border-t border-slate-100">
           <span className="text-[11px] font-bold text-slate-400 uppercase mr-1 shrink-0">Hệ M&E:</span>
           <button
-            onClick={() => setSelectedCategory('all')}
+            onClick={() => {
+              setSelectedCategory('all');
+              setSelectedSubCategory('all');
+            }}
             className={`px-2.5 py-1 rounded-md transition-all shrink-0 ${
               selectedCategory === 'all'
                 ? 'bg-sky-700 text-white font-bold'
@@ -551,17 +578,10 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             Tất cả hệ
           </button>
           <button
-            onClick={() => setSelectedCategory('electrical')}
-            className={`px-2.5 py-1 rounded-md transition-all shrink-0 ${
-              selectedCategory === 'electrical'
-                ? 'bg-sky-600 text-white font-bold'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            ⚡ Điện &amp; MSB
-          </button>
-          <button
-            onClick={() => setSelectedCategory('fire_protection')}
+            onClick={() => {
+              setSelectedCategory('fire_protection');
+              setSelectedSubCategory('all');
+            }}
             className={`px-2.5 py-1 rounded-md transition-all shrink-0 ${
               selectedCategory === 'fire_protection'
                 ? 'bg-rose-600 text-white font-bold'
@@ -571,7 +591,23 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             🔥 PCCC Cứu Hỏa
           </button>
           <button
-            onClick={() => setSelectedCategory('cable_tray')}
+            onClick={() => {
+              setSelectedCategory('electrical');
+              setSelectedSubCategory('all');
+            }}
+            className={`px-2.5 py-1 rounded-md transition-all shrink-0 ${
+              selectedCategory === 'electrical'
+                ? 'bg-sky-600 text-white font-bold'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            ⚡ Điện &amp; MSB
+          </button>
+          <button
+            onClick={() => {
+              setSelectedCategory('cable_tray');
+              setSelectedSubCategory('all');
+            }}
             className={`px-2.5 py-1 rounded-md transition-all shrink-0 ${
               selectedCategory === 'cable_tray'
                 ? 'bg-amber-600 text-white font-bold'
@@ -581,7 +617,10 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             📦 Máng &amp; Thang cáp
           </button>
           <button
-            onClick={() => setSelectedCategory('water')}
+            onClick={() => {
+              setSelectedCategory('water');
+              setSelectedSubCategory('all');
+            }}
             className={`px-2.5 py-1 rounded-md transition-all shrink-0 ${
               selectedCategory === 'water'
                 ? 'bg-cyan-600 text-white font-bold'
@@ -591,7 +630,10 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             💧 Cấp Thoát Nước
           </button>
           <button
-            onClick={() => setSelectedCategory('hvac')}
+            onClick={() => {
+              setSelectedCategory('hvac');
+              setSelectedSubCategory('all');
+            }}
             className={`px-2.5 py-1 rounded-md transition-all shrink-0 ${
               selectedCategory === 'hvac'
                 ? 'bg-teal-600 text-white font-bold'
@@ -600,6 +642,54 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
           >
             ❄️ HVAC
           </button>
+        </div>
+
+        {/* Lọc theo Hạng mục PCCC & Hệ thống chi tiết */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-semibold pt-1 border-t border-slate-100 bg-rose-50/40 p-2 rounded-lg border border-rose-100">
+          <span className="text-[11px] font-bold text-rose-700 uppercase mr-1 shrink-0 flex items-center gap-1">
+            <Flame className="w-3.5 h-3.5 text-rose-600" />
+            <span>Hạng Mục PCCC:</span>
+          </span>
+          <button
+            onClick={() => setSelectedSubCategory('all')}
+            className={`px-2.5 py-1 rounded-md transition-all shrink-0 text-xs ${
+              selectedSubCategory === 'all'
+                ? 'bg-rose-700 text-white font-bold shadow-xs'
+                : 'bg-white text-rose-800 hover:bg-rose-100 border border-rose-200'
+            }`}
+          >
+            Tất cả hạng mục
+          </button>
+          {[
+            { label: '🔥 Sol Khí', val: 'Sol Khí' },
+            { label: '🚪 Thoát Hiểm', val: 'Thoát Hiểm' },
+            { label: '💨 Hút Khói', val: 'Hút Khói' },
+            { label: '💦 Sprinkler', val: 'Sprinkler' },
+            { label: '🚒 Vách Tường', val: 'Vách Tường' },
+            { label: '🔔 Báo Cháy', val: 'Báo Cháy' },
+            { label: '🧯 Bình Chữa Cháy', val: 'Bình' },
+            { label: '⚡ Bơm PCCC', val: 'Bơm' },
+          ].map((item) => {
+            const isMatch = selectedSubCategory === item.val;
+            return (
+              <button
+                key={item.val}
+                onClick={() => {
+                  setSelectedSubCategory(isMatch ? 'all' : item.val);
+                  if (selectedCategory !== 'fire_protection' && selectedCategory !== 'all') {
+                    setSelectedCategory('fire_protection');
+                  }
+                }}
+                className={`px-2.5 py-1 rounded-md transition-all shrink-0 text-xs font-medium cursor-pointer ${
+                  isMatch
+                    ? 'bg-rose-600 text-white font-bold shadow-xs'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-rose-50 hover:text-rose-700'
+                }`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -708,8 +798,14 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                           <div className="font-bold text-slate-900 text-xs hover:text-sky-700 transition-colors">
                             {m.name}
                           </div>
-                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
                             {getCategoryBadge(m.category)}
+                            {m.subCategory && (
+                              <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                                <Tag className="w-2.5 h-2.5 text-rose-600" />
+                                {m.subCategory}
+                              </span>
+                            )}
                             {m.brand && (
                               <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide bg-slate-100 px-1.5 py-0.2 rounded">
                                 {m.brand}
@@ -749,11 +845,11 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                           )}
                         </td>
 
-                        {/* Nhà Cung Cấp (không bắt buộc) */}
+                        {/* Nhà Cung Cấp */}
                         <td className="py-3 px-3">
                           {m.supplier ? (
                             <div className="flex items-center gap-1.5 text-slate-700">
-                              <Store className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <Store className="w-3.5 h-3.5 text-sky-600 shrink-0" />
                               <span className="font-medium text-[11px] line-clamp-2" title={m.supplier}>
                                 {m.supplier}
                               </span>
@@ -770,12 +866,17 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                           </span>
                         </td>
 
-                        {/* Giá Tiền (không bắt buộc) */}
+                        {/* Giá Tiền & Thuế VAT */}
                         <td className="py-3 px-3 text-right">
                           {m.unitPrice !== undefined && m.unitPrice > 0 ? (
-                            <span className="font-mono font-bold text-slate-800">
-                              {formatVND(m.unitPrice)}
-                            </span>
+                            <div>
+                              <div className="font-mono font-bold text-slate-900 text-xs">
+                                {formatVND(m.unitPrice)}
+                              </div>
+                              <div className="text-[10px] text-emerald-700 font-semibold mt-0.5 font-mono">
+                                +{m.vatRate ?? 10}% VAT ({formatVND(Math.round(m.unitPrice * (1 + (m.vatRate ?? 10) / 100)))})
+                              </div>
+                            </div>
                           ) : (
                             <span className="text-slate-400 text-[11px] italic">Liên hệ</span>
                           )}
@@ -962,6 +1063,17 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                       {m.name}
                     </h3>
 
+                    {/* Category & SubCategory Badges */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      {getCategoryBadge(m.category)}
+                      {m.subCategory && (
+                        <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <Tag className="w-2.5 h-2.5 text-rose-600" />
+                          {m.subCategory}
+                        </span>
+                      )}
+                    </div>
+
                     {/* Catalogue Link & Nhà cung cấp */}
                     <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
                       {m.catalogueUrl ? (
@@ -1008,10 +1120,15 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-[10px] text-slate-400 font-medium">Giá tiền:</div>
+                        <div className="text-[10px] text-slate-400 font-medium">Giá tiền &amp; VAT:</div>
                         <div className="font-mono font-bold text-sky-700 text-xs">
                           {m.unitPrice !== undefined && m.unitPrice > 0 ? formatVND(m.unitPrice) : 'Liên hệ'}
                         </div>
+                        {m.unitPrice !== undefined && m.unitPrice > 0 && (
+                          <div className="text-[10px] text-emerald-700 font-semibold font-mono">
+                            +VAT {m.vatRate ?? 10}% ({formatVND(Math.round(m.unitPrice * (1 + (m.vatRate ?? 10) / 100)))})
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1072,7 +1189,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
 
             <form onSubmit={handleFormSubmit} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
               {/* MÃ VẬT TƯ & PHÂN LOẠI HỆ */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 uppercase mb-1">
                     Mã Vật Tư (Từ VT0001 đếm lên) <span className="text-rose-500">*</span>
@@ -1083,7 +1200,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                     value={formCode}
                     onChange={(e) => setFormCode(e.target.value)}
                     placeholder="VD: VT0001, VT0015..."
-                    className="w-full py-2 px-3 border border-slate-300 rounded-lg font-mono font-bold text-sky-800 focus:ring-2 focus:ring-sky-500 uppercase"
+                    className="w-full py-2 px-3 border border-slate-300 rounded-lg font-mono font-bold text-sky-800 focus:ring-2 focus:ring-sky-500 uppercase bg-slate-50 focus:bg-white"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">Hệ thống tự động đánh số tăng dần</span>
                 </div>
@@ -1094,17 +1211,100 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                   </label>
                   <select
                     value={formCategory}
-                    onChange={(e) => setFormCategory(e.target.value as any)}
-                    className="w-full py-2 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 font-semibold"
+                    onChange={(e) => {
+                      const newCat = e.target.value as any;
+                      setFormCategory(newCat);
+                      const defaults = MNE_SUB_CATEGORIES[newCat] || [];
+                      if (defaults.length > 0 && !formSubCategory) {
+                        setFormSubCategory(defaults[0]);
+                      }
+                    }}
+                    className="w-full py-2 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 font-semibold bg-white"
                   >
-                    <option value="electrical">⚡ Hệ Điện &amp; MSB</option>
                     <option value="fire_protection">🔥 Hệ PCCC Cứu hỏa</option>
+                    <option value="electrical">⚡ Hệ Điện &amp; MSB</option>
                     <option value="cable_tray">📦 Thang Máng Cáp</option>
                     <option value="water">💧 Cấp Thoát Nước</option>
                     <option value="hvac">❄️ Hệ Thống HVAC / Thông Gió</option>
                     <option value="other">Cơ điện khác</option>
                   </select>
                 </div>
+              </div>
+
+              {/* HẠNG MỤC HỆ THỐNG / TIỂU MỤC (PCCC: SOL KHÍ, THOÁT HIỂM, HÚT KHÓI, SPRINKLER, VÁCH TƯỜNG...) */}
+              <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-800 uppercase flex items-center gap-1.5 text-xs">
+                    <Tag className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Hạng Mục Chi Tiết {formCategory === 'fire_protection' ? '(PCCC Đa Hạng Mục)' : ''}</span>
+                  </label>
+                  <span className="text-[10px] text-rose-700 font-bold bg-white px-2 py-0.5 rounded border border-rose-200">
+                    Sol Khí • Thoát Hiểm • Hút Khói • Sprinkler • Vách Tường
+                  </span>
+                </div>
+
+                {/* Dropdown danh mục chuẩn */}
+                <select
+                  value={
+                    (MNE_SUB_CATEGORIES[formCategory || 'fire_protection'] || []).includes(formSubCategory)
+                      ? formSubCategory
+                      : formSubCategory ? '__custom__' : ''
+                  }
+                  onChange={(e) => {
+                    if (e.target.value !== '__custom__') {
+                      setFormSubCategory(e.target.value);
+                    }
+                  }}
+                  className="w-full py-2 px-3 border border-slate-300 rounded-lg font-medium text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 text-xs"
+                >
+                  <option value="">-- Chọn hạng mục từ danh mục hệ thống --</option>
+                  {(MNE_SUB_CATEGORIES[formCategory || 'fire_protection'] || PCCC_SUB_CATEGORIES).map((sub) => (
+                    <option key={sub} value={sub}>
+                      {sub}
+                    </option>
+                  ))}
+                  <option value="__custom__">+ Nhập hạng mục tùy chỉnh / Tự gõ...</option>
+                </select>
+
+                {/* Quick Selection Chips cho PCCC */}
+                {formCategory === 'fire_protection' && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {[
+                      { label: '🔥 Sol Khí', val: 'Sol Khí (Aerosol / FM200 / Novec)' },
+                      { label: '🚪 Hệ Thống Thoát Hiểm', val: 'Hệ Thống Thoát Hiểm' },
+                      { label: '💨 Hút Khói & Tăng Áp', val: 'Hút Khói & Tăng Áp' },
+                      { label: '💦 Sprinkler', val: 'Sprinkler (Đầu phun & Van Alarm)' },
+                      { label: '🚒 Họng Nước Vách Tường', val: 'Họng Nước Vách Tường' },
+                      { label: '🔔 Báo Cháy Tự Động', val: 'Báo Cháy Tự Động' },
+                      { label: '🧯 Bình Chữa Cháy', val: 'Bình Chữa Cháy' },
+                    ].map((item) => {
+                      const isSelected = formSubCategory === item.val;
+                      return (
+                        <button
+                          key={item.val}
+                          type="button"
+                          onClick={() => setFormSubCategory(item.val)}
+                          className={`text-[10px] px-2 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-rose-600 text-white shadow-2xs'
+                              : 'bg-white text-slate-700 border border-slate-300 hover:bg-rose-50 hover:text-rose-700'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Trường nhập / điều chỉnh text hạng mục */}
+                <input
+                  type="text"
+                  value={formSubCategory}
+                  onChange={(e) => setFormSubCategory(e.target.value)}
+                  placeholder="Hoặc gõ tên hạng mục: Sol Khí, Thoát Hiểm, Hút Khói, Sprinkler, Vách Tường..."
+                  className="w-full py-1.5 px-3 border border-slate-300 rounded-lg bg-white text-xs text-slate-900 focus:ring-2 focus:ring-sky-500 font-medium"
+                />
               </div>
 
               {/* TÊN SẢN PHẨM / VẬT TƯ (BẮT BUỘC) */}
@@ -1117,7 +1317,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                   required
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder="VD: Cáp đồng CADIVI CXV 3x120+1x70 mm2..."
+                  placeholder="VD: Đèn cảnh báo xả khí, CẤM VÀO / Đầu phun Sprinkler..."
                   className="w-full py-2 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 text-sm font-semibold"
                 />
               </div>
@@ -1149,14 +1349,14 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                     required
                     value={formUnit}
                     onChange={(e) => setFormUnit(e.target.value)}
-                    placeholder="VD: Mét, Cuộn, Cái, Bộ, Cây, Thùng..."
+                    placeholder="VD: Cái, Bộ, Mét, Cuộn, Cây, Thùng..."
                     className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white font-bold text-slate-800 focus:ring-2 focus:ring-sky-500"
                   />
                   <span className="text-[10px] text-slate-500 mt-0.5 block">Đơn vị đo lường thi công</span>
                 </div>
               </div>
 
-              {/* LINK CATALOGUE & NHÀ CUNG CẤP & GIÁ TIỀN */}
+              {/* LINK CATALOGUE & NHÀ CUNG CẤP & GIÁ TIỀN & VAT */}
               <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
                 {/* Link Catalogue */}
                 <div>
@@ -1186,36 +1386,112 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Nhà Cung Cấp (không bắt buộc) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Nhà Cung Cấp: Rê từ bảng Nhà Cung Cấp */}
                   <div>
                     <label className="block font-bold text-slate-700 uppercase mb-1 flex items-center justify-between">
-                      <span>Nhà Cung Cấp</span>
-                      <span className="text-[10px] font-normal text-slate-400 lowercase">(không bắt buộc)</span>
+                      <span className="flex items-center gap-1">
+                        <Store className="w-3.5 h-3.5 text-sky-600" />
+                        <span>Nhà Cung Cấp</span>
+                      </span>
+                      <span className="text-[10px] font-semibold text-sky-700 lowercase">(chọn từ bảng NCC)</span>
                     </label>
-                    <input
-                      type="text"
-                      value={formSupplier}
-                      onChange={(e) => setFormSupplier(e.target.value)}
-                      placeholder="VD: Cty CADIVI, Fisa, Schneider..."
-                      className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500"
-                    />
+
+                    {/* Dropdown chọn từ bảng nhà cung cấp */}
+                    <select
+                      value={suppliers.some((s) => s.name === formSupplier) ? formSupplier : formSupplier ? '__custom__' : ''}
+                      onChange={(e) => {
+                        if (e.target.value !== '__custom__') {
+                          setFormSupplier(e.target.value);
+                        }
+                      }}
+                      className="w-full py-2 px-2.5 mb-1.5 border border-slate-300 rounded-lg bg-white font-medium text-slate-800 text-xs focus:ring-2 focus:ring-sky-500"
+                    >
+                      <option value="">-- Chọn từ bảng NCC ({suppliers.length} đối tác) --</option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.name}>
+                          🏢 {s.name} {s.contactPerson ? `(${s.contactPerson})` : ''}
+                        </option>
+                      ))}
+                      <option value="__custom__">+ Tự gõ tên nhà cung cấp khác...</option>
+                    </select>
+
+                    <div className="relative">
+                      <input
+                        type="text"
+                        list="suppliers-datalist"
+                        value={formSupplier}
+                        onChange={(e) => setFormSupplier(e.target.value)}
+                        placeholder="Hoặc gõ tìm NCC (CADIVI, Fisa, Schneider...)"
+                        className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-sky-500 text-xs font-medium"
+                      />
+                      <datalist id="suppliers-datalist">
+                        {suppliers.map((s) => (
+                          <option key={s.id} value={s.name} />
+                        ))}
+                      </datalist>
+                    </div>
                   </div>
 
-                  {/* Giá Tiền (không bắt buộc) */}
+                  {/* Giá Tiền & Chọn Thuế VAT 0%, 8%, 10% */}
                   <div>
-                    <label className="block font-bold text-slate-700 uppercase mb-1 flex items-center justify-between">
-                      <span>Giá Tiền (VNĐ)</span>
-                      <span className="text-[10px] font-normal text-slate-400 lowercase">(không bắt buộc)</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={formUnitPrice}
-                      onChange={(e) => setFormUnitPrice(e.target.value)}
-                      placeholder="VD: 1050000 (để trống nếu liên hệ)"
-                      className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-sky-500"
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block font-bold text-slate-700 uppercase flex items-center gap-1">
+                        <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Giá Tiền (VNĐ)</span>
+                      </label>
+
+                      {/* Chọn VAT 0%, 8%, 10% */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-bold text-slate-600">VAT:</span>
+                        {[0, 8, 10].map((rate) => (
+                          <button
+                            key={rate}
+                            type="button"
+                            onClick={() => setFormVatRate(rate)}
+                            className={`text-[10px] px-1.5 py-0.5 rounded font-extrabold transition-all cursor-pointer ${
+                              formVatRate === rate
+                                ? 'bg-emerald-600 text-white shadow-2xs'
+                                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                            }`}
+                          >
+                            {rate}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={0}
+                        value={formUnitPrice}
+                        onChange={(e) => setFormUnitPrice(e.target.value)}
+                        placeholder="VD: 694000 (để trống nếu liên hệ)"
+                        className="w-full py-2 pl-3 pr-10 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs pointer-events-none">
+                        VNĐ
+                      </span>
+                    </div>
+
+                    {/* Hiển thị tính toán sau VAT */}
+                    {formUnitPrice && Number(formUnitPrice) > 0 && (
+                      <div className="mt-1.5 p-2 bg-emerald-50 rounded-lg border border-emerald-200 text-[11px] space-y-0.5">
+                        <div className="flex items-center justify-between text-slate-600">
+                          <span>Thuế VAT ({formVatRate}%):</span>
+                          <span className="font-mono font-semibold text-emerald-700">
+                            +{formatVND(Math.round(Number(formUnitPrice) * (formVatRate / 100)))}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between font-bold text-slate-900 border-t border-emerald-200/60 pt-0.5">
+                          <span>Tổng gồm VAT:</span>
+                          <span className="font-mono text-emerald-700 font-extrabold">
+                            {formatVND(Math.round(Number(formUnitPrice) * (1 + formVatRate / 100)))}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
