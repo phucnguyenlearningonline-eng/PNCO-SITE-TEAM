@@ -316,7 +316,26 @@ export default function App() {
 
       // If remote expenses exist (even empty array after deletions), sync it
       if (remoteExpenses !== null) {
-        setExpenses(remoteExpenses);
+        setExpenses((prevLocal) => {
+          return remoteExpenses.map((remote) => {
+            const local = prevLocal.find(
+              (l) => l.id === remote.id || (remote.code && l.code.trim().toLowerCase() === remote.code.trim().toLowerCase())
+            );
+            return {
+              ...remote,
+              hasContract: remote.hasContract ?? local?.hasContract,
+              contractNumber: remote.contractNumber || local?.contractNumber,
+              contractDate: remote.contractDate || local?.contractDate,
+              contractAdvanceAmount: remote.contractAdvanceAmount ?? local?.contractAdvanceAmount,
+              contractAdvancePercentage: remote.contractAdvancePercentage ?? local?.contractAdvancePercentage,
+              contractPaymentStages:
+                remote.contractPaymentStages && remote.contractPaymentStages.length > 0
+                  ? remote.contractPaymentStages
+                  : local?.contractPaymentStages,
+              contractNotes: remote.contractNotes || local?.contractNotes,
+            };
+          });
+        });
       }
       if (remoteProjects && remoteProjects.length > 0) setProjects(remoteProjects);
       if (remoteSuppliers && remoteSuppliers.length > 0) setSuppliers(remoteSuppliers);
@@ -466,13 +485,30 @@ export default function App() {
 
   // Handlers for expense CRUD
   const handleSaveExpense = async (item: ExpenseItem) => {
-    if (editingExpense) {
-      setExpenses((prev) => prev.map((e) => (e.id === item.id ? item : e)));
-      showToast(`Đã cập nhật khoản chi ${item.code} thành công`);
-    } else {
-      setExpenses((prev) => [item, ...prev]);
-      showToast(`Đã tạo khoản chi / PO mới: ${item.code}`);
-    }
+    setExpenses((prev) => {
+      const exists = prev.some(
+        (e) => e.id === item.id || (item.code && e.code.trim().toLowerCase() === item.code.trim().toLowerCase())
+      );
+      let updatedList: ExpenseItem[];
+      if (exists) {
+        updatedList = prev.map((e) =>
+          e.id === item.id || (item.code && e.code.trim().toLowerCase() === item.code.trim().toLowerCase())
+            ? item
+            : e
+        );
+      } else {
+        updatedList = [item, ...prev];
+      }
+      try {
+        localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(updatedList));
+      } catch (err) {
+        // ignore
+      }
+      return updatedList;
+    });
+
+    showToast(editingExpense ? `Đã cập nhật đơn hàng/khoản chi: ${item.code}` : `Đã tạo đơn hàng / hợp đồng mới: ${item.code}`);
+
     if (isSupabaseConfigured()) {
       const ok = await upsertExpenseToSupabase(item);
       if (!ok) {

@@ -6,6 +6,35 @@ import { ExpenseItem, Project, Supplier, User, MaterialItem } from '../types';
 // ==============================================================
 // Row mapper
 export function mapRowToExpense(row: any): ExpenseItem {
+  let hasContract = Boolean(row.has_contract || row.hasContract || row.contract_number || row.contractNumber);
+  let contractNumber = row.contract_number || row.contractNumber;
+  let contractDate = row.contract_date || row.contractDate;
+  let contractAdvanceAmount = typeof row.contract_advance_amount === 'number' ? row.contract_advance_amount : (typeof row.contractAdvanceAmount === 'number' ? row.contractAdvanceAmount : undefined);
+  let contractAdvancePercentage = typeof row.contract_advance_percentage === 'number' ? row.contract_advance_percentage : (typeof row.contractAdvancePercentage === 'number' ? row.contractAdvancePercentage : undefined);
+  let contractPaymentStages = row.contract_payment_stages || row.contractPaymentStages;
+  let contractNotes = row.contract_notes || row.contractNotes;
+  let cleanNotes = row.notes;
+
+  // Extract embedded contract JSON comment from notes if available
+  if (row.notes && typeof row.notes === 'string' && row.notes.includes('<!--CONTRACT_META:')) {
+    try {
+      const match = row.notes.match(/<!--CONTRACT_META:(.*?)-->/s);
+      if (match && match[1]) {
+        const meta = JSON.parse(match[1]);
+        if (meta.hasContract !== undefined) hasContract = Boolean(meta.hasContract);
+        if (meta.contractNumber) contractNumber = meta.contractNumber;
+        if (meta.contractDate) contractDate = meta.contractDate;
+        if (meta.contractAdvanceAmount !== undefined) contractAdvanceAmount = meta.contractAdvanceAmount;
+        if (meta.contractAdvancePercentage !== undefined) contractAdvancePercentage = meta.contractAdvancePercentage;
+        if (meta.contractPaymentStages) contractPaymentStages = meta.contractPaymentStages;
+        if (meta.contractNotes) contractNotes = meta.contractNotes;
+        cleanNotes = row.notes.replace(/<!--CONTRACT_META:.*?-->/s, '').trim();
+      }
+    } catch (e) {
+      // ignore JSON parse error
+    }
+  }
+
   return {
     id: row.id,
     code: row.code,
@@ -28,9 +57,18 @@ export function mapRowToExpense(row: any): ExpenseItem {
     status: row.status || 'pending',
     paymentMethod: row.payment_method || 'advance_fund',
     receiptImage: row.receipt_image || undefined,
-    notes: row.notes || undefined,
+    notes: cleanNotes || undefined,
     approvedBy: row.approved_by || undefined,
     approvedAt: row.approved_at || undefined,
+
+    // Hợp đồng kinh tế
+    hasContract: hasContract || Boolean(contractNumber),
+    contractNumber: contractNumber || undefined,
+    contractDate: contractDate || undefined,
+    contractAdvanceAmount: contractAdvanceAmount,
+    contractAdvancePercentage: contractAdvancePercentage,
+    contractPaymentStages: Array.isArray(contractPaymentStages) ? contractPaymentStages : undefined,
+    contractNotes: contractNotes || undefined,
   };
 }
 
@@ -63,6 +101,22 @@ export async function upsertExpenseToSupabase(item: ExpenseItem): Promise<boolea
   if (!supabase) return false;
 
   try {
+    // Encode contract info into notes so it's guaranteed to persist across all database schemas
+    let serializedNotes = item.notes ? item.notes.replace(/<!--CONTRACT_META:.*?-->/s, '').trim() : '';
+    if (item.hasContract || item.contractNumber) {
+      const contractMeta = {
+        hasContract: Boolean(item.hasContract),
+        contractNumber: item.contractNumber,
+        contractDate: item.contractDate,
+        contractAdvanceAmount: item.contractAdvanceAmount,
+        contractAdvancePercentage: item.contractAdvancePercentage,
+        contractPaymentStages: item.contractPaymentStages,
+        contractNotes: item.contractNotes,
+      };
+      const metaComment = `<!--CONTRACT_META:${JSON.stringify(contractMeta)}-->`;
+      serializedNotes = serializedNotes ? `${serializedNotes}\n${metaComment}` : metaComment;
+    }
+
     const payload = {
       id: item.id,
       code: item.code,
@@ -85,7 +139,7 @@ export async function upsertExpenseToSupabase(item: ExpenseItem): Promise<boolea
       status: item.status,
       payment_method: item.paymentMethod,
       receipt_image: item.receiptImage || null,
-      notes: item.notes || null,
+      notes: serializedNotes || null,
       approved_by: item.approvedBy || null,
       approved_at: item.approvedAt || null,
     };
