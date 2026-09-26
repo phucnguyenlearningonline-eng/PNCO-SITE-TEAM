@@ -1200,62 +1200,8 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             </div>
 
             <form onSubmit={handleFormSubmit} className="p-4 space-y-3 text-xs overflow-y-auto flex-1">
-              {/* HÀNG 1: MÃ VẬT TƯ & PHÂN LOẠI HỆ & HẠNG MỤC CHI TIẾT (DROPDOWN TIẾT KIỆM KHÔNG GIAN) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <div>
-                  <label className="block font-bold text-slate-700 uppercase mb-1 flex items-center justify-between">
-                    <span>Mã Vật Tư <span className="text-rose-500">*</span></span>
-                    {formCode && materials.some((m) => m.code.replace(/\s+/g, '').toUpperCase() === formCode.trim().replace(/\s+/g, '').toUpperCase()) ? (
-                      <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300">
-                        Đã có trong bảng SP
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-500 font-medium">Mã mới</span>
-                    )}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formCode}
-                    onChange={(e) => {
-                      const inputVal = e.target.value;
-                      setFormCode(inputVal);
-                      // Khi nhập mã vật tư mới thì số tồn kho phải là không (0),
-                      // chỉ khi nào vật tư có trong bảng sản phẩm thì mới thể hiện tồn kho
-                      if (!editingMaterial) {
-                        const clean = inputVal.trim().replace(/\s+/g, '').toUpperCase();
-                        const existing = materials.find(
-                          (m) => m.code.replace(/\s+/g, '').toUpperCase() === clean
-                        );
-                        if (existing) {
-                          setFormName(existing.name);
-                          setFormStockQuantity(existing.stockQuantity ?? 0);
-                          setFormUnit(existing.unit);
-                          setFormMinStock(existing.minStock ?? 0);
-                          if (existing.unitPrice !== undefined) setFormUnitPrice(existing.unitPrice);
-                          if (existing.vatRate !== undefined) setFormVatRate(existing.vatRate);
-                          if (existing.supplier) setFormSupplier(existing.supplier);
-                          if (existing.brand) setFormBrand(existing.brand);
-                          if (existing.specifications) setFormSpecifications(existing.specifications);
-                          if (existing.category) setFormCategory(existing.category);
-                          if (existing.subCategory) setFormSubCategory(existing.subCategory);
-                          if (existing.warehouseLocation) setFormWarehouse(existing.warehouseLocation);
-                          if (existing.shelfLocation) setFormShelfLocation(existing.shelfLocation);
-                          if (existing.imageUrl) setFormImageUrl(existing.imageUrl);
-                          if (existing.catalogueUrl) setFormCatalogueUrl(existing.catalogueUrl);
-                        } else {
-                          // Mã vật tư mới hoàn toàn -> số tồn kho phải là 0
-                          setFormStockQuantity(0);
-                          setFormMinStock(0);
-                          setFormWarehouse('Chưa phân kho (Tồn: 0)');
-                        }
-                      }
-                    }}
-                    placeholder="VD: VT0004..."
-                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg font-mono font-bold text-sky-800 focus:ring-2 focus:ring-sky-500 uppercase bg-slate-50 focus:bg-white text-xs"
-                  />
-                </div>
-
+              {/* HÀNG 1: PHÂN LOẠI HỆ & HẠNG MỤC CHI TIẾT (2 CỘT RỘNG RÃI) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 uppercase mb-1">
                     Phân Loại Hệ M&amp;E <span className="text-rose-500">*</span>
@@ -1281,7 +1227,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                   </select>
                 </div>
 
-                {/* ĐÚNG 1 TEXT BOX LÀ HẠNG MỤC VÀ CHỨC NĂNG DROPDOWN */}
+                {/* HẠNG MỤC VỚI DROPDOWN GỢI Ý */}
                 <div>
                   <label className="block font-bold text-slate-700 uppercase mb-1">
                     Hạng Mục
@@ -1362,71 +1308,130 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                   required
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder="VD: Đèn cảnh báo xả khí, CẤM VÀO / Đầu phun Sprinkler Tyco / Cáp đồng..."
-                  className="w-full py-1.5 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 text-xs font-semibold"
+                  placeholder="VD: Ắc quy khô 12V 7.2Ah WP7.2-12 / Đèn cảnh báo xả khí / Cáp đồng..."
+                  className="w-full py-2 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 text-xs font-semibold"
                 />
               </div>
 
-              {/* HÀNG 3: TỒN KHO & ĐƠN VỊ TÍNH & CẢNH BÁO TỒN (GỌN GÀNG 3 CỘT) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-sky-50/60 p-2.5 rounded-xl border border-sky-100">
-                <div>
-                  <label className="block font-bold text-slate-800 uppercase mb-1 flex items-center justify-between">
-                    <span>Tồn Kho Ban Đầu <span className="text-rose-500">*</span></span>
-                    {materials.some((m) => m.code.replace(/\s+/g, '').toUpperCase() === formCode.trim().replace(/\s+/g, '').toUpperCase()) ? (
-                      <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300">
-                        Đang có sẵn
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-500 font-bold bg-slate-200 px-1.5 py-0.2 rounded">
-                        Mã mới: Tồn = 0
-                      </span>
-                    )}
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={formStockQuantity}
-                    onChange={(e) => setFormStockQuantity(e.target.value)}
-                    placeholder="0"
-                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500 text-xs"
-                  />
-                  <span className="text-[10px] text-slate-500 mt-1 block">
-                    {Number(formStockQuantity) === 0
-                      ? 'Vật tư mới số tồn kho là 0 (chỉ tăng khi nhập kho)'
-                      : `Hiện đang có ${formStockQuantity} ${formUnit} trong kho`}
+              {/* HÀNG 3: MÃ SẢN PHẨM / MÃ VẬT TƯ (ĐẶT NGAY DƯỚI TÊN SẢN PHẨM / VẬT TƯ THEO YÊU CẦU) */}
+              <div>
+                <label className="block font-bold text-slate-700 uppercase mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-sky-600" />
+                    <span>Mã Sản Phẩm / Mã Vật Tư <span className="text-rose-500">*</span></span>
                   </span>
-                </div>
+                  {formCode && materials.some((m) => m.code.replace(/\s+/g, '').toUpperCase() === formCode.trim().replace(/\s+/g, '').toUpperCase()) ? (
+                    <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                      Đã có trong bảng sản phẩm
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-600 font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
+                      Mã mới: Tồn kho = 0
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formCode}
+                  onChange={(e) => {
+                    const inputVal = e.target.value;
+                    setFormCode(inputVal);
+                    // Khi nhập mã vật tư mới thì số tồn kho phải là không (0),
+                    // chỉ khi nào vật tư có trong bảng sản phẩm thì mới thể hiện tồn kho
+                    if (!editingMaterial) {
+                      const clean = inputVal.trim().replace(/\s+/g, '').toUpperCase();
+                      const existing = materials.find(
+                        (m) => m.code.replace(/\s+/g, '').toUpperCase() === clean
+                      );
+                      if (existing) {
+                        setFormName(existing.name);
+                        setFormStockQuantity(existing.stockQuantity ?? 0);
+                        setFormUnit(existing.unit);
+                        setFormMinStock(existing.minStock ?? 0);
+                        if (existing.unitPrice !== undefined) setFormUnitPrice(existing.unitPrice);
+                        if (existing.vatRate !== undefined) setFormVatRate(existing.vatRate);
+                        if (existing.supplier) setFormSupplier(existing.supplier);
+                        if (existing.brand) setFormBrand(existing.brand);
+                        if (existing.specifications) setFormSpecifications(existing.specifications);
+                        if (existing.category) setFormCategory(existing.category);
+                        if (existing.subCategory) setFormSubCategory(existing.subCategory);
+                        if (existing.warehouseLocation) setFormWarehouse(existing.warehouseLocation);
+                        if (existing.shelfLocation) setFormShelfLocation(existing.shelfLocation);
+                        if (existing.imageUrl) setFormImageUrl(existing.imageUrl);
+                        if (existing.catalogueUrl) setFormCatalogueUrl(existing.catalogueUrl);
+                      } else {
+                        // Mã vật tư mới hoàn toàn -> số tồn kho phải là 0
+                        setFormStockQuantity(0);
+                        setFormMinStock(0);
+                        setFormWarehouse('Chưa phân kho (Tồn: 0)');
+                      }
+                    }
+                  }}
+                  placeholder="VD: VT0027..."
+                  className="w-full py-2 px-3 border border-slate-300 rounded-lg font-mono font-bold text-sky-800 focus:ring-2 focus:ring-sky-500 uppercase bg-slate-50 focus:bg-white text-xs shadow-2xs"
+                />
+              </div>
 
-                <div>
-                  <label className="block font-bold text-slate-800 uppercase mb-1">
-                    Đơn Vị Tính (ĐVT) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formUnit}
-                    onChange={(e) => setFormUnit(e.target.value)}
-                    placeholder="Cái, Bộ, Mét, Cuộn..."
-                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 text-xs"
-                  />
-                </div>
+              {/* HÀNG 4: TỒN KHO & ĐƠN VỊ TÍNH & CẢNH BÁO TỒN (CÂN CHỈNH 3 TEXT BOX THẲNG HÀNG TUYỆT ĐỐI) */}
+              <div className="bg-sky-50/60 p-3 rounded-xl border border-sky-100">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
+                  {/* CỘT 1: TỒN KHO BAN ĐẦU */}
+                  <div className="flex flex-col">
+                    <label className="h-5 flex items-center font-bold text-slate-800 uppercase text-[11px] mb-1.5 whitespace-nowrap">
+                      <span>Tồn Kho Ban Đầu <span className="text-rose-500">*</span></span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={0}
+                      value={formStockQuantity}
+                      onChange={(e) => setFormStockQuantity(e.target.value)}
+                      placeholder="0"
+                      className="w-full h-9 py-1.5 px-3 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500 text-xs shadow-2xs"
+                    />
+                    <div className="h-4 text-[10px] text-slate-500 mt-1 truncate">
+                      {Number(formStockQuantity) === 0
+                        ? 'Mã mới: Tồn kho = 0'
+                        : `Hiện tồn: ${formStockQuantity} ${formUnit}`}
+                    </div>
+                  </div>
 
-                <div>
-                  <label className="block font-bold text-slate-800 uppercase mb-1">
-                    Cảnh Báo Tồn Tối Thiểu
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={formMinStock}
-                    onChange={(e) => setFormMinStock(e.target.value)}
-                    placeholder="0"
-                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500 text-xs"
-                  />
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    Cảnh báo khi tồn kho &le; mức này
-                  </span>
+                  {/* CỘT 2: ĐƠN VỊ TÍNH */}
+                  <div className="flex flex-col">
+                    <label className="h-5 flex items-center font-bold text-slate-800 uppercase text-[11px] mb-1.5 whitespace-nowrap">
+                      <span>Đơn Vị Tính (ĐVT) <span className="text-rose-500">*</span></span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formUnit}
+                      onChange={(e) => setFormUnit(e.target.value)}
+                      placeholder="Cái, Bộ, Mét, Cuộn..."
+                      className="w-full h-9 py-1.5 px-3 border border-slate-300 rounded-lg bg-white font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 text-xs shadow-2xs"
+                    />
+                    <div className="h-4 text-[10px] text-slate-400 mt-1 truncate">
+                      Đơn vị theo dõi xuất/nhập
+                    </div>
+                  </div>
+
+                  {/* CỘT 3: CẢNH BÁO TỒN TỐI THIỂU */}
+                  <div className="flex flex-col">
+                    <label className="h-5 flex items-center font-bold text-slate-800 uppercase text-[11px] mb-1.5 whitespace-nowrap">
+                      <span>Cảnh Báo Tồn Tối Thiểu</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formMinStock}
+                      onChange={(e) => setFormMinStock(e.target.value)}
+                      placeholder="0"
+                      className="w-full h-9 py-1.5 px-3 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500 text-xs shadow-2xs"
+                    />
+                    <div className="h-4 text-[10px] text-slate-400 mt-1 truncate">
+                      Cảnh báo khi tồn kho &le; mức này
+                    </div>
+                  </div>
                 </div>
               </div>
 
