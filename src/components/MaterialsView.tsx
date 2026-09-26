@@ -726,15 +726,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                   <th className="py-3 px-3 min-w-[150px]">Nhà Cung Cấp</th>
                   <th className="py-3 px-2 w-16 text-center">Đơn Vị</th>
                   <th className="py-3 px-3 w-28 text-right">Giá Tiền</th>
-                  {/* CỘT THỂ HIỆN ĐANG TỒN Ở KHO NÀO */}
-                  <th className="py-3 px-4 min-w-[200px] bg-sky-50/60 text-sky-950 border-x border-sky-100">
-                    <div className="flex items-center gap-1.5">
-                      <Warehouse className="w-4 h-4 text-sky-600" />
-                      <span>Đang Tồn Ở Kho Nào</span>
-                    </div>
-                  </th>
-                  {/* CỘT SETTING LÀ SỐ LƯỢNG */}
-                  <th className="py-3 px-3 w-28 text-right bg-sky-50/60 text-sky-950 border-r border-sky-100">
+                  <th className="py-3 px-3 w-28 text-right">
                     Số Lượng Tồn
                   </th>
                   <th className="py-3 px-3 w-24 text-center">Thao Tác</th>
@@ -743,7 +735,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
               <tbody className="divide-y divide-slate-100 text-xs">
                 {filteredMaterials.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-12 text-center text-slate-400">
+                    <td colSpan={10} className="py-12 text-center text-slate-400">
                       <Package className="w-10 h-10 mx-auto mb-2 text-slate-300" />
                       <p className="font-semibold text-slate-600 text-sm">Không tìm thấy vật tư nào phù hợp</p>
                       <p className="text-xs text-slate-400 mt-1">Bấm nút "+ Thêm Vật Tư Mới" để tạo mã tiếp theo.</p>
@@ -766,21 +758,20 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                           {index + 1}
                         </td>
 
-                        {/* Mã VT0001+ */}
+                        {/* Mã VT0001+ (Bỏ màu nền theo yêu cầu) */}
                         <td className="py-3 px-3">
-                          <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#102742] text-sky-300 border border-sky-400 font-mono font-extrabold text-xs shadow-2xs">
-                            <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
-                            <span>{m.code}</span>
-                          </div>
+                          <span className="font-mono font-bold text-slate-900 text-xs tracking-tight">
+                            {m.code}
+                          </span>
                         </td>
 
-                        {/* Thumbnail ảnh & Snap tool trigger */}
+                        {/* Thumbnail ảnh & Snap tool trigger (Bỏ màu nền theo yêu cầu) */}
                         <td className="py-2 px-3 text-center">
                           <div className="relative inline-block group/img">
                             {m.imageUrl ? (
                               <div
                                 onClick={() => setZoomImage({ url: m.imageUrl!, code: m.code, name: m.name })}
-                                className="w-12 h-10 rounded border border-slate-300 bg-slate-900 overflow-hidden cursor-pointer hover:border-sky-500 transition-all flex items-center justify-center p-0.5 shadow-2xs"
+                                className="w-12 h-10 rounded border border-slate-200 bg-white overflow-hidden cursor-pointer hover:border-sky-500 transition-all flex items-center justify-center p-0.5 shadow-2xs"
                               >
                                 <img
                                   src={m.imageUrl}
@@ -791,7 +782,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                             ) : (
                               <button
                                 onClick={() => handleOpenSnapTool(m)}
-                                className="w-12 h-10 rounded border border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center text-slate-400 hover:bg-sky-50 hover:border-sky-400 hover:text-sky-600 transition-all"
+                                className="w-12 h-10 rounded border border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-slate-400 hover:bg-sky-50 hover:border-sky-400 hover:text-sky-600 transition-all"
                                 title="Bấm để chụp / dán ảnh từ Snap Tool"
                               >
                                 <Scissors className="w-3.5 h-3.5" />
@@ -905,26 +896,8 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                           )}
                         </td>
 
-                        {/* THỂ HIỆN ĐANG TỒN Ở KHO NÀO & VỊ TRÍ */}
-                        <td className="py-3 px-4 bg-sky-50/30 border-x border-sky-100">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1.5">
-                              <Building2 className="w-3.5 h-3.5 text-sky-700 shrink-0" />
-                              <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${getWarehouseBadgeClass(m.warehouseLocation || '')}`}>
-                                {m.warehouseLocation || 'Kho Tổng Dĩ An (Bình Dương)'}
-                              </span>
-                            </div>
-                            {m.shelfLocation && (
-                              <div className="flex items-center gap-1 text-[11px] text-slate-500 pl-5">
-                                <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                                <span>{m.shelfLocation}</span>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* SETTING LÀ SỐ LƯỢNG (SỐ LƯỢNG TỒN) */}
-                        <td className="py-3 px-3 text-right bg-sky-50/30 border-r border-sky-100">
+                        {/* Số Lượng Tồn (Đã bỏ cột kho theo yêu cầu) */}
+                        <td className="py-3 px-3 text-right">
                           <div className="font-mono font-extrabold text-sm text-slate-900">
                             {qty.toLocaleString('vi-VN')} <span className="text-xs font-semibold text-slate-500">{m.unit}</span>
                           </div>
@@ -1031,7 +1004,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
               >
                 <div>
                   {/* Image Snapshot Area */}
-                  <div className="relative aspect-video bg-slate-900 overflow-hidden flex items-center justify-center border-b border-slate-200">
+                  <div className="relative aspect-video bg-white overflow-hidden flex items-center justify-center border-b border-slate-200">
                     {m.imageUrl ? (
                       <img
                         src={m.imageUrl}
@@ -1040,14 +1013,13 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                       />
                     ) : (
                       <div className="text-center p-4 text-slate-400">
-                        <Package className="w-10 h-10 mx-auto mb-1 text-slate-600" />
+                        <Package className="w-10 h-10 mx-auto mb-1 text-slate-400" />
                         <span className="text-[11px]">Chưa có hình ảnh nhận dạng</span>
                       </div>
                     )}
 
-                    {/* Mã vật tư Badge VT0001+ */}
-                    <div className="absolute top-2.5 left-2.5 bg-[#102742]/95 border border-sky-400 text-sky-300 font-mono font-extrabold text-xs px-2.5 py-1 rounded-md shadow-md backdrop-blur-xs flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+                    {/* Mã vật tư Badge VT0001+ (Bỏ màu nền tối) */}
+                    <div className="absolute top-2.5 left-2.5 bg-white/95 border border-slate-300 text-slate-900 font-mono font-bold text-xs px-2.5 py-1 rounded-md shadow-xs backdrop-blur-xs flex items-center gap-1.5">
                       <span>{m.code}</span>
                     </div>
 
@@ -1118,20 +1090,6 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                         <span className="text-[11px] text-slate-600 font-medium truncate max-w-[120px]" title={m.supplier}>
                           {m.supplier}
                         </span>
-                      )}
-                    </div>
-
-                    {/* Badge Kho Lưu Trữ */}
-                    <div className="p-2 rounded-lg bg-sky-50/60 border border-sky-100 text-xs">
-                      <div className="flex items-center gap-1 text-sky-800 font-bold truncate">
-                        <Warehouse className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                        <span className="truncate">{m.warehouseLocation || 'Kho Tổng Dĩ An'}</span>
-                      </div>
-                      {m.shelfLocation && (
-                        <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1 pl-4.5">
-                          <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span>{m.shelfLocation}</span>
-                        </div>
                       )}
                     </div>
 
