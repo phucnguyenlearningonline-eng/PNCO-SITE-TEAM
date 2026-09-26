@@ -459,42 +459,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
         hasContract,
         contractNumber: hasContract ? (contractNumber.trim() || `HĐ-${code.trim().replace(/\s+/g, '')}/PN-2026/VTTB`) : undefined,
         contractDate: hasContract ? (date || new Date().toISOString().split('T')[0]) : undefined,
-        contractAdvanceAmount: hasContract ? (Number(contractAdvanceAmount) > 0 ? Number(contractAdvanceAmount) : Math.round(orderTotalPayment * (contractAdvancePercentage / 100))) : undefined,
-        contractAdvancePercentage: hasContract ? contractAdvancePercentage : undefined,
-        contractPaymentStages: hasContract ? (initialData?.contractPaymentStages || [
-          {
-            id: `stage-${Date.now()}-1`,
-            stageNumber: 1,
-            title: 'Tạm ứng hợp đồng (Đợt 1)',
-            percentage: contractAdvancePercentage,
-            amount: Number(contractAdvanceAmount) > 0 ? Number(contractAdvanceAmount) : Math.round(orderTotalPayment * (contractAdvancePercentage / 100)),
-            dueDate: date || new Date().toISOString().split('T')[0],
-            paidDate: date || new Date().toISOString().split('T')[0],
-            status: 'paid',
-            paymentMethod: 'transfer',
-            notes: 'Tạm ứng ban đầu theo hợp đồng kinh tế ký kết',
-          },
-          {
-            id: `stage-${Date.now()}-2`,
-            stageNumber: 2,
-            title: 'Thanh toán giao hàng đợt 1 (Đợt 2)',
-            percentage: 50,
-            amount: Math.round(orderTotalPayment * 0.5),
-            status: 'pending',
-            paymentMethod: 'transfer',
-            notes: 'Thanh toán sau khi giao hàng & ký biên bản nghiệm thu vật tư',
-          },
-          {
-            id: `stage-${Date.now()}-3`,
-            stageNumber: 3,
-            title: 'Quyết toán hợp đồng (Đợt 3)',
-            percentage: Math.max(0, 100 - contractAdvancePercentage - 50),
-            amount: Math.max(0, orderTotalPayment - (Number(contractAdvanceAmount) > 0 ? Number(contractAdvanceAmount) : Math.round(orderTotalPayment * (contractAdvancePercentage / 100))) - Math.round(orderTotalPayment * 0.5)),
-            status: 'pending',
-            paymentMethod: 'transfer',
-            notes: 'Quyết toán sau khi hoàn tất hồ sơ chất lượng & CO/CQ',
-          }
-        ]) : undefined,
+        contractPaymentStages: hasContract ? (initialData?.contractPaymentStages || []) : undefined,
         contractNotes: hasContract ? contractNotes.trim() || undefined : undefined,
       };
 
@@ -956,7 +921,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                   </select>
 
                   {/* ============================================================== */}
-                  {/* Ô CHỌN & NHẬP HỢP ĐỒNG KINH TẾ (THEO Ô KHOANH TRÒN YÊU CẦU)   */}
+                  {/* Ô CHỌN & NHẬP HỢP ĐỒNG KINH TẾ (CHỈ CẦN TICK & SỐ HỢP ĐỒNG)   */}
                   {/* ============================================================== */}
                   <div className="mt-2.5 bg-gradient-to-r from-sky-50 to-indigo-50/50 p-2.5 rounded-xl border border-sky-200 shadow-2xs">
                     <div className="flex items-center justify-between">
@@ -967,13 +932,8 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                           onChange={(e) => {
                             const checked = e.target.checked;
                             setHasContract(checked);
-                            if (checked) {
-                              if (!contractNumber) {
-                                setContractNumber(`HĐ-${(code || 'DH0011').replace(/\s+/g, '')}/PN-2026/VTTB`);
-                              }
-                              if (contractAdvanceAmount === 0 && orderTotalPayment > 0) {
-                                setContractAdvanceAmount(Math.round(orderTotalPayment * (contractAdvancePercentage / 100)));
-                              }
+                            if (checked && !contractNumber) {
+                              setContractNumber(`HĐ-${(code || 'DH0010').replace(/\s+/g, '')}/PN-2026/VTTB`);
                             }
                           }}
                           className="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 border-slate-300 cursor-pointer accent-sky-600"
@@ -993,69 +953,25 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                     </div>
 
                     {hasContract ? (
-                      <div className="space-y-2 mt-2 pt-2 border-t border-sky-200/80 animate-in fade-in duration-150">
+                      <div className="space-y-1.5 mt-2 pt-2 border-t border-sky-200/80 animate-in fade-in duration-150">
                         <div>
                           <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5 flex items-center justify-between">
                             <span>Số Hợp Đồng Kinh Tế <span className="text-rose-500">*</span></span>
-                            <span className="text-[10px] text-sky-700 font-normal">Sẽ hiển thị bên Tab "Quản Lý Hợp Đồng"</span>
+                            <span className="text-[10px] text-sky-700 font-normal">Quản lý mốc tạm ứng, lần 1, lần 2... bên tab "Quản Lý Hợp Đồng"</span>
                           </label>
                           <input
                             type="text"
                             required={hasContract}
                             value={contractNumber}
                             onChange={(e) => setContractNumber(e.target.value)}
-                            placeholder="VD: HĐ-011/PN-2026/VTTB..."
+                            placeholder="VD: HĐ-010/PN-2026/VTTB..."
                             className="w-full py-1.5 px-2.5 text-xs font-mono font-bold text-sky-900 rounded-lg border border-sky-300 bg-white focus:ring-2 focus:ring-sky-500 shadow-2xs"
                           />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-[10.5px] font-bold text-slate-700 uppercase mb-0.5">
-                              % Tạm Ứng Đợt 1
-                            </label>
-                            <div className="relative">
-                              <input
-                                type="number"
-                                min={0}
-                                max={100}
-                                value={contractAdvancePercentage}
-                                onChange={(e) => {
-                                  const pct = Number(e.target.value);
-                                  setContractAdvancePercentage(pct);
-                                  setContractAdvanceAmount(Math.round(orderTotalPayment * (pct / 100)));
-                                }}
-                                className="w-full py-1.5 px-2.5 pr-6 text-xs font-mono font-bold text-slate-800 rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-sky-500"
-                              />
-                              <span className="absolute right-2 top-1.5 text-xs text-slate-400 font-bold">%</span>
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-[10.5px] font-bold text-slate-700 uppercase mb-0.5">
-                              Tiền Tạm Ứng (VNĐ)
-                            </label>
-                            <input
-                              type="number"
-                              min={0}
-                              value={contractAdvanceAmount}
-                              onChange={(e) => setContractAdvanceAmount(Number(e.target.value))}
-                              placeholder="0"
-                              className="w-full py-1.5 px-2.5 text-xs font-mono font-bold text-emerald-800 rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-emerald-500"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="text-[10px] text-slate-500 flex items-center justify-between pt-0.5">
-                          <span>Dư nợ các đợt tiếp theo:</span>
-                          <span className="font-mono font-bold text-slate-800">
-                            {formatVND(Math.max(0, orderTotalPayment - (Number(contractAdvanceAmount) || 0)))}
-                          </span>
                         </div>
                       </div>
                     ) : (
                       <p className="text-[10.5px] text-slate-500 mt-1">
-                        Đơn hàng nhỏ không cần hợp đồng. Đơn hàng lớn tích chọn ô này để quản lý giá trị HĐ &amp; tiến độ thanh toán từng đợt bên tab <strong>Quản Lý Hợp Đồng</strong>.
+                        Đơn hàng nhỏ không cần hợp đồng. Đơn hàng lớn tích chọn ô này để quản lý giá trị HĐ &amp; tạo mốc thanh toán bên tab <strong>Quản Lý Hợp Đồng</strong>.
                       </p>
                     )}
                   </div>
