@@ -289,6 +289,7 @@ export default function App() {
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseItem | null>(null);
   const [viewingReceipt, setViewingReceipt] = useState<ExpenseItem | null>(null);
+  const [autoPrintReceipt, setAutoPrintReceipt] = useState(false);
   const [isUsersModalOpen, setIsUsersModalOpen] = useState(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
@@ -1113,7 +1114,14 @@ export default function App() {
                   setIsExpenseModalOpen(true);
                 }}
                 onDelete={handleDelete}
-                onViewDetails={(item) => setViewingReceipt(item)}
+                onViewDetails={(item) => {
+                  setViewingReceipt(item);
+                  setAutoPrintReceipt(false);
+                }}
+                onPrint={(item) => {
+                  setViewingReceipt(item);
+                  setAutoPrintReceipt(true);
+                }}
               />
             </>
           )}
@@ -1140,9 +1148,14 @@ export default function App() {
 
       <ReceiptViewModal
         item={viewingReceipt}
-        onClose={() => setViewingReceipt(null)}
+        onClose={() => {
+          setViewingReceipt(null);
+          setAutoPrintReceipt(false);
+        }}
         currentUser={currentUser}
         materials={materials}
+        suppliers={suppliers}
+        autoPrint={autoPrintReceipt}
         onApprove={handleApprove}
         onEdit={(item) => setEditingExpense(item)}
       />

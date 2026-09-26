@@ -5,6 +5,7 @@ import {
   Trash2, 
   Edit3, 
   Eye, 
+  Printer,
   FileText, 
   AlertCircle,
   Truck,
@@ -33,6 +34,7 @@ interface ExpenseTableProps {
   onEdit: (item: ExpenseItem) => void;
   onDelete: (item: ExpenseItem) => void;
   onViewDetails: (item: ExpenseItem) => void;
+  onPrint?: (item: ExpenseItem) => void;
 }
 
 export const ExpenseTable: React.FC<ExpenseTableProps> = ({
@@ -44,6 +46,7 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
   onEdit,
   onDelete,
   onViewDetails,
+  onPrint,
 }) => {
   const canApprove = currentUser.role === 'director' || currentUser.role === 'accountant';
 
@@ -216,9 +219,18 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
                       <button
                         onClick={() => onViewDetails(item)}
                         className="p-1.5 rounded text-slate-600 hover:text-sky-600 hover:bg-sky-50 transition-colors"
-                        title="Xem chi tiết & hóa đơn"
+                        title="Xem chi tiết đơn hàng & hóa đơn"
                       >
                         <Eye className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* In đơn hàng & Xuất PDF (có đầy đủ header công ty) */}
+                      <button
+                        onClick={() => onPrint ? onPrint(item) : onViewDetails(item)}
+                        className="p-1.5 rounded text-sky-700 hover:text-white hover:bg-sky-600 transition-colors"
+                        title="In đơn hàng & Xuất file PDF (đầy đủ thông tin công ty)"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
                       </button>
 
                       {/* Approval buttons for Director or Accountant */}

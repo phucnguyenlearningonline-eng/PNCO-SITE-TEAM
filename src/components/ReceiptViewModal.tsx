@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { 
   X, 
   Printer, 
@@ -8,9 +8,12 @@ import {
   FileText, 
   Edit3, 
   ShoppingCart, 
-  Layers 
+  Layers,
+  Phone,
+  Mail,
+  MapPin
 } from 'lucide-react';
-import { ExpenseItem, User, MaterialItem, OrderItemLine } from '../types';
+import { ExpenseItem, User, MaterialItem, OrderItemLine, Supplier } from '../types';
 import { 
   formatDateVN, 
   formatVND, 
@@ -25,6 +28,8 @@ interface ReceiptViewModalProps {
   onClose: () => void;
   currentUser: User;
   materials?: MaterialItem[];
+  suppliers?: Supplier[];
+  autoPrint?: boolean;
   onApprove?: (item: ExpenseItem) => void;
   onEdit?: (item: ExpenseItem) => void;
 }
@@ -34,14 +39,38 @@ export const ReceiptViewModal: React.FC<ReceiptViewModalProps> = ({
   onClose,
   currentUser,
   materials = [],
+  suppliers = [],
+  autoPrint = false,
   onApprove,
   onEdit,
 }) => {
   if (!item) return null;
 
   const handlePrint = () => {
+    const originalTitle = document.title;
+    document.title = `Don_Hang_${item.code.replace(/\s+/g, '_')}_PhucNguyen_ME`;
     window.print();
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 1000);
   };
+
+  useEffect(() => {
+    if (autoPrint && item) {
+      const timer = setTimeout(() => {
+        handlePrint();
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [autoPrint, item]);
+
+  // Tìm nhà cung cấp tương ứng nếu có trong danh sách
+  const matchedSupplier = useMemo(() => {
+    if (!item.supplier) return null;
+    return suppliers.find(
+      (s) => s.name.trim().toLowerCase() === item.supplier.trim().toLowerCase()
+    );
+  }, [item.supplier, suppliers]);
 
   // Trích xuất hoặc phân tích danh sách các sản phẩm trong đơn hàng
   const orderLines: OrderItemLine[] = useMemo(() => {
@@ -52,24 +81,20 @@ export const ReceiptViewModal: React.FC<ReceiptViewModalProps> = ({
       return item.items;
     }
 
-    // 2. Nếu chưa có items (như các đơn hàng cũ hoặc nạp từ database cũ),
-    // tự động phân tích cú pháp từ subDescription hoặc title
+    // 2. Phân tích cú pháp nếu chưa có items sẵn
     const text = item.subDescription || item.title || '';
     const lines: OrderItemLine[] = [];
 
     if (text.includes(';') || text.includes('VT') || text.includes('(x')) {
       const parts = text.split(';').map((p) => p.trim()).filter(Boolean);
       parts.forEach((part) => {
-        // Tìm Mã VT: VT0001, VT0002...
         const codeMatch = part.match(/(VT\s*\d+)/i);
         const code = codeMatch ? codeMatch[1].replace(/\s+/g, '').toUpperCase() : '';
 
-        // Tìm số lượng và ĐVT: (x19 Cái), (x14 Bộ)...
         const qtyMatch = part.match(/\(x\s*(\d+(?:\.\d+)?)\s*([^)]*)\)/i);
         const quantity = qtyMatch ? parseFloat(qtyMatch[1]) : 1;
         const parsedUnit = qtyMatch && qtyMatch[2] ? qtyMatch[2].trim() : '';
 
-        // Tên hàng: phần nằm giữa mã và số lượng
         let name = part;
         if (codeMatch) {
           const afterCode = part.substring(part.indexOf(codeMatch[0]) + codeMatch[0].length).replace(/^[:\s-]+/, '');
@@ -80,7 +105,6 @@ export const ReceiptViewModal: React.FC<ReceiptViewModalProps> = ({
         }
         name = name.replace(/[,;]+$/, '').trim();
 
-        // Tra cứu trong danh mục materials để lấy đơn vị tính & đơn giá niêm yết
         const cleanCode = code ? code.replace(/\s+/g, '').toUpperCase() : '';
         const matched = materials.find(
           (m) => m.code.replace(/\s+/g, '').toUpperCase() === cleanCode
@@ -95,30 +119,19 @@ export const ReceiptViewModal: React.FC<ReceiptViewModalProps> = ({
           lines.push({
             materialId: matched?.id,
             code: code || matched?.code || 'VT',
+            deviceCode: matched?.deviceCode,
             name: finalName,
             unit: finalUnit,
             quantity: quantity || 1,
             unitPrice: unitPrice,
-            total: total,
+            total: total > 0 ? total : 0,
           });
         }
       });
     }
 
-    if (lines.length > 0) {
-      // Nếu các dòng chưa có đơn giá mà đơn hàng có tổng tiền amount
-      const sumCalculated = lines.reduce((s, l) => s + l.total, 0);
-      if (sumCalculated === 0 && item.amount > 0) {
-        const totalQty = lines.reduce((s, l) => s + l.quantity, 0) || lines.length;
-        lines.forEach((l) => {
-          l.unitPrice = Math.round(item.amount / totalQty);
-          l.total = l.quantity * l.unitPrice;
-        });
-      }
-      return lines;
-    }
+    if (lines.length > 0) return lines;
 
-    // 3. Trường hợp đơn lẻ thông thường
     const singleMat = materials.find(
       (m) => m.code.replace(/\s+/g, '').toUpperCase() === (item.materialCode || '').replace(/\s+/g, '').toUpperCase()
     );
@@ -126,7 +139,8 @@ export const ReceiptViewModal: React.FC<ReceiptViewModalProps> = ({
     return [
       {
         materialId: singleMat?.id,
-        code: item.materialCode || singleMat?.code || 'VT-0001',
+        code: item.materialCode || 'VT0001',
+        deviceCode: singleMat?.deviceCode,
         name: item.title,
         unit: singleMat?.unit || 'Hạng mục',
         quantity: 1,
@@ -138,19 +152,19 @@ export const ReceiptViewModal: React.FC<ReceiptViewModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-150">
-        {/* Modal Top Bar */}
-        <div className="no-print bg-[#102742] text-white px-5 py-3 flex items-center justify-between">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-150">
+        {/* Modal Top Bar (Controls - Hidden during print) */}
+        <div className="no-print bg-[#102742] text-white px-5 py-3 flex items-center justify-between border-b border-[#1d3d63]">
           <div className="flex items-center gap-2">
             {item.type === 'po' ? (
               <ShoppingCart className="w-5 h-5 text-amber-400" />
             ) : (
               <FileText className="w-5 h-5 text-cyan-400" />
             )}
-            <span className="font-bold text-sm uppercase">
-              {item.type === 'po' ? 'PHIẾU ĐẶT HÀNG & DUYỆT MUA VẬT TƯ (PO)' : 'PHIẾU ĐỀ NGHỊ CHI TIÊU & DUYỆT SITE'}
+            <span className="font-bold text-sm uppercase tracking-wide">
+              {item.type === 'po' ? 'ĐƠN ĐẶT HÀNG MUA VẬT TƯ THIẾT BỊ (PURCHASE ORDER)' : 'PHIẾU ĐỀ NGHỊ THANH TOÁN CHI TIÊU SITE'}
             </span>
-            <span className="ml-2 font-mono font-bold text-xs bg-amber-500 text-slate-950 px-2 py-0.5 rounded">
+            <span className="ml-2 font-mono font-bold text-xs bg-amber-500 text-slate-950 px-2 py-0.5 rounded shadow-2xs">
               {item.code}
             </span>
           </div>
@@ -170,100 +184,165 @@ export const ReceiptViewModal: React.FC<ReceiptViewModalProps> = ({
               </button>
             )}
 
+            {/* Nút In đơn hàng / Xuất PDF */}
             <button
               onClick={handlePrint}
-              className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs flex items-center gap-1.5 px-3 transition-colors font-bold shadow-xs"
+              className="p-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs flex items-center gap-2 px-4 transition-all font-bold shadow-md cursor-pointer hover:scale-102"
+              title="In ra máy in hoặc Lưu dưới dạng file PDF (Save as PDF)"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>In Phiếu Kế Toán</span>
+              <Printer className="w-4 h-4" />
+              <span>In Đơn Hàng (Xuất PDF)</span>
             </button>
 
             <button
               onClick={onClose}
-              className="p-1 rounded-lg text-slate-400 hover:text-white transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              title="Đóng cửa sổ"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Printable Paper Area */}
-        <div className="p-6 sm:p-8 space-y-5 print:p-0 print:space-y-4 text-slate-800 bg-white">
-          {/* Company Letterhead */}
-          <div className="border-b-2 border-slate-900 pb-3 flex justify-between items-start">
-            <div>
-              <h1 className="text-base sm:text-lg font-black tracking-tight text-slate-950 uppercase">
-                CÔNG TY TNHH XÂY DỰNG - CƠ ĐIỆN PHÚC NGUYÊN
-              </h1>
-              <p className="text-[11px] text-slate-600 mt-0.5">
-                Văn phòng: 70 Nam Kỳ Khởi Nghĩa, Q.1, TP. Hồ Chí Minh
-              </p>
-              <p className="text-[11px] text-slate-600">
-                Bộ phận: Ban Chỉ Huy Công Trường &amp; Phòng Kế Toán Dự Án
-              </p>
-            </div>
-            <div className="text-right">
-              <div className="text-sm font-mono font-black text-sky-900 bg-sky-50 px-2 py-0.5 rounded border border-sky-300 inline-block">
-                {item.code}
+        {/* Printable Paper Area - Targeted by #printable-order in print CSS */}
+        <div id="printable-order" className="p-6 sm:p-9 space-y-4 text-slate-900 bg-white">
+          {/* ============================================================== */}
+          {/* HEADER CÔNG TY ĐẦY ĐỦ THÔNG TIN DOANH NGHIỆP THEO YÊU CẦU       */}
+          {/* ============================================================== */}
+          <div className="border-b-2 border-slate-900 pb-4">
+            <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+              {/* Logo & Thông Tin Doanh Nghiệp */}
+              <div className="flex items-start gap-3.5 flex-1">
+                {/* Logo PNCONS M&E */}
+                <div className="w-16 h-16 rounded-xl bg-[#102742] text-white flex flex-col items-center justify-center font-black p-1 shrink-0 shadow-md border-2 border-sky-400">
+                  <span className="text-base tracking-tighter text-sky-300 font-mono leading-none">PN</span>
+                  <span className="text-[8.5px] tracking-widest text-amber-400 font-sans uppercase font-black mt-0.5">CONS</span>
+                  <span className="text-[7px] text-slate-300 tracking-wider font-mono">M&amp;E</span>
+                </div>
+
+                <div className="space-y-0.5">
+                  <h1 className="text-sm sm:text-base font-black text-slate-950 uppercase tracking-tight leading-snug">
+                    CÔNG TY TNHH XÂY DỰNG - CƠ ĐIỆN PHÚC NGUYÊN
+                  </h1>
+                  <div className="text-[10px] sm:text-[11px] font-bold text-sky-800 uppercase tracking-wide">
+                    PHUC NGUYEN MECHANICAL &amp; ELECTRICAL CONSTRUCTION CO., LTD
+                  </div>
+                  <div className="text-[10.5px] text-slate-700 font-medium">
+                    <strong>Mã số thuế:</strong> <span className="font-mono font-bold text-slate-950">0314892668</span> • <strong>Điện thoại:</strong> (028) 3821 6889 - <strong>Hotline:</strong> 0908 123 456
+                  </div>
+                  <div className="text-[10px] text-slate-600">
+                    <strong>Trụ sở chính:</strong> Tầng 5, Số 70 Nam Kỳ Khởi Nghĩa, P. Nguyễn Thái Bình, Quận 1, TP. Hồ Chí Minh
+                  </div>
+                  <div className="text-[10px] text-slate-600">
+                    <strong>VP Điều Hành &amp; Kho Tổng:</strong> Số 12 Đường DT743, KCN Sóng Thần, TP. Dĩ An, Tỉnh Bình Dương
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono">
+                    Email: ketoan@phucnguyencons.com.vn • Website: www.phucnguyencons.com.vn
+                  </div>
+                </div>
               </div>
-              <div className="text-[11px] text-slate-500 mt-1">
-                Ngày lập: <strong className="text-slate-800">{formatDateVN(item.date)}</strong>
-              </div>
-              <div className="text-[11px] text-slate-500">
-                Mẫu số: <strong className="text-slate-800">02-TT/EPC</strong>
+
+              {/* Thông Tin Số Đơn Hàng & Mẫu Biểu */}
+              <div className="text-right shrink-0 sm:border-l sm:border-slate-300 sm:pl-4 space-y-1">
+                <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">
+                  Mẫu số: <strong className="text-slate-950 font-mono">01-PO/PNCONS-2026</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase block font-semibold">Mã Đơn Hàng:</span>
+                  <span className="text-base font-mono font-black text-sky-950 bg-sky-50 px-3 py-1 rounded border border-sky-300 inline-block shadow-2xs">
+                    {item.code}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-600">
+                  Ngày lập đơn: <strong className="text-slate-950">{formatDateVN(item.date)}</strong>
+                </div>
+                <div className="text-[10.5px] text-slate-500 font-medium">
+                  Trạng thái: <span className="font-bold text-emerald-700">{getStatusLabel(item.status)}</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Title */}
-          <div className="text-center pt-1">
-            <h2 className="text-lg sm:text-xl font-black uppercase text-slate-950 tracking-wide">
-              {item.type === 'po' ? 'PHIẾU ĐẶT HÀNG & DUYỆT MUA VẬT TƯ (PO)' : 'GIẤY ĐỀ NGHỊ THANH TOÁN CHI TIÊU SITE'}
+          {/* ============================================================== */}
+          {/* TIÊU ĐỀ ĐƠN HÀNG                                                */}
+          {/* ============================================================== */}
+          <div className="text-center py-1">
+            <h2 className="text-lg sm:text-xl font-black uppercase text-slate-950 tracking-wider">
+              {item.type === 'po' ? 'ĐƠN ĐẶT HÀNG MUA VẬT TƯ THIẾT BỊ (PURCHASE ORDER)' : 'GIẤY ĐỀ NGHỊ THANH TOÁN CHI TIÊU SITE'}
             </h2>
-            <p className="text-xs text-slate-500 mt-1 italic">
-              (Dành cho việc kiểm tra duyệt mua vật tư, vận chuyển &amp; dịch vụ phục vụ công trình)
+            <p className="text-[11px] text-slate-500 italic mt-0.5">
+              (Ban hành theo quy chuẩn quản lý vật tư &amp; thanh toán dự án công trình PNCONS M&amp;E)
             </p>
           </div>
 
-          {/* Details Header Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-lg border border-slate-200">
-            <div>
-              <span className="text-slate-500">Dự án thi công:</span>{' '}
-              <strong className="text-slate-900 font-bold text-sm">{item.projectName}</strong>
+          {/* ============================================================== */}
+          {/* KHUNG THÔNG TIN BÊN MUA (BÊN A) & BÊN BÁN (BÊN B)               */}
+          {/* ============================================================== */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            {/* BÊN A: ĐƠN VỊ ĐẶT HÀNG (BÊN MUA) */}
+            <div className="bg-sky-50/60 p-3 rounded-lg border border-sky-200 space-y-1">
+              <div className="font-black text-sky-950 text-[11px] uppercase tracking-wide border-b border-sky-200 pb-1 flex items-center gap-1.5">
+                <Building className="w-3.5 h-3.5 text-sky-700" />
+                <span>BÊN A: ĐƠN VỊ ĐẶT HÀNG (BÊN MUA)</span>
+              </div>
+              <div className="font-bold text-slate-900">CÔNG TY TNHH XÂY DỰNG - CƠ ĐIỆN PHÚC NGUYÊN</div>
+              <div>
+                <span className="text-slate-500">Dự án thi công:</span>{' '}
+                <strong className="text-sky-900 font-bold text-sm">{item.projectName}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500">Người lập đơn:</span>{' '}
+                <strong className="text-slate-900">{item.createdByName}</strong> ({item.createdByRole})
+              </div>
+              <div>
+                <span className="text-slate-500">Hình thức thanh toán:</span>{' '}
+                <strong className="text-slate-900">
+                  {item.paymentMethod === 'advance_fund'
+                    ? 'Tạm ứng quỹ site (Kỹ sư thanh toán trước)'
+                    : item.paymentMethod === 'transfer'
+                    ? 'Chuyển khoản công ty (Theo hợp đồng)'
+                    : 'Tiền mặt'}
+                </strong>
+              </div>
             </div>
-            <div>
-              <span className="text-slate-500">Phân loại chi tiêu:</span>{' '}
-              <strong className="text-sky-800 font-bold">{getCategoryLabel(item.category)}</strong>
-            </div>
-            <div>
-              <span className="text-slate-500">Người đề nghị / Lập:</span>{' '}
-              <strong className="text-slate-900">{item.createdByName}</strong> ({item.createdByRole})
-            </div>
-            <div>
-              <span className="text-slate-500">Đơn vị thụ hưởng / NCC:</span>{' '}
-              <strong className="text-slate-900">{item.supplier}</strong>
-            </div>
-            <div>
-              <span className="text-slate-500">Hình thức thanh toán:</span>{' '}
-              <strong className="text-slate-900">
-                {item.paymentMethod === 'advance_fund'
-                  ? 'Tạm ứng quỹ site (Kỹ sư chi trước)'
-                  : item.paymentMethod === 'transfer'
-                  ? 'Chuyển khoản công ty'
-                  : 'Tiền mặt'}
-              </strong>
-            </div>
-            <div>
-              <span className="text-slate-500">Mức độ ưu tiên:</span>{' '}
-              <strong className="text-slate-900">{getPriorityLabel(item.priority)}</strong>
+
+            {/* BÊN B: ĐƠN VỊ CUNG CẤP (BÊN BÁN) */}
+            <div className="bg-amber-50/50 p-3 rounded-lg border border-amber-200 space-y-1">
+              <div className="font-black text-amber-950 text-[11px] uppercase tracking-wide border-b border-amber-200 pb-1 flex items-center gap-1.5">
+                <ShoppingCart className="w-3.5 h-3.5 text-amber-700" />
+                <span>BÊN B: ĐƠN VỊ CUNG CẤP (BÊN BÁN)</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Nhà Cung Cấp:</span>{' '}
+                <strong className="text-slate-950 text-sm">{item.supplier}</strong>
+              </div>
+              {matchedSupplier?.contactPerson && (
+                <div>
+                  <span className="text-slate-500">Người liên hệ:</span>{' '}
+                  <strong className="text-slate-900">{matchedSupplier.contactPerson}</strong>
+                  {matchedSupplier.phone && ` • SĐT: ${matchedSupplier.phone}`}
+                </div>
+              )}
+              {matchedSupplier?.address && (
+                <div>
+                  <span className="text-slate-500">Địa chỉ:</span>{' '}
+                  <span className="text-slate-800">{matchedSupplier.address}</span>
+                </div>
+              )}
+              <div>
+                <span className="text-slate-500">Phân loại hàng hóa:</span>{' '}
+                <strong className="text-sky-800">{getCategoryLabel(item.category)}</strong> •{' '}
+                <span className="text-slate-500">Ưu tiên:</span>{' '}
+                <strong className="text-slate-900">{getPriorityLabel(item.priority)}</strong>
+              </div>
             </div>
           </div>
 
           {/* ============================================================== */}
-          {/* BẢNG TÊN HÀNG, SỐ LƯỢNG, GIÁ TIỀN CHO NHÂN VIÊN KIỂM TRA TRƯỚC IN */}
+          {/* BẢNG KÊ CHI TIẾT TÊN HÀNG, MÃ TB, SỐ LƯỢNG, ĐƠN GIÁ, THÀNH TIỀN   */}
           {/* ============================================================== */}
           <div className="border-2 border-slate-800 rounded-lg overflow-hidden text-xs shadow-2xs">
-            <div className="bg-[#102742] text-white px-3 py-1.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
+            <div className="bg-[#102742] text-white px-3.5 py-2 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
               <span>BẢNG KÊ DANH MỤC HÀNG HÓA &amp; VẬT TƯ MUA SẮM</span>
               <span>Tổng cộng: {orderLines.length} mặt hàng</span>
             </div>
@@ -273,7 +352,7 @@ export const ReceiptViewModal: React.FC<ReceiptViewModalProps> = ({
                 <tr>
                   <th className="py-2.5 px-2 text-center w-10 border-r border-slate-300">STT</th>
                   <th className="py-2.5 px-2.5 w-24 border-r border-slate-300">Mã VT</th>
-                  <th className="py-2.5 px-3 border-r border-slate-300">Tên Hàng / Quy Cách Kỹ Thuật</th>
+                  <th className="py-2.5 px-3 border-r border-slate-300">Tên Hàng Hóa &amp; Quy Cách Kỹ Thuật</th>
                   <th className="py-2.5 px-2 text-center w-16 border-r border-slate-300">ĐVT</th>
                   <th className="py-2.5 px-2 text-center w-20 border-r border-slate-300">Số Lượng</th>
                   <th className="py-2.5 px-3 text-right w-28 border-r border-slate-300">Đơn Giá (VNĐ)</th>
@@ -292,8 +371,8 @@ export const ReceiptViewModal: React.FC<ReceiptViewModalProps> = ({
                     <td className="py-2.5 px-3 font-semibold text-slate-900 border-r border-slate-200">
                       <div>{line.name}</div>
                       {line.deviceCode && (
-                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                          Model / Mã TB: {line.deviceCode}
+                        <div className="text-[10px] text-indigo-700 font-mono font-bold mt-0.5">
+                          Model / Mã Thiết Bị: {line.deviceCode}
                         </div>
                       )}
                     </td>
@@ -353,54 +432,76 @@ export const ReceiptViewModal: React.FC<ReceiptViewModalProps> = ({
             </table>
           </div>
 
-          {/* Ghi chú đơn hàng nếu có */}
-          {item.notes && (
-            <div className="bg-amber-50/80 p-3 rounded-lg border border-amber-300 text-xs text-amber-900">
+          {/* Ghi chú đơn hàng & Điều khoản thi công nếu có */}
+          {item.notes ? (
+            <div className="bg-amber-50/80 p-3 rounded-lg border border-amber-300 text-xs text-amber-950">
               <strong className="font-bold">Ghi chú giao nhận &amp; thi công:</strong> {item.notes}
+            </div>
+          ) : (
+            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-[11px] text-slate-600">
+              <strong>Điều khoản giao hàng:</strong> Hàng mới 100%, đúng quy cách kỹ thuật catalogue M&amp;E. Giao hàng kèm theo biên bản bàn giao, CO/CQ và hóa đơn VAT hợp lệ.
             </div>
           )}
 
-          {/* Chữ Ký Các Bên */}
-          <div className="pt-6 grid grid-cols-3 gap-4 text-center text-xs">
+          {/* ============================================================== */}
+          {/* CHỮ KÝ 4 BÊN PHÊ DUYỆT ĐƠN HÀNG                                 */}
+          {/* ============================================================== */}
+          <div className="pt-4 grid grid-cols-4 gap-2 text-center text-xs">
             <div>
-              <div className="font-bold uppercase text-slate-900">Người Lập Phiếu</div>
+              <div className="font-bold uppercase text-slate-900 text-[11px]">Người Lập Đơn</div>
               <div className="text-slate-400 text-[10px] italic">(Ký, ghi rõ họ tên)</div>
-              <div className="h-16 flex items-center justify-center font-bold text-slate-800 mt-2">
+              <div className="h-16 flex items-center justify-center font-bold text-slate-900 mt-1">
                 {item.createdByName}
               </div>
             </div>
 
             <div>
-              <div className="font-bold uppercase text-slate-900">Kế Toán Dự Án</div>
-              <div className="text-slate-400 text-[10px] italic">(Kiểm tra, xác nhận)</div>
-              <div className="h-16 flex items-center justify-center font-bold text-emerald-700 mt-2">
-                {item.status === 'approved' || item.status === 'paid' ? 'Đã kiểm tra ✓' : 'Chờ xác nhận'}
+              <div className="font-bold uppercase text-slate-900 text-[11px]">Chỉ Huy Trưởng Site</div>
+              <div className="text-slate-400 text-[10px] italic">(Kiểm tra khối lượng)</div>
+              <div className="h-16 flex items-center justify-center font-bold text-sky-900 mt-1">
+                Trần Anh Minh
               </div>
             </div>
 
             <div>
-              <div className="font-bold uppercase text-slate-900">Giám Đốc / Duyệt Chi</div>
-              <div className="text-slate-400 text-[10px] italic">(Ký duyệt đơn hàng)</div>
-              <div className="h-16 flex items-center justify-center font-black text-sky-900 mt-2">
-                {item.status === 'approved' || item.status === 'paid' ? 'ĐÃ PHÊ DUYỆT' : 'Chờ duyệt'}
+              <div className="font-bold uppercase text-slate-900 text-[11px]">Kế Toán Dự Án</div>
+              <div className="text-slate-400 text-[10px] italic">(Kiểm soát ngân sách)</div>
+              <div className="h-16 flex items-center justify-center font-bold text-emerald-700 mt-1">
+                {item.status === 'approved' || item.status === 'paid' ? 'Đã kiểm tra ✓' : 'Chờ kiểm tra'}
+              </div>
+            </div>
+
+            <div>
+              <div className="font-bold uppercase text-slate-900 text-[11px]">Giám Đốc Phê Duyệt</div>
+              <div className="text-slate-400 text-[10px] italic">(Ký duyệt mua)</div>
+              <div className="h-16 flex items-center justify-center font-black text-slate-950 mt-1">
+                {item.status === 'approved' || item.status === 'paid' ? 'ĐÃ DUYỆT' : 'Chờ duyệt'}
               </div>
             </div>
           </div>
 
-          {/* Action button inside modal if pending */}
-          <div className="no-print pt-4 border-t border-slate-200 flex justify-between items-center">
+          {/* Action button inside modal if pending (Hidden during print) */}
+          <div className="no-print pt-4 border-t border-slate-200 flex flex-wrap justify-between items-center gap-3">
             <div className="text-xs text-slate-500">
-              Nhân viên vui lòng kiểm tra kỹ danh sách tên hàng, số lượng và đơn giá trước khi in hoặc xuất trình.
+              Mẹo: Chọn <strong>"Lưu dưới dạng PDF" (Save as PDF)</strong> trong hộp thoại in để xuất file PDF chất lượng cao.
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                onClick={handlePrint}
+                className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 rounded-lg flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                <span>In / Xuất PDF</span>
+              </button>
+
               {onApprove && item.status === 'pending' && (currentUser.role === 'director' || currentUser.role === 'accountant') && (
                 <button
                   onClick={() => {
                     onApprove(item);
                     onClose();
                   }}
-                  className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg flex items-center gap-1.5 shadow-sm"
+                  className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg flex items-center gap-1.5 shadow-sm cursor-pointer"
                 >
                   <CheckCircle className="w-4 h-4" />
                   <span>Phê Duyệt Đơn Hàng</span>
@@ -408,7 +509,7 @@ export const ReceiptViewModal: React.FC<ReceiptViewModalProps> = ({
               )}
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg"
+                className="px-4 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer"
               >
                 Đóng
               </button>
