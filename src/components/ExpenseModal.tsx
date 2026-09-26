@@ -215,6 +215,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       const matchSearch =
         !q ||
         m.code.toLowerCase().includes(q) ||
+        (m.deviceCode && m.deviceCode.toLowerCase().includes(q)) ||
         m.name.toLowerCase().includes(q) ||
         (m.subCategory && m.subCategory.toLowerCase().includes(q)) ||
         (m.brand && m.brand.toLowerCase().includes(q));
@@ -239,6 +240,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       const newLine: OrderItemLine = {
         materialId: material.id,
         code: material.code,
+        deviceCode: material.deviceCode,
         name: material.name,
         unit: material.unit || 'Cái',
         quantity: 1,
@@ -743,9 +745,14 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                               </td>
                               <td className="py-2 px-3">
                                 <div className="font-semibold text-slate-900">{mat.name}</div>
-                                {mat.brand && (
-                                  <div className="text-[10px] text-slate-400">Hãng: {mat.brand}</div>
-                                )}
+                                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
+                                  {mat.deviceCode && (
+                                    <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-1 rounded border border-indigo-200">
+                                      Model: {mat.deviceCode}
+                                    </span>
+                                  )}
+                                  {mat.brand && <span>Hãng: {mat.brand}</span>}
+                                </div>
                               </td>
                               <td className="py-2 px-2 text-center text-slate-600 font-medium">
                                 {mat.unit}

@@ -60,7 +60,8 @@ export interface Supplier {
 
 export interface MaterialItem {
   id: string;
-  code: string; // "VT0001", "VT0002", "VT0003"...
+  code: string; // Mã VT nội bộ: "VT0001", "VT0002", "VT0003"...
+  deviceCode?: string; // Mã Thiết Bị / Model / Part Number của hãng (VD: WP7.2-12, TY3251...)
   name: string; // Tên vật tư
   stockQuantity: number; // Số lượng tồn kho
   unit: string; // Đơn vị tính: Mét, Cuộn, Cái, Bộ, Cây, Thùng...
@@ -81,6 +82,7 @@ export interface MaterialItem {
 export interface OrderItemLine {
   materialId?: string;
   code: string;
+  deviceCode?: string;
   name: string;
   unit: string;
   quantity: number;

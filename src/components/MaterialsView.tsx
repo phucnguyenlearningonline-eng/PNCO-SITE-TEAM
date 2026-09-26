@@ -80,6 +80,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   // - Giá Tiền (không bắt buộc)
   // - Kho lưu trữ & Vị trí kệ
   const [formCode, setFormCode] = useState('');
+  const [formDeviceCode, setFormDeviceCode] = useState('');
   const [formName, setFormName] = useState('');
   const [formStockQuantity, setFormStockQuantity] = useState<number | string>(0);
   const [formUnit, setFormUnit] = useState('Cái');
@@ -155,6 +156,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     const nextCode = getNextMaterialCode();
     setEditingMaterial(null);
     setFormCode(nextCode);
+    setFormDeviceCode('');
     setFormName('');
     setFormStockQuantity(0); // Luôn bắt đầu từ 0 khi thêm vật tư mới
     setFormUnit('Cái');
@@ -179,6 +181,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   const openEditModal = (m: MaterialItem) => {
     setEditingMaterial(m);
     setFormCode(m.code);
+    setFormDeviceCode(m.deviceCode || '');
     setFormName(m.name);
     setFormStockQuantity(m.stockQuantity ?? 0);
     setFormUnit(m.unit);
@@ -242,6 +245,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
       const updated: MaterialItem = {
         ...editingMaterial,
         code: cleanCode,
+        deviceCode: formDeviceCode.trim() || undefined,
         name: formName.trim(),
         stockQuantity: parsedStock,
         unit: formUnit.trim(),
@@ -263,6 +267,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
       const newMaterial: MaterialItem = {
         id: `mat-${Date.now()}`,
         code: cleanCode,
+        deviceCode: formDeviceCode.trim() || undefined,
         name: formName.trim(),
         stockQuantity: parsedStock,
         unit: formUnit.trim(),
@@ -327,6 +332,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
       const matchSearch =
         !q ||
         m.code.toLowerCase().includes(q) ||
+        (m.deviceCode && m.deviceCode.toLowerCase().includes(q)) ||
         m.name.toLowerCase().includes(q) ||
         (m.subCategory && m.subCategory.toLowerCase().includes(q)) ||
         (m.brand && m.brand.toLowerCase().includes(q)) ||
@@ -811,6 +817,11 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                             {m.name}
                           </div>
                           <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            {m.deviceCode && (
+                              <span className="text-[10px] font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded shadow-2xs" title={`Mã thiết bị / Model: ${m.deviceCode}`}>
+                                Model: {m.deviceCode}
+                              </span>
+                            )}
                             {getCategoryBadge(m.category)}
                             {m.subCategory && (
                               <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
@@ -1200,8 +1211,68 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             </div>
 
             <form onSubmit={handleFormSubmit} className="p-4 space-y-3 text-xs overflow-y-auto flex-1">
-              {/* HÀNG 1: PHÂN LOẠI HỆ & HẠNG MỤC CHI TIẾT (2 CỘT RỘNG RÃI) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* HÀNG 1: MÃ VẬT TƯ NỘI BỘ [VT] & PHÂN LOẠI HỆ & HẠNG MỤC (NẰM TRÊN TÊN SẢN PHẨM / VẬT TƯ) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {/* CỘT 1: MÃ VẬT TƯ NỘI BỘ [VT] */}
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Tag className="w-3.5 h-3.5 text-sky-600" />
+                      <span>Mã VT Nội Bộ <span className="text-rose-500">*</span></span>
+                    </span>
+                    {formCode && materials.some((m) => m.code.replace(/\s+/g, '').toUpperCase() === formCode.trim().replace(/\s+/g, '').toUpperCase()) ? (
+                      <span className="text-[9px] text-emerald-700 font-bold bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300">
+                        Đã có SP
+                      </span>
+                    ) : (
+                      <span className="text-[9px] text-slate-500 font-medium">Mã mới</span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formCode}
+                    onChange={(e) => {
+                      const inputVal = e.target.value;
+                      setFormCode(inputVal);
+                      // Khi nhập mã vật tư mới thì số tồn kho phải là không (0),
+                      // chỉ khi nào vật tư có trong bảng sản phẩm thì mới thể hiện tồn kho
+                      if (!editingMaterial) {
+                        const clean = inputVal.trim().replace(/\s+/g, '').toUpperCase();
+                        const existing = materials.find(
+                          (m) => m.code.replace(/\s+/g, '').toUpperCase() === clean
+                        );
+                        if (existing) {
+                          setFormName(existing.name);
+                          setFormDeviceCode(existing.deviceCode || '');
+                          setFormStockQuantity(existing.stockQuantity ?? 0);
+                          setFormUnit(existing.unit);
+                          setFormMinStock(existing.minStock ?? 0);
+                          if (existing.unitPrice !== undefined) setFormUnitPrice(existing.unitPrice);
+                          if (existing.vatRate !== undefined) setFormVatRate(existing.vatRate);
+                          if (existing.supplier) setFormSupplier(existing.supplier);
+                          if (existing.brand) setFormBrand(existing.brand);
+                          if (existing.specifications) setFormSpecifications(existing.specifications);
+                          if (existing.category) setFormCategory(existing.category);
+                          if (existing.subCategory) setFormSubCategory(existing.subCategory);
+                          if (existing.warehouseLocation) setFormWarehouse(existing.warehouseLocation);
+                          if (existing.shelfLocation) setFormShelfLocation(existing.shelfLocation);
+                          if (existing.imageUrl) setFormImageUrl(existing.imageUrl);
+                          if (existing.catalogueUrl) setFormCatalogueUrl(existing.catalogueUrl);
+                        } else {
+                          // Mã vật tư mới hoàn toàn -> số tồn kho phải là 0
+                          setFormStockQuantity(0);
+                          setFormMinStock(0);
+                          setFormWarehouse('Chưa phân kho (Tồn: 0)');
+                        }
+                      }
+                    }}
+                    placeholder="VD: VT0042..."
+                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg font-mono font-bold text-sky-800 focus:ring-2 focus:ring-sky-500 uppercase bg-slate-50 focus:bg-white text-xs shadow-2xs"
+                  />
+                </div>
+
+                {/* CỘT 2: PHÂN LOẠI HỆ M&E */}
                 <div>
                   <label className="block font-bold text-slate-700 uppercase mb-1">
                     Phân Loại Hệ M&amp;E <span className="text-rose-500">*</span>
@@ -1227,7 +1298,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                   </select>
                 </div>
 
-                {/* HẠNG MỤC VỚI DROPDOWN GỢI Ý */}
+                {/* CỘT 3: HẠNG MỤC VỚI DROPDOWN GỢI Ý */}
                 <div>
                   <label className="block font-bold text-slate-700 uppercase mb-1">
                     Hạng Mục
@@ -1239,7 +1310,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                       value={formSubCategory}
                       onChange={(e) => setFormSubCategory(e.target.value)}
                       onFocus={() => setIsHangMucDropdownOpen(true)}
-                      placeholder="Gõ hoặc chọn: Sol Khí, Thoát Hiểm, Sprinkler..."
+                      placeholder="Sol Khí, Thoát Hiểm..."
                       className="w-full py-1.5 pl-2.5 pr-7 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 shadow-2xs"
                     />
                     <button
@@ -1308,68 +1379,26 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                   required
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder="VD: Ắc quy khô 12V 7.2Ah WP7.2-12 / Đèn cảnh báo xả khí / Cáp đồng..."
+                  placeholder="VD: Ắc quy khô 12V 7.2Ah / Đầu phun Sprinkler Tyco / Cáp đồng CADIVI..."
                   className="w-full py-2 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 text-xs font-semibold"
                 />
               </div>
 
-              {/* HÀNG 3: MÃ SẢN PHẨM / MÃ VẬT TƯ (ĐẶT NGAY DƯỚI TÊN SẢN PHẨM / VẬT TƯ THEO YÊU CẦU) */}
+              {/* HÀNG 3: MÃ THIẾT BỊ / MODEL HÃNG (BỔ SUNG THEO YÊU CẦU CỦA BẠN) */}
               <div>
                 <label className="block font-bold text-slate-700 uppercase mb-1 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-sky-600" />
-                    <span>Mã Sản Phẩm / Mã Vật Tư <span className="text-rose-500">*</span></span>
+                    <Boxes className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Mã Thiết Bị / Model Sản Phẩm (Part Number)</span>
                   </span>
-                  {formCode && materials.some((m) => m.code.replace(/\s+/g, '').toUpperCase() === formCode.trim().replace(/\s+/g, '').toUpperCase()) ? (
-                    <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
-                      Đã có trong bảng sản phẩm
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-slate-600 font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
-                      Mã mới: Tồn kho = 0
-                    </span>
-                  )}
+                  <span className="text-[10px] text-slate-500 italic">Theo catalogue hoặc tem nhãn hãng</span>
                 </label>
                 <input
                   type="text"
-                  required
-                  value={formCode}
-                  onChange={(e) => {
-                    const inputVal = e.target.value;
-                    setFormCode(inputVal);
-                    // Khi nhập mã vật tư mới thì số tồn kho phải là không (0),
-                    // chỉ khi nào vật tư có trong bảng sản phẩm thì mới thể hiện tồn kho
-                    if (!editingMaterial) {
-                      const clean = inputVal.trim().replace(/\s+/g, '').toUpperCase();
-                      const existing = materials.find(
-                        (m) => m.code.replace(/\s+/g, '').toUpperCase() === clean
-                      );
-                      if (existing) {
-                        setFormName(existing.name);
-                        setFormStockQuantity(existing.stockQuantity ?? 0);
-                        setFormUnit(existing.unit);
-                        setFormMinStock(existing.minStock ?? 0);
-                        if (existing.unitPrice !== undefined) setFormUnitPrice(existing.unitPrice);
-                        if (existing.vatRate !== undefined) setFormVatRate(existing.vatRate);
-                        if (existing.supplier) setFormSupplier(existing.supplier);
-                        if (existing.brand) setFormBrand(existing.brand);
-                        if (existing.specifications) setFormSpecifications(existing.specifications);
-                        if (existing.category) setFormCategory(existing.category);
-                        if (existing.subCategory) setFormSubCategory(existing.subCategory);
-                        if (existing.warehouseLocation) setFormWarehouse(existing.warehouseLocation);
-                        if (existing.shelfLocation) setFormShelfLocation(existing.shelfLocation);
-                        if (existing.imageUrl) setFormImageUrl(existing.imageUrl);
-                        if (existing.catalogueUrl) setFormCatalogueUrl(existing.catalogueUrl);
-                      } else {
-                        // Mã vật tư mới hoàn toàn -> số tồn kho phải là 0
-                        setFormStockQuantity(0);
-                        setFormMinStock(0);
-                        setFormWarehouse('Chưa phân kho (Tồn: 0)');
-                      }
-                    }
-                  }}
-                  placeholder="VD: VT0027..."
-                  className="w-full py-2 px-3 border border-slate-300 rounded-lg font-mono font-bold text-sky-800 focus:ring-2 focus:ring-sky-500 uppercase bg-slate-50 focus:bg-white text-xs shadow-2xs"
+                  value={formDeviceCode}
+                  onChange={(e) => setFormDeviceCode(e.target.value)}
+                  placeholder="VD: WP7.2-12 (Ắc quy) / TY3251 / CXV-3x120 / FM-200-120L..."
+                  className="w-full py-2 px-3 border border-slate-300 rounded-lg font-mono font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500 bg-indigo-50/20 focus:bg-white text-xs shadow-2xs"
                 />
               </div>
 

@@ -291,6 +291,11 @@ export const ReceiptViewModal: React.FC<ReceiptViewModalProps> = ({
                     </td>
                     <td className="py-2.5 px-3 font-semibold text-slate-900 border-r border-slate-200">
                       <div>{line.name}</div>
+                      {line.deviceCode && (
+                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                          Model / Mã TB: {line.deviceCode}
+                        </div>
+                      )}
                     </td>
                     <td className="py-2.5 px-2 text-center text-slate-700 font-medium border-r border-slate-200">
                       {line.unit}
