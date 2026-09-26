@@ -253,6 +253,14 @@ export const ReceiptViewModal: React.FC<ReceiptViewModalProps> = ({
                     {item.code}
                   </span>
                 </div>
+                {item.contractNumber && (
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block font-semibold">Số Hợp Đồng:</span>
+                    <span className="text-xs font-mono font-bold text-indigo-900 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 inline-block">
+                      {item.contractNumber}
+                    </span>
+                  </div>
+                )}
                 <div className="text-[11px] text-slate-600">
                   Ngày lập đơn: <strong className="text-slate-950">{formatDateVN(item.date)}</strong>
                 </div>

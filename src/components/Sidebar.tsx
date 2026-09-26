@@ -13,11 +13,12 @@ import {
   Database,
   Shield,
   Layers,
-  Sparkles
+  Sparkles,
+  FileSignature
 } from 'lucide-react';
 import { User } from '../types';
 
-export type ActiveTab = 'orders' | 'materials' | 'projects' | 'transactions' | 'clients' | 'suppliers' | 'reports' | 'users';
+export type ActiveTab = 'orders' | 'materials' | 'projects' | 'contracts' | 'transactions' | 'clients' | 'suppliers' | 'reports' | 'users';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -30,6 +31,7 @@ interface SidebarProps {
   suppliersCount: number;
   clientsCount: number;
   materialsCount: number;
+  contractsCount?: number;
   currentUser: User;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
@@ -46,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   suppliersCount,
   clientsCount,
   materialsCount,
+  contractsCount = 0,
   currentUser,
   isCollapsed,
   onToggleCollapse,
@@ -58,6 +61,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: ShoppingCart,
       badge: pendingCount > 0 ? `${pendingCount} chờ duyệt` : null,
       badgeColor: 'bg-red-600 text-white',
+    },
+    {
+      id: 'contracts' as ActiveTab,
+      label: 'Quản Lý Hợp Đồng',
+      sublabel: 'Hợp đồng kinh tế, tạm ứng & các đợt TT',
+      icon: FileSignature,
+      count: contractsCount,
+      badge: contractsCount > 0 ? `${contractsCount} HĐ` : null,
+      badgeColor: 'bg-emerald-600 text-white',
     },
     {
       id: 'materials' as ActiveTab,

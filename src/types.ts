@@ -90,6 +90,20 @@ export interface OrderItemLine {
   total: number;
 }
 
+export interface ContractPaymentStage {
+  id: string;
+  stageNumber: number; // Đợt 1, Đợt 2, Đợt 3...
+  title: string; // VD: "Tạm ứng hợp đồng (Đợt 1)", "Giao hàng đợt 1 (Đợt 2)", "Nghiệm thu quyết toán (Đợt 3)"
+  percentage?: number; // % của hợp đồng (VD: 30%)
+  amount: number; // Số tiền thanh toán (VNĐ)
+  dueDate?: string; // Ngày dự kiến YYYY-MM-DD
+  paidDate?: string; // Ngày đã thanh toán YYYY-MM-DD
+  status: 'pending' | 'paid'; // 'pending' = Chưa thanh toán, 'paid' = Đã thanh toán
+  paymentMethod?: 'transfer' | 'cash';
+  notes?: string;
+  proofDocument?: string;
+}
+
 export interface ExpenseItem {
   id: string;
   code: string; // DH 0001, PO-2026-0224, EXP-2026-0105
@@ -117,6 +131,15 @@ export interface ExpenseItem {
   notes?: string;
   approvedBy?: string;
   approvedAt?: string;
+
+  // Quản lý Hợp Đồng Kinh Tế (Dành cho đơn hàng lớn)
+  hasContract?: boolean; // Đơn hàng này có hợp đồng kinh tế hay không
+  contractNumber?: string; // Số hợp đồng (VD: "HĐ-011/PN-2026/VTTB")
+  contractDate?: string; // Ngày ký hợp đồng
+  contractAdvanceAmount?: number; // Giá trị thanh toán tạm ứng (VNĐ)
+  contractAdvancePercentage?: number; // % Tạm ứng hợp đồng (VD: 30%)
+  contractPaymentStages?: ContractPaymentStage[]; // Danh sách các lần thanh toán tiếp theo
+  contractNotes?: string; // Ghi chú điều khoản hợp đồng & bảo hành
 }
 
 export interface FilterState {

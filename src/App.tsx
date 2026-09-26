@@ -64,6 +64,7 @@ import {
 } from './services/supabaseService';
 import { ClientsView } from './components/ClientsView';
 import { MaterialsView } from './components/MaterialsView';
+import { ContractsView } from './components/ContractsView';
 import { 
   INITIAL_EXPENSES, 
   INITIAL_PROJECTS, 
@@ -91,7 +92,8 @@ import {
   TrendingUp,
   ShieldCheck,
   CheckCircle2,
-  Bell
+  Bell,
+  FileSignature
 } from 'lucide-react';
 
 const STORAGE_KEYS = {
@@ -719,6 +721,11 @@ export default function App() {
     showToast('Đã khôi phục dữ liệu ban đầu của Phúc Nguyên M&E');
   };
 
+  // Tính toán số lượng đơn hàng có hợp đồng kinh tế
+  const contractsCount = useMemo(() => {
+    return expenses.filter((e) => Boolean(e.hasContract || e.contractNumber)).length;
+  }, [expenses]);
+
   // Horizontal sub-tabs array matching screenshot
   const subTabs = [
     {
@@ -726,6 +733,12 @@ export default function App() {
       label: 'ĐƠN HÀNG (PO)',
       badge: pendingCount > 0 ? `${pendingCount}` : null,
       icon: ShoppingCart,
+    },
+    {
+      id: 'contracts' as ActiveTab,
+      label: 'QUẢN LÝ HỢP ĐỒNG',
+      badge: contractsCount > 0 ? `${contractsCount}` : null,
+      icon: FileSignature,
     },
     {
       id: 'materials' as ActiveTab,
@@ -824,6 +837,7 @@ export default function App() {
           suppliersCount={actualSuppliersCount}
           clientsCount={actualClientsCount}
           materialsCount={materials.length}
+          contractsCount={contractsCount}
           currentUser={currentUser}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -868,7 +882,26 @@ export default function App() {
           </div>
 
           {/* Conditional View by Active Tab */}
-          {activeTab === 'materials' ? (
+          {activeTab === 'contracts' ? (
+            <ContractsView
+              expenses={expenses}
+              projects={projects}
+              currentUser={currentUser}
+              onUpdateExpense={handleSaveExpense}
+              onViewOrder={(item) => {
+                setViewingReceipt(item);
+                setAutoPrintReceipt(false);
+              }}
+              onEditOrder={(item) => {
+                setEditingExpense(item);
+                setIsExpenseModalOpen(true);
+              }}
+              onOpenCreateOrder={() => {
+                setEditingExpense(null);
+                setIsExpenseModalOpen(true);
+              }}
+            />
+          ) : activeTab === 'materials' ? (
             <MaterialsView
               materials={materials}
               suppliers={suppliers}
