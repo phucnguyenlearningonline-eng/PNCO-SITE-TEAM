@@ -65,6 +65,7 @@ import {
 import { ClientsView } from './components/ClientsView';
 import { MaterialsView } from './components/MaterialsView';
 import { ContractsView } from './components/ContractsView';
+import { TransactionsView } from './components/TransactionsView';
 import { 
   INITIAL_EXPENSES, 
   INITIAL_PROJECTS, 
@@ -1045,6 +1046,16 @@ export default function App() {
                   category: cat || 'all',
                 }));
                 setActiveTab('orders');
+              }}
+            />
+          ) : activeTab === 'transactions' ? (
+            <TransactionsView
+              projects={projects}
+              expenses={expenses}
+              onSaveExpense={handleSaveExpense}
+              onDeleteExpense={handleDelete}
+              onRefreshData={() => {
+                showToast('Đã nạp lại dữ liệu dòng tiền');
               }}
             />
           ) : activeTab === 'suppliers' ? (

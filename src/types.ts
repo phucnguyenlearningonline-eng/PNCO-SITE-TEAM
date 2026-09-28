@@ -182,6 +182,11 @@ export interface ExpenseItem {
   contractAdvancePercentage?: number; // % Tạm ứng hợp đồng (VD: 30%)
   contractPaymentStages?: ContractPaymentStage[]; // Danh sách các lần thanh toán tiếp theo
   contractNotes?: string; // Ghi chú điều khoản hợp đồng & bảo hành
+
+  // Đồng bộ phiếu chi với đơn hàng PO & Phiếu thu
+  linkedPoId?: string; // ID đơn hàng PO liên kết
+  linkedPoCode?: string; // Mã đơn hàng PO liên kết (PO-2026-...)
+  receiverOrPayer?: string; // Người nộp tiền (phiếu thu) hoặc người nhận tiền (phiếu chi)
 }
 
 export interface FilterState {
