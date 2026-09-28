@@ -5,6 +5,24 @@ export function formatVND(amount?: number | null): string {
   return new Intl.NumberFormat('vi-VN').format(Math.round(amount)) + ' đ';
 }
 
+export function formatTy(amount?: number | null): string {
+  if (amount === undefined || amount === null || isNaN(amount) || amount === 0) return '0 đ';
+  const abs = Math.abs(amount);
+  const sign = amount < 0 ? '-' : '';
+  if (abs >= 1_000_000_000) {
+    const val = abs / 1_000_000_000;
+    return `${sign}${val >= 10 ? val.toFixed(1) : val.toFixed(2)} tỷ`;
+  }
+  if (abs >= 1_000_000) {
+    const val = abs / 1_000_000;
+    return `${sign}${val >= 10 ? val.toFixed(0) : val.toFixed(1)} tr`;
+  }
+  if (abs >= 1_000) {
+    return `${sign}${(abs / 1_000).toFixed(0)}k đ`;
+  }
+  return `${sign}${abs} đ`;
+}
+
 export function formatNumber(amount: number): string {
   if (isNaN(amount)) return '0';
   return new Intl.NumberFormat('vi-VN').format(Math.round(amount));

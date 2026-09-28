@@ -69,7 +69,8 @@ import {
   INITIAL_EXPENSES, 
   INITIAL_PROJECTS, 
   INITIAL_SUPPLIERS, 
-  INITIAL_USERS 
+  INITIAL_USERS,
+  INITIAL_CUSTOMERS 
 } from './data/mockData';
 import { INITIAL_MATERIALS } from './data/materialsData';
 import { 
@@ -78,7 +79,8 @@ import {
   Project, 
   Supplier, 
   User,
-  MaterialItem 
+  MaterialItem,
+  Customer 
 } from './types';
 import { exportExpensesToExcel } from './utils/excelExport';
 import { formatVND } from './utils/formatters';
@@ -102,6 +104,7 @@ const STORAGE_KEYS = {
   PROJECTS: 'phuc_nguyen_me_projects_v1',
   SUPPLIERS: 'phuc_nguyen_me_suppliers_v1',
   MATERIALS: 'phuc_nguyen_me_materials_v1',
+  CUSTOMERS: 'phuc_nguyen_me_customers_v1',
   CURRENT_USER_ID: 'phuc_nguyen_me_current_user_v1',
   IS_LOGGED_IN: 'phuc_nguyen_me_is_logged_in_v1',
 };
@@ -113,7 +116,11 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingIds = new Set(parsed.map((e: any) => e.id));
+          const missing = INITIAL_EXPENSES.filter((ie) => !existingIds.has(ie.id));
+          return [...missing, ...parsed];
+        }
       } catch (e) { /* ignore */ }
     }
     return INITIAL_EXPENSES;
@@ -169,12 +176,27 @@ export default function App() {
     return INITIAL_USERS;
   });
 
+  const [customers, setCustomers] = useState<Customer[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) { /* ignore */ }
+    }
+    return INITIAL_CUSTOMERS;
+  });
+
   const [projects, setProjects] = useState<Project[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingIds = new Set(parsed.map((p: any) => p.code || p.id));
+          const missing = INITIAL_PROJECTS.filter((ip) => !existingIds.has(ip.code) && !existingIds.has(ip.id));
+          return [...missing, ...parsed];
+        }
       } catch (e) { /* ignore */ }
     }
     return INITIAL_PROJECTS;
@@ -241,6 +263,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
   }, [projects]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+  }, [customers]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers));
@@ -673,6 +699,11 @@ export default function App() {
     showToast(`Đã cập nhật khách hàng/chủ đầu tư: ${newClientName}`);
   };
 
+  const handleAddCustomer = (newCustomer: Customer) => {
+    setCustomers((prev) => [newCustomer, ...prev]);
+    showToast(`Đã thêm khách hàng/CĐT: ${newCustomer.name}`);
+  };
+
   // Add User handler
   const handleAddUser = (newUser: User) => {
     setUsers((prev) => [...prev, newUser]);
@@ -997,11 +1028,22 @@ export default function App() {
             <ProjectsView
               projects={projects}
               expenses={expenses}
+              customers={customers}
               onAddProject={handleAddProject}
               onEditProject={handleEditProject}
               onDeleteProject={handleDeleteProject}
+              onAddCustomer={handleAddCustomer}
+              onAddExpense={handleSaveExpense}
               onSelectProjectFilter={(prjId) => {
                 setFilters((prev) => ({ ...prev, projectId: prjId }));
+                setActiveTab('orders');
+              }}
+              onNavigateToExpense={(prjId, cat) => {
+                setFilters((prev) => ({
+                  ...prev,
+                  projectId: prjId || 'all',
+                  category: cat || 'all',
+                }));
                 setActiveTab('orders');
               }}
             />

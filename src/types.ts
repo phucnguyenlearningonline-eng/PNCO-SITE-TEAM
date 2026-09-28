@@ -35,17 +35,59 @@ export interface User {
   permissions?: UserPermissions;
 }
 
+export interface Customer {
+  id: string;
+  code: string; // KH-001, KH-002...
+  name: string; // Tên công ty / chủ đầu tư
+  shortName?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  taxCode?: string;
+  contactPerson?: string;
+  notes?: string;
+}
+
+export interface ProjectAddendum {
+  id: string;
+  code: string; // PLHĐ-01/PNC-DA01
+  title: string; // Nội dung bổ sung / điều chỉnh phát sinh
+  signingDate: string; // YYYY-MM-DD
+  amount: number; // Giá trị phát sinh trước thuế (VNĐ)
+  vatRate: number; // % VAT (0, 8, 10)
+  totalAmount: number; // Giá trị phát sinh sau thuế (VNĐ)
+  scope?: string; // Phạm vi / Diễn giải kỹ thuật phát sinh
+  status: 'draft' | 'pending' | 'signed' | 'approved';
+  notes?: string;
+}
+
 export interface Project {
   id: string;
-  code: string;
+  code: string; // PNC-DA01, PNC-DA02...
   name: string;
-  client: string;
-  totalBudget: number;
-  totalRevenue: number;
-  currentAdvance: number;
-  status: 'active' | 'completed' | 'paused';
+  clientId?: string;
+  clientCode?: string; // KH-001, KH-002...
+  client: string; // Tên Khách hàng / Chủ đầu tư
+  clientAddress?: string;
+  packageType?: string; // Gói thầu M&E (VD: Tổng thầu Cơ Điện M&E toàn bộ)
+  year?: number; // Năm thực hiện: 2026, 2025...
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string; // YYYY-MM-DD
+  contractNumber?: string; // Số hợp đồng kinh tế
+  contractDate?: string; // Ngày ký hợp đồng
+  vatRate?: number; // % VAT (0, 8, 10)
+  originalContractValue?: number; // Giá trị HĐ gốc
+  totalBudget: number; // Ngân sách dự toán
+  totalRevenue: number; // Tổng quyết toán sau PLHĐ
+  currentAdvance: number; // Đã thu CĐT
+  status: 'active' | 'completed' | 'paused' | 'accepted';
+  progressPercentage?: number; // Tiến độ thi công (% 0 - 100)
   location: string;
-  manager: string;
+  manager: string; // CHT: Chỉ huy trưởng
+  addendums?: ProjectAddendum[]; // Danh sách phụ lục hợp đồng
+  laborBudget?: number; // Ngân sách nhân công dự toán
+  materialBudget?: number; // Ngân sách vật tư dự toán
+  notes?: string;
 }
 
 export interface Supplier {
