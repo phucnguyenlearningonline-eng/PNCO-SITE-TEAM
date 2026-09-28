@@ -55,6 +55,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('all');
+  const [selectedSupplier, setSelectedSupplier] = useState<string>('all');
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'in_stock'>('all');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
@@ -111,6 +112,31 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     });
     STANDARD_WAREHOUSES.forEach((w) => set.add(w));
     return Array.from(set);
+  }, [materials]);
+
+  // Danh sách các nhà cung cấp thực tế và số lượng vật tư tương ứng
+  const existingSuppliers = useMemo(() => {
+    const map = new Map<string, number>();
+    materials.forEach((m) => {
+      const sup = m.supplier ? m.supplier.trim() : '';
+      if (sup) {
+        map.set(sup, (map.get(sup) || 0) + 1);
+      }
+    });
+
+    // Bổ sung các NCC từ danh mục nhà cung cấp hệ thống nếu chưa có trong vật tư
+    suppliers.forEach((s) => {
+      const name = s.name ? s.name.trim() : '';
+      if (name && !map.has(name)) {
+        map.set(name, 0);
+      }
+    });
+
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], 'vi'));
+  }, [materials, suppliers]);
+
+  const unassignedSupplierCount = useMemo(() => {
+    return materials.filter((m) => !m.supplier || !m.supplier.trim()).length;
   }, [materials]);
 
   // Thống kê tổng quan kho
@@ -319,6 +345,13 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
         selectedWarehouse === 'all' ||
         (m.warehouseLocation && m.warehouseLocation.toLowerCase() === selectedWarehouse.toLowerCase());
 
+      const matchSupplier =
+        selectedSupplier === 'all'
+          ? true
+          : selectedSupplier === '__none__'
+          ? !m.supplier || !m.supplier.trim()
+          : Boolean(m.supplier && m.supplier.trim().toLowerCase() === selectedSupplier.trim().toLowerCase());
+
       const qty = m.stockQuantity ?? 0;
       const min = m.minStock ?? 10;
       let matchStock = true;
@@ -341,9 +374,9 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
         (m.shelfLocation && m.shelfLocation.toLowerCase().includes(q)) ||
         (m.specifications && m.specifications.toLowerCase().includes(q));
 
-      return matchCategory && matchSubCategory && matchWarehouse && matchStock && matchSearch;
+      return matchCategory && matchSubCategory && matchWarehouse && matchSupplier && matchStock && matchSearch;
     });
-  }, [materials, selectedCategory, selectedSubCategory, selectedWarehouse, stockFilter, search]);
+  }, [materials, selectedCategory, selectedSubCategory, selectedWarehouse, selectedSupplier, stockFilter, search]);
 
   const getCategoryBadge = (category?: MaterialItem['category']) => {
     switch (category) {
@@ -519,6 +552,46 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
+          </div>
+
+          {/* Lọc theo Nhà Cung Cấp (Dropdown theo yêu cầu ô khoanh màu xanh trong ảnh) */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-600 flex items-center gap-1 shrink-0">
+              <Building2 className="w-3.5 h-3.5 text-sky-600" />
+              <span>Nhà Cung Cấp:</span>
+            </span>
+            <div className="relative">
+              <select
+                value={selectedSupplier}
+                onChange={(e) => setSelectedSupplier(e.target.value)}
+                className={`py-1.5 pl-3 pr-7 text-xs border rounded-lg font-medium focus:ring-2 focus:ring-sky-500 focus:outline-none max-w-[280px] truncate cursor-pointer ${
+                  selectedSupplier !== 'all'
+                    ? 'bg-sky-50 text-sky-900 border-sky-400 font-bold ring-1 ring-sky-300 shadow-2xs'
+                    : 'bg-slate-50 border-slate-300 text-slate-800'
+                }`}
+                title="Chọn nhà cung cấp để chỉ hiển thị vật tư của nhà cung cấp đó"
+              >
+                <option value="all">Tất cả nhà cung cấp ({materials.length})</option>
+                {existingSuppliers.map(([supName, count]) => (
+                  <option key={supName} value={supName}>
+                    {supName} ({count})
+                  </option>
+                ))}
+                {unassignedSupplierCount > 0 && (
+                  <option value="__none__">Chưa khai báo NCC ({unassignedSupplierCount})</option>
+                )}
+              </select>
+              {selectedSupplier !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedSupplier('all')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5"
+                  title="Bỏ lọc nhà cung cấp (Hiển thị tất cả)"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Lọc theo Kho Lưu Trữ */}
@@ -738,7 +811,21 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                     <td colSpan={10} className="py-12 text-center text-slate-400">
                       <Package className="w-10 h-10 mx-auto mb-2 text-slate-300" />
                       <p className="font-semibold text-slate-600 text-sm">Không tìm thấy vật tư nào phù hợp</p>
-                      <p className="text-xs text-slate-400 mt-1">Bấm nút "+ Thêm Vật Tư Mới" để tạo mã tiếp theo.</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {selectedSupplier !== 'all' ? (
+                          <span>
+                            Không có vật tư nào của nhà cung cấp này.{' '}
+                            <button
+                              onClick={() => setSelectedSupplier('all')}
+                              className="text-sky-600 font-bold hover:underline cursor-pointer"
+                            >
+                              Hiển thị tất cả nhà cung cấp
+                            </button>
+                          </span>
+                        ) : (
+                          'Bấm nút "+ Thêm Vật Tư Mới" để tạo mã tiếp theo.'
+                        )}
+                      </p>
                     </td>
                   </tr>
                 ) : (
@@ -862,12 +949,17 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                         {/* Nhà Cung Cấp */}
                         <td className="py-3 px-3">
                           {m.supplier ? (
-                            <div className="flex items-center gap-1.5 text-slate-700">
-                              <Store className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                              <span className="font-medium text-[11px] line-clamp-2" title={m.supplier}>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedSupplier(m.supplier!)}
+                              className="flex items-center gap-1.5 text-slate-700 hover:text-sky-700 text-left transition-colors cursor-pointer group"
+                              title={`Bấm để chỉ lọc các vật tư của ${m.supplier}`}
+                            >
+                              <Store className="w-3.5 h-3.5 text-sky-600 shrink-0 group-hover:scale-110 transition-transform" />
+                              <span className={`font-medium text-[11px] line-clamp-2 ${selectedSupplier.toLowerCase() === m.supplier.toLowerCase() ? 'text-sky-800 font-bold underline' : ''}`}>
                                 {m.supplier}
                               </span>
-                            </div>
+                            </button>
                           ) : (
                             <span className="text-slate-400 text-[11px] italic">Chưa xác định</span>
                           )}
@@ -972,11 +1064,23 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
           </div>
 
           {/* Table Footer Summary */}
-          <div className="bg-slate-50 px-4 py-3 border-t border-slate-200 flex flex-wrap items-center justify-between text-xs text-slate-600 font-medium">
-            <div>
-              Đang hiển thị <strong>{filteredMaterials.length}</strong> / <strong>{materials.length}</strong> sản phẩm vật tư
+          <div className="bg-slate-50 px-4 py-3 border-t border-slate-200 flex flex-wrap items-center justify-between text-xs text-slate-600 font-medium gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span>Đang hiển thị <strong>{filteredMaterials.length}</strong> / <strong>{materials.length}</strong> sản phẩm vật tư</span>
+              {selectedSupplier !== 'all' && (
+                <span className="inline-flex items-center gap-1 bg-sky-100 text-sky-800 px-2 py-0.5 rounded font-medium border border-sky-300">
+                  NCC: <strong>{selectedSupplier === '__none__' ? 'Chưa khai báo' : selectedSupplier}</strong>
+                  <button
+                    onClick={() => setSelectedSupplier('all')}
+                    className="text-sky-700 hover:text-rose-600 ml-0.5"
+                    title="Bỏ lọc NCC"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
               {selectedWarehouse !== 'all' && (
-                <span className="ml-1 text-sky-700">tại <strong>{selectedWarehouse}</strong></span>
+                <span className="text-sky-700">tại <strong>{selectedWarehouse}</strong></span>
               )}
             </div>
             <div className="flex items-center gap-4">
