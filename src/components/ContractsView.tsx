@@ -24,7 +24,12 @@ import {
   ArrowRight,
   ShieldCheck,
   Calendar,
-  Layers
+  Layers,
+  Table as TableIcon,
+  List as ListIcon,
+  LayoutGrid,
+  ChevronRight,
+  Eye
 } from 'lucide-react';
 import { ExpenseItem, Project, User, ContractPaymentStage } from '../types';
 import { formatVND, formatDateVN } from '../utils/formatters';
@@ -41,6 +46,7 @@ interface ContractsViewProps {
 
 // Các loại mốc thanh toán chuẩn trong xây dựng - cơ điện
 type MilestoneType = 'advance' | 'stage_1' | 'stage_2' | 'stage_3' | 'final' | 'custom';
+export type ContractViewMode = 'table' | 'list' | 'cards';
 
 export const ContractsView: React.FC<ContractsViewProps> = ({
   expenses,
@@ -56,10 +62,23 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
     return expenses.filter((e) => Boolean(e.hasContract || e.contractNumber));
   }, [expenses]);
 
+  // Chế độ xem: Bảng (table) | Danh sách gọn (list) | Thẻ (cards)
+  const [viewMode, setViewMode] = useState<ContractViewMode>(() => {
+    return (localStorage.getItem('contract_view_mode_v1') as ContractViewMode) || 'table';
+  });
+
+  const handleSetViewMode = (mode: ContractViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem('contract_view_mode_v1', mode);
+  };
+
   // Bộ lọc tìm kiếm
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<'all' | 'pending_advance' | 'in_progress' | 'completed'>('all');
+
+  // Modal xem và quản lý mốc thanh toán độc lập
+  const [managingMilestonesContract, setManagingMilestonesContract] = useState<ExpenseItem | null>(null);
 
   // Modal thêm / sửa mốc thanh toán
   const [activeContractForStage, setActiveContractForStage] = useState<ExpenseItem | null>(null);
@@ -75,7 +94,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
   const [stagePaymentMethod, setStagePaymentMethod] = useState<'transfer' | 'cash'>('transfer');
   const [stageNotes, setStageNotes] = useState('');
 
-  // Expand / collapse details for contracts
+  // Expand / collapse details for contracts (Mặc định thu gọn để không chiếm màn hình)
   const [expandedContractIds, setExpandedContractIds] = useState<Record<string, boolean>>({});
 
   const toggleExpand = (id: string) => {
@@ -83,6 +102,18 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
       ...prev,
       [id]: !prev[id],
     }));
+  };
+
+  const handleExpandAll = () => {
+    const next: Record<string, boolean> = {};
+    contractExpenses.forEach((c) => {
+      next[c.id] = true;
+    });
+    setExpandedContractIds(next);
+  };
+
+  const handleCollapseAll = () => {
+    setExpandedContractIds({});
   };
 
   // Helper tính toán số tiền đã thanh toán của từng hợp đồng
@@ -431,6 +462,167 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
     onUpdateExpense(updatedContract);
   };
 
+  // Helper render bảng chi tiết các mốc thanh toán (gọn gàng, dùng chung cho cả Table, List, Cards)
+  const renderMilestoneContent = (contract: ExpenseItem) => {
+    const { totalContractValue, allocatedAmount, unallocatedAmount } = getContractPaidInfo(contract);
+    const stages = contract.contractPaymentStages || [];
+
+    return (
+      <div className="p-3.5 sm:p-4 bg-slate-50/70 border-t border-slate-200 space-y-3">
+        {/* Header bar mốc thanh toán */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white p-2.5 rounded-lg border border-slate-200">
+          <div className="text-xs">
+            <span className="font-bold text-slate-800">Tiến độ phân bổ mốc: </span>
+            <span className="font-mono font-bold text-sky-800">{formatVND(allocatedAmount)}</span>
+            <span className="text-slate-400"> / </span>
+            <span className="font-mono font-semibold text-slate-700">{formatVND(totalContractValue)}</span>
+            {unallocatedAmount > 0 && (
+              <span className="text-amber-700 font-bold ml-2">
+                (Chưa phân bổ: {formatVND(unallocatedAmount)})
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {stages.length === 0 && (
+              <button
+                type="button"
+                onClick={() => handleCreateStandardMilestones(contract)}
+                className="text-xs font-bold px-2.5 py-1 rounded bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 flex items-center gap-1 cursor-pointer"
+                title="Tạo nhanh 4 mốc: Tạm ứng 30% → Lần 1 40% → Lần 2 20% → Tất toán 10%"
+              >
+                <Sparkles className="w-3 h-3 text-emerald-600" />
+                <span>Tạo 4 mốc chuẩn</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => handleOpenAddStage(contract)}
+              className="text-xs font-bold px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white flex items-center gap-1 shadow-2xs cursor-pointer"
+            >
+              <Plus className="w-3 h-3" />
+              <span>+ Thêm mốc</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Bảng kê chi tiết các mốc */}
+        {stages.length === 0 ? (
+          <div className="py-4 text-center text-xs text-slate-500 bg-white rounded-lg border border-dashed border-slate-300">
+            Hợp đồng này chưa có mốc thanh toán nào.{' '}
+            <button
+              type="button"
+              onClick={() => handleCreateStandardMilestones(contract)}
+              className="text-emerald-700 font-bold hover:underline cursor-pointer ml-1"
+            >
+              Tạo nhanh bộ 4 mốc chuẩn
+            </button>{' '}
+            hoặc{' '}
+            <button
+              type="button"
+              onClick={() => handleOpenAddStage(contract, 'advance')}
+              className="text-sky-700 font-bold hover:underline cursor-pointer"
+            >
+              tự thêm mốc
+            </button>.
+          </div>
+        ) : (
+          <div className="overflow-x-auto bg-white rounded-lg border border-slate-200">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead className="bg-slate-100/90 text-slate-700 font-bold text-[11px] uppercase border-b border-slate-200">
+                <tr>
+                  <th className="py-2 px-2.5 w-12 text-center">Mốc</th>
+                  <th className="py-2 px-2.5">Tên mốc thanh toán &amp; điều kiện giải ngân</th>
+                  <th className="py-2 px-2 text-center w-16">% HĐ</th>
+                  <th className="py-2 px-2.5 text-right w-28">Số tiền (VNĐ)</th>
+                  <th className="py-2 px-2.5 text-center w-24">Ngày thực hiện</th>
+                  <th className="py-2 px-2.5 text-center w-28">Trạng thái</th>
+                  <th className="py-2 px-2 text-center w-20">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {stages.map((stage, idx) => (
+                  <tr
+                    key={stage.id}
+                    className={`hover:bg-slate-50/80 transition-colors ${
+                      stage.status === 'paid' ? 'bg-emerald-50/20' : ''
+                    }`}
+                  >
+                    <td className="py-2 px-2.5 text-center font-bold text-slate-700 font-mono">
+                      #{idx + 1}
+                    </td>
+                    <td className="py-2 px-2.5">
+                      <div className="font-bold text-slate-900">{stage.title}</div>
+                      {stage.notes && <div className="text-[10.5px] text-slate-500 mt-0.5">{stage.notes}</div>}
+                    </td>
+                    <td className="py-2 px-2 text-center font-mono font-semibold text-slate-600">
+                      {stage.percentage ? `${stage.percentage}%` : '-'}
+                    </td>
+                    <td className="py-2 px-2.5 text-right font-mono font-bold text-slate-900">
+                      {formatVND(stage.amount)}
+                    </td>
+                    <td className="py-2 px-2.5 text-center font-mono text-[11px] text-slate-600">
+                      {stage.status === 'paid' && stage.paidDate
+                        ? formatDateVN(stage.paidDate)
+                        : stage.dueDate
+                        ? formatDateVN(stage.dueDate)
+                        : '-'}
+                    </td>
+                    <td className="py-2 px-2.5 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStageStatus(contract, stage.id)}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold border inline-flex items-center gap-1 transition-all cursor-pointer ${
+                          stage.status === 'paid'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
+                            : 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
+                        }`}
+                        title="Bấm để chuyển đổi trạng thái Đã thanh toán / Chờ thanh toán"
+                      >
+                        {stage.status === 'paid' ? (
+                          <>
+                            <Check className="w-2.5 h-2.5 text-emerald-700" />
+                            <span>Đã TT</span>
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="w-2.5 h-2.5 text-amber-700" />
+                            <span>Chờ TT</span>
+                          </>
+                        )}
+                      </button>
+                    </td>
+                    <td className="py-2 px-2 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditStage(contract, stage)}
+                          className="p-1 rounded text-slate-400 hover:text-sky-600 hover:bg-sky-50 cursor-pointer"
+                          title="Sửa mốc"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteStage(contract, stage.id)}
+                          className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                          title="Xóa mốc"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-5 animate-in fade-in duration-150">
       {/* ============================================================== */}
@@ -506,10 +698,10 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
       </div>
 
       {/* ============================================================== */}
-      {/* FILTER & ACTIONS BAR                                            */}
+      {/* FILTER & ACTIONS BAR & VIEW MODE SWITCHER                      */}
       {/* ============================================================== */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
           {/* Search box */}
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -527,7 +719,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
             <select
               value={selectedProjectId}
               onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="py-2 px-3 text-xs border border-slate-300 rounded-lg bg-white font-medium focus:ring-2 focus:ring-sky-500"
+              className="py-2 px-2.5 text-xs border border-slate-300 rounded-lg bg-white font-medium focus:ring-2 focus:ring-sky-500"
             >
               <option value="all">🏢 Tất cả dự án thi công</option>
               {projects.map((p) => (
@@ -541,7 +733,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
             <select
               value={paymentStatusFilter}
               onChange={(e) => setPaymentStatusFilter(e.target.value as any)}
-              className="py-2 px-3 text-xs border border-slate-300 rounded-lg bg-white font-medium focus:ring-2 focus:ring-sky-500"
+              className="py-2 px-2.5 text-xs border border-slate-300 rounded-lg bg-white font-medium focus:ring-2 focus:ring-sky-500"
             >
               <option value="all">⚡ Tất cả trạng thái thanh toán</option>
               <option value="pending_advance">Chờ tạm ứng ban đầu</option>
@@ -556,6 +748,81 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
               <Plus className="w-4 h-4" />
               <span>Tạo Đơn Hàng Mới</span>
             </button>
+          </div>
+        </div>
+
+        {/* View Mode Switcher Bar */}
+        <div className="pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-600">Kiểu hiển thị:</span>
+            <div className="inline-flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+              <button
+                type="button"
+                onClick={() => handleSetViewMode('table')}
+                className={`py-1.5 px-3 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-white text-sky-800 shadow-2xs ring-1 ring-slate-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Dạng bảng Excel / ERP gọn gàng, hiển thị nhiều hợp đồng trên một màn hình"
+              >
+                <TableIcon className="w-3.5 h-3.5" />
+                <span>Dạng Bảng (Table)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSetViewMode('list')}
+                className={`py-1.5 px-3 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'list'
+                    ? 'bg-white text-sky-800 shadow-2xs ring-1 ring-slate-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Dạng danh sách thẻ ngang thu gọn, thao tác nhanh"
+              >
+                <ListIcon className="w-3.5 h-3.5" />
+                <span>Dạng Danh Sách (List)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSetViewMode('cards')}
+                className={`py-1.5 px-3 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'cards'
+                    ? 'bg-white text-sky-800 shadow-2xs ring-1 ring-slate-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Dạng thẻ khối chi tiết"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Dạng Thẻ Chi Tiết</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-slate-500 font-medium">
+              Hiển thị <strong>{filteredContracts.length}</strong> / <strong>{contractExpenses.length}</strong> hợp đồng
+            </span>
+
+            <div className="flex items-center gap-1 pl-2 border-l border-slate-200">
+              <button
+                type="button"
+                onClick={handleExpandAll}
+                className="px-2.5 py-1 text-[11px] font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 rounded border border-sky-200 cursor-pointer"
+                title="Mở rộng chi tiết tất cả các hợp đồng"
+              >
+                Mở rộng tất cả
+              </button>
+              <button
+                type="button"
+                onClick={handleCollapseAll}
+                className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 cursor-pointer"
+                title="Thu gọn tất cả về dạng tóm tắt"
+              >
+                Thu gọn tất cả
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -584,386 +851,481 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
           </button>
         </div>
       ) : (
-        <div className="space-y-4">
-          {filteredContracts.map((contract) => {
-            const { totalContractValue, paidAmount, remainingAmount, paidPercentage, allocatedAmount, unallocatedAmount, status } = getContractPaidInfo(contract);
-            const isExpanded = expandedContractIds[contract.id] ?? true;
-            const stages = contract.contractPaymentStages || [];
+        <>
+          {/* ============================================================== */}
+          {/* CHẾ ĐỘ 1: DẠNG BẢNG (TABLE VIEW) - GỌN GÀNG, NHIỀU HỢP ĐỒNG    */}
+          {/* ============================================================== */}
+          {viewMode === 'table' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-[#102742] text-white font-bold text-[11px] uppercase tracking-wider">
+                    <tr>
+                      <th className="py-3 px-2.5 w-12 text-center">STT</th>
+                      <th className="py-3 px-3 w-48">Số Hợp Đồng &amp; Đơn PO</th>
+                      <th className="py-3 px-3">Nhà Cung Cấp</th>
+                      <th className="py-3 px-3 w-48">Dự Án Thi Công</th>
+                      <th className="py-3 px-3 text-right w-36">Tổng Tiền HĐ</th>
+                      <th className="py-3 px-3 text-right w-32">Đã Thanh Toán</th>
+                      <th className="py-3 px-3 text-right w-32">Còn Lại (Dư Nợ)</th>
+                      <th className="py-3 px-3 text-center w-36">Tiến Độ Mốc</th>
+                      <th className="py-3 px-3 text-center w-32">Trạng Thái</th>
+                      <th className="py-3 px-3 text-center w-32">Thao Tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {filteredContracts.map((contract, index) => {
+                      const { totalContractValue, paidAmount, remainingAmount, paidPercentage, status } = getContractPaidInfo(contract);
+                      const isExpanded = Boolean(expandedContractIds[contract.id]);
+                      const stages = contract.contractPaymentStages || [];
+                      const paidStagesCount = stages.filter((s) => s.status === 'paid').length;
 
-            return (
-              <div
-                key={contract.id}
-                className="bg-white rounded-xl border-2 border-slate-200 shadow-2xs overflow-hidden transition-all hover:border-sky-400"
-              >
-                {/* Header Card Hợp Đồng */}
-                <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-50 via-white to-sky-50/30 border-b border-slate-200">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                    {/* Thông tin số HĐ & Tên NCC */}
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono font-black text-sm text-sky-950 bg-sky-100 border border-sky-300 px-3 py-1 rounded shadow-2xs">
-                          {contract.contractNumber || `HĐ-${contract.code.replace(/\s+/g, '')}/PN-2026`}
-                        </span>
+                      return (
+                        <React.Fragment key={contract.id}>
+                          <tr
+                            className={`hover:bg-sky-50/50 transition-colors ${
+                              isExpanded ? 'bg-sky-50/30' : index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'
+                            }`}
+                          >
+                            {/* STT */}
+                            <td className="py-3 px-2.5 text-center font-bold text-slate-500 font-mono">
+                              {index + 1}
+                            </td>
 
-                        <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                          Đơn PO: {contract.code}
-                        </span>
+                            {/* Số HĐ & Đơn PO */}
+                            <td className="py-3 px-3">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-mono font-bold text-sky-950 text-xs bg-sky-100/80 px-2 py-0.5 rounded border border-sky-300">
+                                  {contract.contractNumber || `HĐ-${contract.code.replace(/\s+/g, '')}/PN-2026`}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500">
+                                <span className="font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                                  PO: {contract.code}
+                                </span>
+                                <span>{formatDateVN(contract.contractDate || contract.date)}</span>
+                              </div>
+                            </td>
 
-                        {status === 'completed' ? (
-                          <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-300 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
-                            Đã Tất Toán 100%
+                            {/* Nhà Cung Cấp */}
+                            <td className="py-3 px-3">
+                              <div className="font-bold text-slate-900 line-clamp-2" title={contract.supplier}>
+                                {contract.supplier}
+                              </div>
+                              <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
+                                <span>Phụ trách:</span>
+                                <strong className="text-slate-700">{contract.createdByName}</strong>
+                              </div>
+                            </td>
+
+                            {/* Dự Án */}
+                            <td className="py-3 px-3">
+                              <div className="font-medium text-slate-800 line-clamp-2" title={contract.projectName}>
+                                {contract.projectName}
+                              </div>
+                            </td>
+
+                            {/* Tổng Tiền HĐ */}
+                            <td className="py-3 px-3 text-right">
+                              <div className="font-mono font-black text-emerald-800 text-sm">
+                                {formatVND(totalContractValue)}
+                              </div>
+                              <div className="text-[10px] text-slate-400">Đã gồm VAT</div>
+                            </td>
+
+                            {/* Đã Thanh Toán */}
+                            <td className="py-3 px-3 text-right">
+                              <div className="font-mono font-bold text-blue-700">
+                                {formatVND(paidAmount)}
+                              </div>
+                              <div className="text-[10px] font-bold text-blue-600">
+                                ({paidPercentage}%)
+                              </div>
+                            </td>
+
+                            {/* Còn Lại */}
+                            <td className="py-3 px-3 text-right">
+                              <div className="font-mono font-bold text-amber-700">
+                                {formatVND(remainingAmount)}
+                              </div>
+                            </td>
+
+                            {/* Tiến Độ Mốc */}
+                            <td className="py-3 px-3 text-center">
+                              <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-slate-700 mb-1">
+                                <span>{paidStagesCount}/{stages.length} mốc đã TT</span>
+                              </div>
+                              <div className="w-24 mx-auto bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                                    paidPercentage >= 100
+                                      ? 'bg-emerald-500'
+                                      : paidPercentage > 50
+                                      ? 'bg-blue-600'
+                                      : 'bg-amber-500'
+                                  }`}
+                                  style={{ width: `${Math.min(100, paidPercentage)}%` }}
+                                />
+                              </div>
+                            </td>
+
+                            {/* Trạng Thái */}
+                            <td className="py-3 px-3 text-center whitespace-nowrap">
+                              {status === 'completed' ? (
+                                <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded-full">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                                  Đã Tất Toán
+                                </span>
+                              ) : status === 'in_progress' ? (
+                                <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-blue-800 bg-blue-100/90 border border-blue-300 px-2 py-0.5 rounded-full">
+                                  <TrendingUp className="w-3 h-3 text-blue-700" />
+                                  Đang Chi Mốc
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-2 py-0.5 rounded-full">
+                                  <Clock className="w-3 h-3 text-amber-700" />
+                                  Chờ Tạm Ứng
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Thao Tác */}
+                            <td className="py-3 px-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                {/* Toggle inline mốc */}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpand(contract.id)}
+                                  className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+                                    isExpanded
+                                      ? 'bg-sky-600 text-white shadow-2xs'
+                                      : 'bg-sky-50 text-sky-700 hover:bg-sky-100'
+                                  }`}
+                                  title={isExpanded ? 'Thu gọn các mốc' : 'Xem & mở rộng các mốc thanh toán'}
+                                >
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                  <span className="text-[10.5px]">{stages.length}</span>
+                                  {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                </button>
+
+                                {/* In PDF */}
+                                <button
+                                  type="button"
+                                  onClick={() => onViewOrder(contract)}
+                                  className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:text-sky-700 hover:bg-slate-200 transition-colors cursor-pointer"
+                                  title="In đơn hàng & Xem chi tiết"
+                                >
+                                  <Printer className="w-3.5 h-3.5" />
+                                </button>
+
+                                {/* Chỉnh sửa */}
+                                <button
+                                  type="button"
+                                  onClick={() => onEditOrder(contract)}
+                                  className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:text-amber-700 hover:bg-amber-50 transition-colors cursor-pointer"
+                                  title="Chỉnh sửa thông tin đơn hàng / hợp đồng"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Dòng mở rộng chi tiết các mốc của Table */}
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={10} className="p-0 border-b-2 border-sky-300">
+                                {renderMilestoneContent(contract)}
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================== */}
+          {/* CHẾ ĐỘ 2: DẠNG DANH SÁCH GỌN (LIST VIEW) - THẺ NGANG TINH GỌN  */}
+          {/* ============================================================== */}
+          {viewMode === 'list' && (
+            <div className="space-y-2.5">
+              {filteredContracts.map((contract) => {
+                const { totalContractValue, paidAmount, remainingAmount, paidPercentage, status } = getContractPaidInfo(contract);
+                const isExpanded = Boolean(expandedContractIds[contract.id]);
+                const stages = contract.contractPaymentStages || [];
+                const paidStagesCount = stages.filter((s) => s.status === 'paid').length;
+
+                return (
+                  <div
+                    key={contract.id}
+                    className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden transition-all hover:border-sky-400"
+                  >
+                    <div className="p-3 sm:p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      {/* Cột 1: Mã HĐ, PO, Nhà Cung Cấp */}
+                      <div className="space-y-1 flex-1 min-w-[240px]">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-bold text-xs text-sky-950 bg-sky-100 px-2 py-0.5 rounded border border-sky-300">
+                            {contract.contractNumber || `HĐ-${contract.code.replace(/\s+/g, '')}/PN-2026`}
                           </span>
-                        ) : status === 'in_progress' ? (
-                          <span className="text-[11px] font-bold text-blue-800 bg-blue-100/80 border border-blue-300 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                            <TrendingUp className="w-3.5 h-3.5 text-blue-700" />
-                            Đang Chi Theo Mốc ({paidPercentage}%)
+                          <span className="font-mono text-[11px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                            PO: {contract.code}
                           </span>
-                        ) : (
-                          <span className="text-[11px] font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                            <AlertCircle className="w-3.5 h-3.5 text-amber-700" />
-                            Chờ Tạm Ứng Đợt 1
+                          <span className="text-[11px] text-slate-500">
+                            {formatDateVN(contract.contractDate || contract.date)}
                           </span>
-                        )}
-                      </div>
-
-                      <h4 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-1.5 pt-0.5">
-                        <span className="text-slate-500 font-normal">Nhà Cung Cấp:</span>
-                        <strong className="text-sky-950">{contract.supplier}</strong>
-                      </h4>
-
-                      <div className="text-xs text-slate-600 flex items-center gap-4 flex-wrap">
-                        <span>Dự án thi công: <strong className="text-slate-900">{contract.projectName}</strong></span>
-                        <span>Ngày lập: <strong>{formatDateVN(contract.contractDate || contract.date)}</strong></span>
-                        <span>Người phụ trách: <strong>{contract.createdByName}</strong></span>
-                      </div>
-                    </div>
-
-                    {/* Khối THỂ HIỆN SỐ TIỀN TỔNG HỢP ĐỒNG (THEO YÊU CẦU NỔI BẬT) */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 lg:text-right shrink-0 bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
-                      <div>
-                        <div className="text-[10px] uppercase font-black text-slate-500 tracking-wider">
-                          SỐ TIỀN TỔNG HỢP ĐỒNG
                         </div>
-                        <div className="text-xl sm:text-2xl font-black font-mono text-emerald-800">
-                          {formatVND(totalContractValue)}
+                        <div className="font-bold text-sm text-slate-900 truncate" title={contract.supplier}>
+                          {contract.supplier}
                         </div>
-                        <div className="text-[10px] text-slate-400 font-medium">Đã bao gồm thuế VAT</div>
-                      </div>
-
-                      <div className="sm:border-l sm:border-slate-200 sm:pl-4 space-y-0.5">
-                        <div className="text-[10px] uppercase font-bold text-slate-500">Tiến Độ Thanh Toán</div>
-                        <div className="text-xs font-mono font-bold text-blue-700">
-                          Đã chi: {formatVND(paidAmount)} ({paidPercentage}%)
-                        </div>
-                        <div className="text-xs font-mono font-bold text-amber-700">
-                          Còn lại: {formatVND(remainingAmount)}
+                        <div className="text-[11px] text-slate-600 truncate">
+                          Công trình: <strong className="text-slate-800">{contract.projectName}</strong>
                         </div>
                       </div>
 
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-1.5 pt-1 sm:pt-0">
-                        <button
-                          onClick={() => onViewOrder(contract)}
-                          className="p-2 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-600 hover:text-white transition-colors cursor-pointer"
-                          title="Xem chi tiết đơn hàng & In PDF"
-                        >
-                          <Printer className="w-4 h-4" />
-                        </button>
+                      {/* Cột 2: Tiền HĐ, Đã chi, Còn lại */}
+                      <div className="flex items-center gap-4 text-left md:text-right shrink-0">
+                        <div>
+                          <div className="text-[10px] uppercase font-bold text-slate-400">Tổng HĐ</div>
+                          <div className="font-mono font-black text-emerald-800 text-sm sm:text-base">
+                            {formatVND(totalContractValue)}
+                          </div>
+                        </div>
 
-                        <button
-                          onClick={() => onEditOrder(contract)}
-                          className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-amber-500 hover:text-white transition-colors cursor-pointer"
-                          title="Chỉnh sửa thông tin đơn hàng / hợp đồng"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-
-                        <button
-                          onClick={() => toggleExpand(contract.id)}
-                          className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
-                          title={isExpanded ? 'Thu gọn các mốc' : 'Mở rộng các mốc'}
-                        >
-                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </button>
+                        <div className="border-l border-slate-200 pl-4">
+                          <div className="text-[10px] uppercase font-bold text-slate-400">Đã chi / Còn lại</div>
+                          <div className="font-mono font-bold text-blue-700 text-xs">
+                            {formatVND(paidAmount)} ({paidPercentage}%)
+                          </div>
+                          <div className="font-mono font-bold text-amber-700 text-xs">
+                            Còn: {formatVND(remainingAmount)}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
 
-                  {/* Thanh Progress Bar */}
-                  <div className="mt-3.5">
-                    <div className="flex items-center justify-between text-[11px] text-slate-600 mb-1">
-                      <span className="font-medium">Tiến độ giải ngân theo các mốc:</span>
-                      <span className="font-mono font-bold text-slate-900">{paidPercentage}% hoàn thành ({stages.filter((s) => s.status === 'paid').length}/{stages.length} mốc)</span>
-                    </div>
-                    <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
-                      <div
-                        className={`h-2.5 rounded-full transition-all duration-300 ${
-                          paidPercentage >= 100
-                            ? 'bg-emerald-500'
-                            : paidPercentage > 50
-                            ? 'bg-blue-600'
-                            : 'bg-amber-500'
-                        }`}
-                        style={{ width: `${Math.min(100, paidPercentage)}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Danh Sách Các Mốc Thanh Toán: Tạm ứng, Lần 1, Lần 2, ..., Tất toán */}
-                {isExpanded && (
-                  <div className="p-4 sm:p-5 bg-white space-y-4">
-                    {/* Header mốc & Các nút tạo mốc nhanh */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                      <div>
-                        <h5 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
-                          <CreditCard className="w-4 h-4 text-sky-600" />
-                          <span>CÁC MỐC THANH TOÁN (TẠM ỨNG, LẦN 1, LẦN 2, TẤT TOÁN)</span>
-                        </h5>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          Tổng HĐ: <strong className="font-mono text-slate-800">{formatVND(totalContractValue)}</strong> • 
-                          Đã phân bổ mốc: <strong className="font-mono text-sky-800">{formatVND(allocatedAmount)}</strong>
-                          {unallocatedAmount > 0 && (
-                            <span className="text-amber-700 ml-1.5 font-bold">
-                              (Chưa phân bổ: {formatVND(unallocatedAmount)})
+                      {/* Cột 3: Tiến độ mốc & Trạng thái */}
+                      <div className="min-w-[140px] shrink-0 space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-500 font-medium">Tiến độ:</span>
+                          <span className="font-bold text-slate-800">{paidStagesCount}/{stages.length} mốc</span>
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className={`h-1.5 rounded-full transition-all duration-300 ${
+                              paidPercentage >= 100
+                                ? 'bg-emerald-500'
+                                : paidPercentage > 50
+                                ? 'bg-blue-600'
+                                : 'bg-amber-500'
+                            }`}
+                            style={{ width: `${Math.min(100, paidPercentage)}%` }}
+                          />
+                        </div>
+                        <div className="pt-0.5">
+                          {status === 'completed' ? (
+                            <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-block">
+                              ✓ Đã Tất Toán
+                            </span>
+                          ) : status === 'in_progress' ? (
+                            <span className="text-[10px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full inline-block">
+                              ⚡ Đang Chi Mốc
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full inline-block">
+                              ⏳ Chờ Tạm Ứng
                             </span>
                           )}
-                        </p>
+                        </div>
                       </div>
 
-                      {/* Các nút thêm mốc */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {stages.length === 0 && (
-                          <button
-                            onClick={() => handleCreateStandardMilestones(contract)}
-                            className="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                            title="Tự động tạo 4 mốc: Tạm ứng (30%) → Lần 1 (40%) → Lần 2 (20%) → Tất toán (10%)"
-                          >
-                            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Tạo 4 Mốc Chuẩn Tự Động</span>
-                          </button>
-                        )}
+                      {/* Cột 4: Nút thao tác */}
+                      <div className="flex items-center gap-1.5 shrink-0 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(contract.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                            isExpanded
+                              ? 'bg-sky-600 text-white shadow-2xs'
+                              : 'bg-sky-50 text-sky-800 hover:bg-sky-100'
+                          }`}
+                          title="Xem chi tiết các mốc thanh toán"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          <span>Mốc ({stages.length})</span>
+                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </button>
 
                         <button
-                          onClick={() => handleOpenAddStage(contract)}
-                          className="text-xs font-bold px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                          type="button"
+                          onClick={() => onViewOrder(contract)}
+                          className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:text-sky-700 hover:bg-slate-200 transition-colors cursor-pointer"
+                          title="In đơn hàng & Xem chi tiết"
                         >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>+ Thêm Mốc Thanh Toán</span>
+                          <Printer className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => onEditOrder(contract)}
+                          className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:text-amber-700 hover:bg-amber-50 transition-colors cursor-pointer"
+                          title="Sửa hợp đồng / PO"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
 
-                    {/* Nếu chưa có mốc nào */}
-                    {stages.length === 0 ? (
-                      <div className="p-6 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-center space-y-3">
-                        <div className="w-10 h-10 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center mx-auto">
-                          <Layers className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <p className="font-bold text-slate-800 text-xs">Chưa có mốc thanh toán nào cho hợp đồng này</p>
-                          <p className="text-[11px] text-slate-500 mt-0.5">
-                            Bạn có thể tạo nhanh bộ 4 mốc chuẩn (Tạm ứng 30% → Lần 1 40% → Lần 2 20% → Tất toán 10%) hoặc tự thêm mốc theo nhu cầu.
-                          </p>
-                        </div>
-                        <div className="flex items-center justify-center gap-2 pt-1">
-                          <button
-                            onClick={() => handleCreateStandardMilestones(contract)}
-                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
-                          >
-                            <Sparkles className="w-3.5 h-3.5" />
-                            <span>Tạo Bộ 4 Mốc Chuẩn Ngay</span>
-                          </button>
-                          <button
-                            onClick={() => handleOpenAddStage(contract, 'advance')}
-                            className="px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <Plus className="w-3.5 h-3.5 text-slate-500" />
-                            <span>Tự Thêm Mốc Tạm Ứng</span>
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {/* Milestone Timeline Cards (Trực quan các mốc) */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-                          {stages.map((stage, idx) => {
-                            const isPaid = stage.status === 'paid';
-                            return (
-                              <div
-                                key={stage.id}
-                                className={`p-3 rounded-lg border text-xs transition-all relative ${
-                                  isPaid
-                                    ? 'bg-emerald-50/40 border-emerald-300'
-                                    : 'bg-slate-50/70 border-slate-200'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
-                                    isPaid ? 'bg-emerald-200 text-emerald-900' : 'bg-slate-200 text-slate-700'
-                                  }`}>
-                                    Mốc #{idx + 1}
-                                  </span>
-
-                                  <button
-                                    onClick={() => handleToggleStageStatus(contract, stage.id)}
-                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold border inline-flex items-center gap-1 transition-all cursor-pointer ${
-                                      isPaid
-                                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
-                                        : 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
-                                    }`}
-                                    title="Bấm để chuyển trạng thái"
-                                  >
-                                    {isPaid ? (
-                                      <>
-                                        <Check className="w-2.5 h-2.5 text-emerald-700" />
-                                        <span>Đã TT</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Clock className="w-2.5 h-2.5 text-amber-700" />
-                                        <span>Chờ TT</span>
-                                      </>
-                                    )}
-                                  </button>
-                                </div>
-
-                                <div className="font-bold text-slate-900 truncate" title={stage.title}>
-                                  {stage.title}
-                                </div>
-
-                                <div className="text-sm font-black font-mono text-slate-900 mt-1">
-                                  {formatVND(stage.amount)}{' '}
-                                  {stage.percentage && (
-                                    <span className="text-[10px] font-semibold text-slate-500 font-sans">
-                                      ({stage.percentage}%)
-                                    </span>
-                                  )}
-                                </div>
-
-                                <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between">
-                                  <span>{isPaid && stage.paidDate ? formatDateVN(stage.paidDate) : formatDateVN(stage.dueDate || '')}</span>
-                                  <div className="flex items-center gap-1">
-                                    <button
-                                      onClick={() => handleOpenEditStage(contract, stage)}
-                                      className="p-1 text-slate-400 hover:text-sky-600 rounded cursor-pointer"
-                                      title="Sửa mốc này"
-                                    >
-                                      <Edit3 className="w-3 h-3" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteStage(contract, stage.id)}
-                                      className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
-                                      title="Xóa mốc này"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Bảng Kê Chi Tiết Các Mốc */}
-                        <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                          <table className="w-full text-left border-collapse text-xs">
-                            <thead className="bg-slate-100 text-slate-700 font-bold text-[11px] uppercase border-b border-slate-200">
-                              <tr>
-                                <th className="py-2.5 px-3 w-14 text-center">Mốc</th>
-                                <th className="py-2.5 px-3">Tên Mốc Thanh Toán &amp; Điều Kiện Giải Ngân</th>
-                                <th className="py-2.5 px-3 w-20 text-center">% HĐ</th>
-                                <th className="py-2.5 px-3 w-32 text-right">Số Tiền (VNĐ)</th>
-                                <th className="py-2.5 px-3 w-28 text-center">Ngày Thực Hiện</th>
-                                <th className="py-2.5 px-3 w-32 text-center">Trạng Thái</th>
-                                <th className="py-2.5 px-3 w-24 text-center">Thao Tác</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {stages.map((stage, idx) => (
-                                <tr
-                                  key={stage.id}
-                                  className={`hover:bg-slate-50/80 transition-colors ${
-                                    stage.status === 'paid' ? 'bg-emerald-50/20' : 'bg-white'
-                                  }`}
-                                >
-                                  <td className="py-2.5 px-3 text-center font-bold text-slate-700 font-mono">
-                                    #{idx + 1}
-                                  </td>
-                                  <td className="py-2.5 px-3">
-                                    <div className="font-bold text-slate-900">{stage.title}</div>
-                                    {stage.notes && (
-                                      <div className="text-[11px] text-slate-500 mt-0.5">{stage.notes}</div>
-                                    )}
-                                  </td>
-                                  <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-600">
-                                    {stage.percentage ? `${stage.percentage}%` : '-'}
-                                  </td>
-                                  <td className="py-2.5 px-3 text-right font-mono font-black text-slate-900">
-                                    {formatVND(stage.amount)}
-                                  </td>
-                                  <td className="py-2.5 px-3 text-center font-mono text-[11px] text-slate-600">
-                                    {stage.status === 'paid' && stage.paidDate
-                                      ? formatDateVN(stage.paidDate)
-                                      : stage.dueDate
-                                      ? formatDateVN(stage.dueDate)
-                                      : '-'}
-                                  </td>
-                                  <td className="py-2.5 px-3 text-center">
-                                    <button
-                                      onClick={() => handleToggleStageStatus(contract, stage.id)}
-                                      className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border inline-flex items-center gap-1 transition-all cursor-pointer ${
-                                        stage.status === 'paid'
-                                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
-                                          : 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
-                                      }`}
-                                      title="Bấm để chuyển đổi trạng thái Đã thanh toán / Chờ thanh toán"
-                                    >
-                                      {stage.status === 'paid' ? (
-                                        <>
-                                          <Check className="w-3 h-3 text-emerald-700" />
-                                          <span>Đã Thanh Toán</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Clock className="w-3 h-3 text-amber-700" />
-                                          <span>Chờ Thanh Toán</span>
-                                        </>
-                                      )}
-                                    </button>
-                                  </td>
-                                  <td className="py-2.5 px-3 text-center">
-                                    <div className="flex items-center justify-center gap-1">
-                                      <button
-                                        onClick={() => handleOpenEditStage(contract, stage)}
-                                        className="p-1 rounded text-slate-400 hover:text-sky-600 hover:bg-sky-50 transition-colors cursor-pointer"
-                                        title="Chỉnh sửa mốc này"
-                                      >
-                                        <Edit3 className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteStage(contract, stage.id)}
-                                        className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                                        title="Xóa mốc thanh toán này"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
+                    {/* Mở rộng chi tiết mốc */}
+                    {isExpanded && renderMilestoneContent(contract)}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ============================================================== */}
+          {/* CHẾ ĐỘ 3: DẠNG THẺ CHI TIẾT (CARDS VIEW)                       */}
+          {/* ============================================================== */}
+          {viewMode === 'cards' && (
+            <div className="space-y-4">
+              {filteredContracts.map((contract) => {
+                const { totalContractValue, paidAmount, remainingAmount, paidPercentage, status } = getContractPaidInfo(contract);
+                const isExpanded = Boolean(expandedContractIds[contract.id]);
+                const stages = contract.contractPaymentStages || [];
+
+                return (
+                  <div
+                    key={contract.id}
+                    className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden transition-all hover:border-sky-400"
+                  >
+                    {/* Header Card Hợp Đồng */}
+                    <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-50 via-white to-sky-50/30 border-b border-slate-200">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono font-black text-sm text-sky-950 bg-sky-100 border border-sky-300 px-3 py-1 rounded shadow-2xs">
+                              {contract.contractNumber || `HĐ-${contract.code.replace(/\s+/g, '')}/PN-2026`}
+                            </span>
+
+                            <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                              Đơn PO: {contract.code}
+                            </span>
+
+                            {status === 'completed' ? (
+                              <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-300 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                                Đã Tất Toán 100%
+                              </span>
+                            ) : status === 'in_progress' ? (
+                              <span className="text-[11px] font-bold text-blue-800 bg-blue-100/80 border border-blue-300 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                                <TrendingUp className="w-3.5 h-3.5 text-blue-700" />
+                                Đang Chi Theo Mốc ({paidPercentage}%)
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                                <AlertCircle className="w-3.5 h-3.5 text-amber-700" />
+                                Chờ Tạm Ứng Đợt 1
+                              </span>
+                            )}
+                          </div>
+
+                          <h4 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-1.5 pt-0.5">
+                            <span className="text-slate-500 font-normal">Nhà Cung Cấp:</span>
+                            <strong className="text-sky-950">{contract.supplier}</strong>
+                          </h4>
+
+                          <div className="text-xs text-slate-600 flex items-center gap-4 flex-wrap">
+                            <span>Dự án: <strong className="text-slate-900">{contract.projectName}</strong></span>
+                            <span>Ngày lập: <strong>{formatDateVN(contract.contractDate || contract.date)}</strong></span>
+                            <span>Phụ trách: <strong>{contract.createdByName}</strong></span>
+                          </div>
+                        </div>
+
+                        {/* Số tiền tổng HĐ */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 lg:text-right shrink-0 bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                          <div>
+                            <div className="text-[10px] uppercase font-black text-slate-500 tracking-wider">
+                              SỐ TIỀN TỔNG HỢP ĐỒNG
+                            </div>
+                            <div className="text-xl sm:text-2xl font-black font-mono text-emerald-800">
+                              {formatVND(totalContractValue)}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-medium">Đã bao gồm thuế VAT</div>
+                          </div>
+
+                          <div className="sm:border-l sm:border-slate-200 sm:pl-4 space-y-0.5">
+                            <div className="text-[10px] uppercase font-bold text-slate-500">Tiến Độ Thanh Toán</div>
+                            <div className="text-xs font-mono font-bold text-blue-700">
+                              Đã chi: {formatVND(paidAmount)} ({paidPercentage}%)
+                            </div>
+                            <div className="text-xs font-mono font-bold text-amber-700">
+                              Còn lại: {formatVND(remainingAmount)}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 pt-1 sm:pt-0">
+                            <button
+                              type="button"
+                              onClick={() => onViewOrder(contract)}
+                              className="p-2 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-600 hover:text-white transition-colors cursor-pointer"
+                              title="Xem chi tiết đơn hàng & In PDF"
+                            >
+                              <Printer className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => onEditOrder(contract)}
+                              className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-amber-500 hover:text-white transition-colors cursor-pointer"
+                              title="Chỉnh sửa thông tin đơn hàng / hợp đồng"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => toggleExpand(contract.id)}
+                              className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+                              title={isExpanded ? 'Thu gọn các mốc' : 'Mở rộng các mốc'}
+                            >
+                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Thanh Progress Bar */}
+                      <div className="mt-3.5">
+                        <div className="flex items-center justify-between text-[11px] text-slate-600 mb-1">
+                          <span className="font-medium">Tiến độ giải ngân theo các mốc:</span>
+                          <span className="font-mono font-bold text-slate-900">{paidPercentage}% hoàn thành ({stages.filter((s) => s.status === 'paid').length}/{stages.length} mốc)</span>
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-2 bg-slate-200 overflow-hidden">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-300 ${
+                              paidPercentage >= 100
+                                ? 'bg-emerald-500'
+                                : paidPercentage > 50
+                                ? 'bg-blue-600'
+                                : 'bg-amber-500'
+                            }`}
+                            style={{ width: `${Math.min(100, paidPercentage)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Mở rộng chi tiết mốc */}
+                    {isExpanded && renderMilestoneContent(contract)}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {/* ============================================================== */}
