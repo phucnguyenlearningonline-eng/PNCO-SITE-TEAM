@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, 
   CreditCard, 
@@ -12,10 +12,15 @@ import {
   Users,
   Edit3,
   FileText,
-  DollarSign
+  DollarSign,
+  Layers,
+  ArrowRight,
+  Percent,
+  Clock,
+  AlertCircle
 } from 'lucide-react';
 import { Project, ExpenseItem, ExpenseCategory } from '../../types';
-import { formatVND } from '../../utils/formatters';
+import { formatVND, formatTy, formatDateVN } from '../../utils/formatters';
 
 interface CreatePaymentModalProps {
   isOpen: boolean;
@@ -23,7 +28,11 @@ interface CreatePaymentModalProps {
   projects: Project[];
   expenses: ExpenseItem[];
   preselectedPo?: ExpenseItem | null;
-  onSavePayment: (payment: ExpenseItem, syncedPoId?: string) => void;
+  onSavePayment: (
+    payment: ExpenseItem, 
+    syncedPoId?: string,
+    paymentStageDetails?: { isFullyPaid: boolean; newTotalPaid: number; stageTitle?: string }
+  ) => void;
 }
 
 type PaymentSourceType = 'po' | 'labor_contract' | 'other';
@@ -38,18 +47,50 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  // Lọc các đơn hàng PO chưa thanh toán để đồng bộ
-  const pendingOrders = expenses.filter(
-    (e) => (e.type === 'po' || e.type === 'expense') && e.status !== 'paid'
-  );
+  // Lọc các đơn hàng PO: hiển thị cả đơn chưa thanh toán hoặc đã thanh toán một phần
+  const allOrders = useMemo(() => {
+    return expenses.filter((e) => e.type === 'po' || e.type === 'expense');
+  }, [expenses]);
+
+  const payableOrders = useMemo(() => {
+    return allOrders.filter((po) => {
+      // Tính số tiền đã chi cho PO này
+      const paidSoFar = po.paidAmount || expenses
+        .filter((e) => e.linkedPoId === po.id && e.status === 'paid')
+        .reduce((sum, e) => sum + e.totalAmount, 0);
+      const isUnfinished = po.status !== 'paid' || paidSoFar < po.totalAmount;
+      return isUnfinished;
+    });
+  }, [allOrders, expenses]);
 
   // 3 chế độ nguồn chi: 'po' (Từ đơn hàng) | 'labor_contract' (Hợp đồng nhân công) | 'other' (Tự nhập)
   const [sourceType, setSourceType] = useState<PaymentSourceType>(
-    preselectedPo ? 'po' : pendingOrders.length > 0 ? 'po' : 'other'
+    preselectedPo ? 'po' : payableOrders.length > 0 ? 'po' : 'other'
   );
 
   // States cho Ref PO
-  const [selectedPoId, setSelectedPoId] = useState<string>(preselectedPo?.id || pendingOrders[0]?.id || '');
+  const [selectedPoId, setSelectedPoId] = useState<string>(preselectedPo?.id || payableOrders[0]?.id || '');
+
+  // Lấy chi tiết đơn hàng PO đang chọn
+  const currentPo = useMemo(() => {
+    return allOrders.find((p) => p.id === selectedPoId) || preselectedPo || payableOrders[0];
+  }, [allOrders, selectedPoId, preselectedPo, payableOrders]);
+
+  // Tính số tiền PO đã trả trước đó
+  const poAlreadyPaid = useMemo(() => {
+    if (!currentPo) return 0;
+    const historyPaid = expenses
+      .filter((e) => e.linkedPoId === currentPo.id && e.status === 'paid')
+      .reduce((sum, e) => sum + e.totalAmount, 0);
+    return Math.max(currentPo.paidAmount || 0, historyPaid);
+  }, [currentPo, expenses]);
+
+  const poOriginalValue = currentPo ? currentPo.totalAmount : 0;
+  const poRemainingValue = Math.max(0, poOriginalValue - poAlreadyPaid);
+
+  // Giai đoạn thanh toán cho PO: 'full' | 'stage_1' | 'stage_2' | 'stage_3' | 'custom'
+  const [poStageType, setPoStageType] = useState<'full' | 'stage_1' | 'stage_2' | 'stage_3' | 'custom'>('full');
+  const [stageName, setStageName] = useState<string>('Tất toán toàn bộ đơn hàng');
 
   // States cho Hợp đồng nhân công
   const [laborContractCode, setLaborContractCode] = useState<string>('HĐNC-01/COHERENT');
@@ -59,57 +100,102 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
   const [isCustomLaborContract, setIsCustomLaborContract] = useState<boolean>(false);
 
   // Form Fields Chung
-  const [projectId, setProjectId] = useState<string>(preselectedPo?.projectId || projects[0]?.id || '');
-  const [category, setCategory] = useState<ExpenseCategory>(preselectedPo?.category || 'material');
-  const [title, setTitle] = useState<string>(preselectedPo?.title ? `Thanh toán đơn hàng ${preselectedPo.code}: ${preselectedPo.title}` : '');
-  const [supplier, setSupplier] = useState<string>(preselectedPo?.supplier || '');
-  const [receiverName, setReceiverName] = useState<string>(preselectedPo?.supplier || '');
-  const [amount, setAmount] = useState<number>(preselectedPo?.totalAmount || 50000000);
+  const [projectId, setProjectId] = useState<string>(currentPo?.projectId || projects[0]?.id || '');
+  const [category, setCategory] = useState<ExpenseCategory>(currentPo?.category || 'material');
+  const [title, setTitle] = useState<string>('');
+  const [supplier, setSupplier] = useState<string>(currentPo?.supplier || '');
+  const [receiverName, setReceiverName] = useState<string>(currentPo?.supplier || '');
+  const [amount, setAmount] = useState<number>(poRemainingValue || 50000000);
   const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState<'transfer' | 'cash' | 'advance_fund'>('transfer');
   const [notes, setNotes] = useState<string>('');
+
+  // Hàm cập nhật số tiền và nội dung khi chọn đợt thanh toán PO
+  const applyPoPaymentStage = (
+    stage: 'full' | 'stage_1' | 'stage_2' | 'stage_3' | 'custom', 
+    targetPo?: ExpenseItem,
+    customPercentage?: number
+  ) => {
+    const po = targetPo || currentPo;
+    if (!po) return;
+
+    setPoStageType(stage);
+
+    const orig = po.totalAmount;
+    const paid = po.paidAmount || expenses
+      .filter((e) => e.linkedPoId === po.id && e.status === 'paid')
+      .reduce((sum, e) => sum + e.totalAmount, 0);
+    const rem = Math.max(0, orig - paid);
+
+    let stageAmount = rem;
+    let sTitle = 'Tất toán toàn bộ đơn hàng';
+
+    if (stage === 'full') {
+      stageAmount = rem > 0 ? rem : orig;
+      sTitle = 'Tất toán toàn bộ đơn hàng';
+    } else if (stage === 'stage_1') {
+      const pct = customPercentage ?? 30;
+      stageAmount = Math.round((orig * pct) / 100);
+      sTitle = `Thanh toán Đợt 1 (Tạm ứng ${pct}%)`;
+    } else if (stage === 'stage_2') {
+      const pct = customPercentage ?? 50;
+      stageAmount = Math.round((orig * pct) / 100);
+      sTitle = `Thanh toán Đợt 2 (Giao hàng nghiệm thu ${pct}%)`;
+    } else if (stage === 'stage_3') {
+      const pct = customPercentage ?? 20;
+      stageAmount = Math.min(rem, Math.round((orig * pct) / 100));
+      sTitle = `Thanh toán Đợt 3 (Quyết toán giữ bảo hành ${pct}%)`;
+    } else {
+      sTitle = 'Thanh toán đợt theo thỏa thuận';
+    }
+
+    setStageName(sTitle);
+    setAmount(stageAmount);
+    setTitle(`[${po.code}] ${sTitle} - ${po.title}`);
+    setProjectId(po.projectId);
+    setCategory(po.category);
+    setSupplier(po.supplier);
+    setReceiverName(po.supplier);
+  };
+
+  // Khởi tạo form khi đổi đơn hàng PO
+  const handleSelectPo = (poId: string) => {
+    setSelectedPoId(poId);
+    const po = allOrders.find((item) => item.id === poId);
+    if (po) {
+      applyPoPaymentStage('full', po);
+    }
+  };
+
+  // Khởi tạo khi mở modal với preselectedPo hoặc khi mount
+  useEffect(() => {
+    if (preselectedPo) {
+      setSourceType('po');
+      setSelectedPoId(preselectedPo.id);
+      applyPoPaymentStage('full', preselectedPo);
+    } else if (currentPo && sourceType === 'po') {
+      applyPoPaymentStage('full', currentPo);
+    }
+  }, [preselectedPo]);
 
   // Khi đổi tab Nguồn chi
   const handleChangeSourceType = (type: PaymentSourceType) => {
     setSourceType(type);
 
     if (type === 'po') {
-      const defaultPo = pendingOrders.find((p) => p.id === selectedPoId) || pendingOrders[0];
-      if (defaultPo) {
-        setSelectedPoId(defaultPo.id);
-        setProjectId(defaultPo.projectId);
-        setCategory(defaultPo.category);
-        setTitle(`Thanh toán đơn hàng ${defaultPo.code}: ${defaultPo.title}`);
-        setSupplier(defaultPo.supplier);
-        setReceiverName(defaultPo.supplier);
-        setAmount(defaultPo.totalAmount);
+      if (currentPo) {
+        applyPoPaymentStage('full', currentPo);
       }
     } else if (type === 'labor_contract') {
       setCategory('labor_sub');
       setSupplier(laborTeamName);
       setReceiverName(laborLeader);
       setTitle(`[${laborContractCode}] ${laborStage} - ${laborTeamName}`);
-      if (amount === 50000000 || (preselectedPo && amount === preselectedPo.totalAmount)) {
-        setAmount(35000000);
-      }
+      setAmount(35000000);
     } else {
       // 'other' - Tự nhập tự do
       setTitle('');
       setCategory('other');
-    }
-  };
-
-  // Khi chọn PO khác trong dropdown
-  const handleSelectPo = (poId: string) => {
-    setSelectedPoId(poId);
-    const po = pendingOrders.find((item) => item.id === poId);
-    if (po) {
-      setProjectId(po.projectId);
-      setCategory(po.category);
-      setTitle(`Thanh toán đơn hàng ${po.code}: ${po.title}`);
-      setSupplier(po.supplier);
-      setReceiverName(po.supplier);
-      setAmount(po.totalAmount);
     }
   };
 
@@ -160,18 +246,18 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
     setTitle(`[${laborContractCode}] ${stage} - ${laborTeamName || 'Đội thợ nhân công'}`);
   };
 
-  useEffect(() => {
-    if (preselectedPo) {
-      setSourceType('po');
-      setSelectedPoId(preselectedPo.id);
-      setProjectId(preselectedPo.projectId);
-      setCategory(preselectedPo.category);
-      setTitle(`Thanh toán đơn hàng ${preselectedPo.code}: ${preselectedPo.title}`);
-      setSupplier(preselectedPo.supplier);
-      setReceiverName(preselectedPo.supplier);
-      setAmount(preselectedPo.totalAmount);
-    }
-  }, [preselectedPo]);
+  // Tính % của đợt thanh toán này so với giá trị đơn hàng gốc
+  const currentPercentage = useMemo(() => {
+    if (!poOriginalValue || poOriginalValue <= 0 || !amount) return 0;
+    return (amount / poOriginalValue) * 100;
+  }, [amount, poOriginalValue]);
+
+  // Số tiền còn nợ sau đợt thanh toán này
+  const remainingAfterThisPayment = useMemo(() => {
+    if (!currentPo) return 0;
+    const newTotalPaid = poAlreadyPaid + (amount || 0);
+    return Math.max(0, poOriginalValue - newTotalPaid);
+  }, [currentPo, poAlreadyPaid, amount, poOriginalValue]);
 
   const selectedProj = projects.find((p) => p.id === projectId) || projects[0];
 
@@ -179,11 +265,16 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
     e.preventDefault();
     if (amount <= 0 || !title.trim()) return;
 
-    const matchedPo = sourceType === 'po' ? pendingOrders.find((p) => p.id === selectedPoId) : null;
+    const matchedPo = sourceType === 'po' ? currentPo : null;
 
     let subDesc = '';
+    let isFullyPaid = false;
+    let newTotalPaid = 0;
+
     if (sourceType === 'po' && matchedPo) {
-      subDesc = `Đồng bộ tất toán đơn PO ${matchedPo.code}`;
+      newTotalPaid = poAlreadyPaid + amount;
+      isFullyPaid = newTotalPaid >= matchedPo.totalAmount;
+      subDesc = `Đồng bộ đơn PO ${matchedPo.code} • ${stageName} • Đã chi: ${formatVND(newTotalPaid)}/${formatVND(matchedPo.totalAmount)}`;
     } else if (sourceType === 'labor_contract') {
       subDesc = `HĐ khoán nhân công: ${laborContractCode} • ${laborStage}`;
     } else {
@@ -215,9 +306,15 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
       notes: notes.trim(),
       linkedPoId: matchedPo?.id,
       linkedPoCode: matchedPo?.code,
+      paymentStageTitle: sourceType === 'po' ? stageName : laborStage,
     };
 
-    onSavePayment(paymentItem, matchedPo?.id);
+    onSavePayment(paymentItem, matchedPo?.id, {
+      isFullyPaid,
+      newTotalPaid,
+      stageTitle: sourceType === 'po' ? stageName : laborStage,
+    });
+
     onClose();
   };
 
@@ -232,7 +329,7 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
             </span>
             <div>
               <h3 className="font-bold text-base">Lập Phiếu Chi Tiền Dự Án</h3>
-              <p className="text-xs text-rose-200">Ref từ đơn hàng PO, Hợp đồng nhân công hoặc Chi tự do</p>
+              <p className="text-xs text-rose-200">Ref từ đơn hàng PO (link giá trị, đợt 1, đợt 2), HĐ nhân công hoặc chi tự do</p>
             </div>
           </div>
           <button onClick={onClose} className="text-rose-200 hover:text-white p-1 rounded-lg">
@@ -266,7 +363,7 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
                   <span className="font-bold text-[11px]">1. Từ Đơn Hàng (PO)</span>
                 </div>
                 <span className="text-[10px] text-slate-500 mt-1 block">
-                  {pendingOrders.length} PO chờ chi
+                  Link giá trị &amp; đợt chi
                 </span>
               </button>
 
@@ -311,36 +408,196 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
           </div>
 
           {/* ============================================================== */}
-          {/* KHỐI CON 1: NẾU CHỌN TỪ ĐƠN HÀNG (PO)                           */}
+          {/* KHỐI CON 1: NẾU CHỌN TỪ ĐƠN HÀNG (PO) - LINK GIÁ TRỊ & ĐỢT CHI  */}
           {/* ============================================================== */}
           {sourceType === 'po' && (
-            <div className="bg-rose-50/70 p-3.5 rounded-xl border border-rose-200 space-y-2 animate-in fade-in">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-rose-950 text-[11px] flex items-center gap-1">
-                  <LinkIcon className="w-3.5 h-3.5 text-rose-600" />
-                  <span>Chọn Đơn Hàng PO Để Chi &amp; Tự Động Tất Toán:</span>
-                </span>
-                <span className="text-[10.5px] font-semibold text-rose-700">
-                  {pendingOrders.length} đơn hàng chưa chi
-                </span>
-              </div>
-
-              {pendingOrders.length === 0 ? (
-                <div className="p-2.5 text-center text-slate-500 bg-white rounded-lg border border-dashed border-slate-300">
-                  Hiện không có đơn hàng PO nào đang chờ chi. Bạn có thể chọn "HĐ Nhân Công" hoặc "Chi Khác (Tự Gõ)".
+            <div className="bg-rose-50/70 p-3.5 rounded-xl border border-rose-200 space-y-3 animate-in fade-in">
+              {/* Chọn đơn hàng */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold text-rose-950 text-[11px] flex items-center gap-1">
+                    <LinkIcon className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Chọn Đơn Hàng PO Để Liên Kết:</span>
+                  </span>
+                  <span className="text-[10.5px] font-semibold text-rose-700">
+                    {payableOrders.length} đơn hàng cần thanh toán
+                  </span>
                 </div>
-              ) : (
+
                 <select
                   value={selectedPoId}
                   onChange={(e) => handleSelectPo(e.target.value)}
                   className="w-full py-2 px-2.5 border border-rose-300 rounded-lg bg-white font-bold text-slate-900 text-xs focus:ring-2 focus:ring-rose-500"
                 >
-                  {pendingOrders.map((po) => (
-                    <option key={po.id} value={po.id}>
-                      [{po.code}] {po.title} - {po.supplier} ({formatVND(po.totalAmount)})
-                    </option>
-                  ))}
+                  {allOrders.map((po) => {
+                    const paid = po.paidAmount || expenses
+                      .filter((e) => e.linkedPoId === po.id && e.status === 'paid')
+                      .reduce((sum, e) => sum + e.totalAmount, 0);
+                    const rem = Math.max(0, po.totalAmount - paid);
+                    return (
+                      <option key={po.id} value={po.id}>
+                        [{po.code}] {po.title} - {po.supplier} (Tổng: {formatTy(po.totalAmount)}{rem > 0 ? ` • Còn nợ: ${formatTy(rem)}` : ' • Đã trả đủ'})
+                      </option>
+                    );
+                  })}
                 </select>
+              </div>
+
+              {/* BẢNG LINK GIÁ TRỊ ĐƠN HÀNG CHI TIẾT (ĐÁP ỨNG TRỰC TIẾP YÊU CẦU USER) */}
+              {currentPo && (
+                <div className="bg-white p-3 rounded-xl border border-rose-200 space-y-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between text-xs border-b pb-1.5">
+                    <span className="font-bold text-slate-700">Giá trị đơn hàng &amp; Tiến độ thanh toán:</span>
+                    <span className="font-mono font-bold text-sky-800 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                      {currentPo.code}
+                    </span>
+                  </div>
+
+                  {/* 3 Thẻ số liệu: Tổng đơn | Đã chi | Còn nợ */}
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="p-2 bg-slate-50 rounded-lg border border-slate-200">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 block">Tổng đơn hàng</span>
+                      <strong className="font-mono font-black text-slate-900 text-xs sm:text-sm mt-0.5 block">
+                        {formatVND(poOriginalValue)}
+                      </strong>
+                    </div>
+
+                    <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-200">
+                      <span className="text-[10px] uppercase font-bold text-emerald-800 block">Đã thanh toán</span>
+                      <strong className="font-mono font-black text-emerald-700 text-xs sm:text-sm mt-0.5 block">
+                        {formatVND(poAlreadyPaid)}
+                      </strong>
+                    </div>
+
+                    <div className="p-2 bg-rose-50 rounded-lg border border-rose-200">
+                      <span className="text-[10px] uppercase font-bold text-rose-800 block">Còn lại cần chi</span>
+                      <strong className="font-mono font-black text-rose-700 text-xs sm:text-sm mt-0.5 block">
+                        {formatVND(poRemainingValue)}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Thanh tiến độ thanh toán của PO */}
+                  <div className="space-y-1 pt-1">
+                    <div className="flex justify-between text-[10.5px] text-slate-500 font-semibold">
+                      <span>Đã chi trước: {((poAlreadyPaid / (poOriginalValue || 1)) * 100).toFixed(0)}%</span>
+                      <span className="text-amber-700">Đợt này chi: {currentPercentage.toFixed(0)}%</span>
+                      <span className="text-rose-700">Còn lại sau đợt này: {formatVND(remainingAfterThisPayment)}</span>
+                    </div>
+
+                    <div className="w-full bg-slate-200 rounded-full h-2 flex overflow-hidden">
+                      <div
+                        className="bg-emerald-500 h-2 transition-all"
+                        style={{ width: `${Math.min(100, (poAlreadyPaid / (poOriginalValue || 1)) * 100)}%` }}
+                        title="Đã chi trước đó"
+                      />
+                      <div
+                        className="bg-amber-500 h-2 transition-all"
+                        style={{ width: `${Math.min(100, currentPercentage)}%` }}
+                        title="Đợt thanh toán này"
+                      />
+                    </div>
+                  </div>
+
+                  {/* CÁC NÚT TẠO THANH TOÁN ĐỢT 1, ĐỢT 2, ĐỢT 3... (THEO YÊU CẦU CỦA USER) */}
+                  <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                    <span className="font-bold text-[11px] text-slate-700 block">
+                      Chọn giai đoạn thanh toán đợt:
+                    </span>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      {/* Nút 1: Tất toán 100% */}
+                      <button
+                        type="button"
+                        onClick={() => applyPoPaymentStage('full')}
+                        className={`p-1.5 rounded-lg border text-center transition-all cursor-pointer ${
+                          poStageType === 'full'
+                            ? 'bg-rose-600 text-white font-bold border-rose-600 shadow-2xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="text-[11px] font-bold">Tất toán 100%</div>
+                        <div className="text-[9.5px] opacity-80 font-mono">
+                          {formatTy(poRemainingValue)}
+                        </div>
+                      </button>
+
+                      {/* Nút 2: Đợt 1 (Tạm ứng 30%) */}
+                      <button
+                        type="button"
+                        onClick={() => applyPoPaymentStage('stage_1', undefined, 30)}
+                        className={`p-1.5 rounded-lg border text-center transition-all cursor-pointer ${
+                          poStageType === 'stage_1'
+                            ? 'bg-amber-600 text-white font-bold border-amber-600 shadow-2xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="text-[11px] font-bold">Đợt 1 (30%)</div>
+                        <div className="text-[9.5px] opacity-80 font-mono">
+                          {formatTy(Math.round(poOriginalValue * 0.3))}
+                        </div>
+                      </button>
+
+                      {/* Nút 3: Đợt 2 (Giao hàng 50%) */}
+                      <button
+                        type="button"
+                        onClick={() => applyPoPaymentStage('stage_2', undefined, 50)}
+                        className={`p-1.5 rounded-lg border text-center transition-all cursor-pointer ${
+                          poStageType === 'stage_2'
+                            ? 'bg-amber-600 text-white font-bold border-amber-600 shadow-2xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="text-[11px] font-bold">Đợt 2 (50%)</div>
+                        <div className="text-[9.5px] opacity-80 font-mono">
+                          {formatTy(Math.round(poOriginalValue * 0.5))}
+                        </div>
+                      </button>
+
+                      {/* Nút 4: Đợt 3 (Quyết toán 20%) */}
+                      <button
+                        type="button"
+                        onClick={() => applyPoPaymentStage('stage_3', undefined, 20)}
+                        className={`p-1.5 rounded-lg border text-center transition-all cursor-pointer ${
+                          poStageType === 'stage_3'
+                            ? 'bg-amber-600 text-white font-bold border-amber-600 shadow-2xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="text-[11px] font-bold">Đợt 3 (20%)</div>
+                        <div className="text-[9.5px] opacity-80 font-mono">
+                          {formatTy(Math.round(poOriginalValue * 0.2))}
+                        </div>
+                      </button>
+                    </div>
+
+                    {/* Hoặc tự nhập % tùy ý */}
+                    <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-500">
+                      <span>Tùy chỉnh đợt:</span>
+                      <button
+                        type="button"
+                        onClick={() => applyPoPaymentStage('stage_1', undefined, 40)}
+                        className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 font-medium"
+                      >
+                        Tạm ứng 40%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyPoPaymentStage('stage_1', undefined, 50)}
+                        className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 font-medium"
+                      >
+                        Tạm ứng 50%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyPoPaymentStage('stage_3', undefined, 10)}
+                        className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 font-medium"
+                      >
+                        Giữ bảo hành 10%
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -517,7 +774,7 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
-              placeholder="VD: Chi thanh toán tiền nhân công kéo cáp tuần 36 hoặc Chi tiền xe cẩu bồn nước"
+              placeholder="VD: [PO-2026-0224] Thanh toán Đợt 1 (Tạm ứng 30%) - Mua cáp đồng hạ thế"
               className="w-full py-2 px-3 border border-slate-300 rounded-xl font-medium bg-white focus:ring-2 focus:ring-rose-500"
             />
           </div>
@@ -526,17 +783,28 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                Số Tiền Chi Thực Tế (VNĐ) <span className="text-rose-500">*</span>
+                Số Tiền Chi Đợt Này (VNĐ) <span className="text-rose-500">*</span>
               </label>
               <input
                 type="number"
-                step="1000000"
+                step="100000"
                 value={amount}
-                onChange={(e) => setAmount(Number(e.target.value))}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setAmount(val);
+                  setPoStageType('custom');
+                }}
                 required
                 className="w-full py-2 px-3 border border-rose-300 bg-rose-50/60 rounded-xl font-mono font-black text-rose-900 text-sm"
               />
-              <div className="text-[10.5px] text-slate-400 mt-1 font-mono">{formatVND(amount)}</div>
+              <div className="text-[10.5px] text-slate-400 mt-1 font-mono flex items-center justify-between">
+                <span>{formatVND(amount)}</span>
+                {sourceType === 'po' && poOriginalValue > 0 && (
+                  <span className="text-amber-800 font-bold font-mono">
+                    ~ {currentPercentage.toFixed(1)}% đơn hàng
+                  </span>
+                )}
+              </div>
             </div>
 
             <div>

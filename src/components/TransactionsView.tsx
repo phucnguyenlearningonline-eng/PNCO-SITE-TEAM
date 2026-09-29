@@ -58,11 +58,17 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [preselectedPoForPayment, setPreselectedPoForPayment] = useState<ExpenseItem | null>(null);
   const [preselectedProjForAction, setPreselectedProjForAction] = useState<string | undefined>(undefined);
 
-  // Đơn hàng PO chưa thanh toán (Dự chi)
+  // Đơn hàng PO chưa thanh toán hoặc còn nợ (Dự chi)
   const pendingOrders = useMemo(() => {
-    return expenses.filter(
-      (e) => (e.type === 'po' || e.type === 'expense') && e.status !== 'paid'
-    );
+    return expenses.filter((e) => {
+      const isOrder = e.type === 'po' || e.type === 'expense';
+      if (!isOrder) return false;
+      const paid = e.paidAmount || expenses
+        .filter((exp) => exp.linkedPoId === e.id && exp.status === 'paid')
+        .reduce((sum, exp) => sum + exp.totalAmount, 0);
+      const rem = e.totalAmount - paid;
+      return e.status !== 'paid' || rem > 0;
+    });
   }, [expenses]);
 
   // Danh sách giao dịch thu - chi thực tế đã phát sinh
@@ -93,11 +99,22 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       );
       const totalPaidExpenses = prjPaidExpenses.reduce((sum, item) => sum + item.totalAmount, 0);
 
-      // 3. Dự chi từ đơn hàng PO chưa thanh toán
-      const prjPendingOrders = expenses.filter(
-        (e) => e.projectId === p.id && (e.type === 'po' || e.type === 'expense') && e.status !== 'paid'
-      );
-      const totalPendingOrdersAmount = prjPendingOrders.reduce((sum, item) => sum + item.totalAmount, 0);
+      // 3. Dự chi từ đơn hàng PO chưa thanh toán (tính theo số tiền còn nợ sau các đợt đã chi)
+      const prjPendingOrders = expenses.filter((e) => {
+        const isOrder = (e.type === 'po' || e.type === 'expense') && e.projectId === p.id;
+        if (!isOrder) return false;
+        const paid = e.paidAmount || expenses
+          .filter((exp) => exp.linkedPoId === e.id && exp.status === 'paid')
+          .reduce((sum, exp) => sum + exp.totalAmount, 0);
+        const rem = e.totalAmount - paid;
+        return e.status !== 'paid' || rem > 0;
+      });
+      const totalPendingOrdersAmount = prjPendingOrders.reduce((sum, item) => {
+        const paid = item.paidAmount || expenses
+          .filter((exp) => exp.linkedPoId === item.id && exp.status === 'paid')
+          .reduce((s, exp) => s + exp.totalAmount, 0);
+        return sum + Math.max(0, item.totalAmount - paid);
+      }, 0);
 
       // 4. Giá trị hợp đồng sau PLHĐ
       const contractValue = p.totalRevenue || p.originalContractValue || 0;
@@ -207,17 +224,26 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   };
 
   // Xử lý lưu phiếu chi (có đồng bộ PO nếu chọn)
-  const handleSavePayment = (payment: ExpenseItem, syncedPoId?: string) => {
+  const handleSavePayment = (
+    payment: ExpenseItem, 
+    syncedPoId?: string,
+    paymentStageDetails?: { isFullyPaid: boolean; newTotalPaid: number; stageTitle?: string }
+  ) => {
     onSaveExpense(payment);
 
-    // Đồng bộ PO thành 'paid' nếu liên kết
+    // Đồng bộ PO nếu liên kết
     if (syncedPoId) {
       const po = expenses.find((e) => e.id === syncedPoId);
       if (po) {
+        const isFullyPaid = paymentStageDetails ? paymentStageDetails.isFullyPaid : true;
+        const newTotalPaid = paymentStageDetails ? paymentStageDetails.newTotalPaid : po.totalAmount;
+        const stageNote = paymentStageDetails?.stageTitle ? `[${paymentStageDetails.stageTitle}]` : '';
+
         onSaveExpense({
           ...po,
-          status: 'paid',
-          notes: (po.notes ? `${po.notes} - ` : '') + `Đã thanh toán theo phiếu chi ${payment.code}`,
+          status: isFullyPaid ? 'paid' : (po.status === 'pending' ? 'approved' : po.status),
+          paidAmount: newTotalPaid,
+          notes: (po.notes ? `${po.notes} • ` : '') + `${stageNote} Đã chi ${formatVND(payment.totalAmount)} (Phiếu ${payment.code})`,
         });
       }
     }

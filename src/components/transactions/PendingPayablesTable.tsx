@@ -16,20 +16,39 @@ export const PendingPayablesTable: React.FC<PendingPayablesTableProps> = ({
   selectedProjectId,
   onOpenCreatePaymentForPo,
 }) => {
-  // Lọc các đơn hàng PO chưa thanh toán
+  const getPoPaid = (po: ExpenseItem) => {
+    return po.paidAmount || expenses
+      .filter((exp) => exp.linkedPoId === po.id && exp.status === 'paid')
+      .reduce((sum, exp) => sum + exp.totalAmount, 0);
+  };
+
+  const getPoRemaining = (po: ExpenseItem) => {
+    const paid = getPoPaid(po);
+    return Math.max(0, po.totalAmount - paid);
+  };
+
+  // Lọc các đơn hàng PO chưa thanh toán hoặc còn nợ
   const pendingOrders = expenses.filter((e) => {
-    const isUnpaid = (e.type === 'po' || e.type === 'expense') && e.status !== 'paid';
+    const isOrder = e.type === 'po' || e.type === 'expense';
+    if (!isOrder) return false;
+    const rem = getPoRemaining(e);
+    const isUnpaid = e.status !== 'paid' || rem > 0;
     if (!isUnpaid) return false;
     if (selectedProjectId !== 'all' && e.projectId !== selectedProjectId) return false;
     return true;
   });
 
-  const totalPendingAmount = pendingOrders.reduce((sum, item) => sum + item.totalAmount, 0);
+  const totalPendingAmount = pendingOrders.reduce((sum, item) => sum + getPoRemaining(item), 0);
 
   // Nhóm theo dự án
   const projectSummary = projects.map((p) => {
-    const prjPos = expenses.filter((e) => (e.type === 'po' || e.type === 'expense') && e.status !== 'paid' && e.projectId === p.id);
-    const amount = prjPos.reduce((sum, item) => sum + item.totalAmount, 0);
+    const prjPos = expenses.filter((e) => {
+      const isOrder = (e.type === 'po' || e.type === 'expense') && e.projectId === p.id;
+      if (!isOrder) return false;
+      const rem = getPoRemaining(e);
+      return e.status !== 'paid' || rem > 0;
+    });
+    const amount = prjPos.reduce((sum, item) => sum + getPoRemaining(item), 0);
     return {
       project: p,
       posCount: prjPos.length,
@@ -153,12 +172,26 @@ export const PendingPayablesTable: React.FC<PendingPayablesTableProps> = ({
                       </td>
 
                       <td className="py-3 px-3 text-right">
-                        <div className="font-mono font-black text-rose-700 text-sm">
-                          {formatVND(po.totalAmount)}
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          {formatTy(po.totalAmount)}
-                        </div>
+                        {(() => {
+                          const paid = getPoPaid(po);
+                          const rem = getPoRemaining(po);
+                          return (
+                            <div>
+                              <div className="font-mono font-black text-rose-700 text-sm">
+                                {formatVND(rem)}
+                              </div>
+                              {paid > 0 ? (
+                                <div className="text-[10px] text-emerald-700 font-semibold font-mono mt-0.5">
+                                  Đã chi: {formatTy(paid)} • Tổng: {formatTy(po.totalAmount)}
+                                </div>
+                              ) : (
+                                <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                  Tổng đơn: {formatTy(po.totalAmount)}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       <td className="py-3 px-3 text-center">

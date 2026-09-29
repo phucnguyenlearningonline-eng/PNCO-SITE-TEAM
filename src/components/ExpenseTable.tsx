@@ -69,9 +69,9 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
         <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-400 mb-3">
           <FileText className="w-6 h-6" />
         </div>
-        <h3 className="text-base font-bold text-slate-800">Không tìm thấy đơn hàng hoặc khoản chi nào</h3>
+        <h3 className="text-base font-bold text-slate-800">Không tìm thấy đơn hàng mua vật tư nào</h3>
         <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-          Không có dữ liệu phù hợp với điều kiện lọc hiện tại. Thử thay đổi từ khóa tìm kiếm, dự án hoặc chọn "Toàn bộ các tháng".
+          Chỉ các đơn đặt hàng mua vật tư &amp; thiết bị M&amp;E (PO) được hiển thị tại đây. Hợp đồng nhân công được quản lý tại tab "Quản Lý Hợp Đồng", các chi phí site khác nằm tại tab "Giao Dịch (Thu - Chi)".
         </p>
       </div>
     );
@@ -89,8 +89,8 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
           <thead>
             <tr className="bg-[#102742] text-white font-bold tracking-wider uppercase text-[11px] select-none">
               <th className="py-3 px-3 text-center border-r border-[#1d3d63] w-12">STT</th>
-              <th className="py-3 px-3.5 border-r border-[#1d3d63] min-w-[110px]">MÃ PO / CHI</th>
-              <th className="py-3 px-4 border-r border-[#1d3d63] min-w-[260px]">TÊN VẬT TƯ / HẠNG MỤC CHÍNH</th>
+              <th className="py-3 px-3.5 border-r border-[#1d3d63] min-w-[110px]">MÃ ĐƠN HÀNG (PO)</th>
+              <th className="py-3 px-4 border-r border-[#1d3d63] min-w-[260px]">TÊN VẬT TƯ / HÀNG HÓA M&amp;E</th>
               <th className="py-3 px-3.5 border-r border-[#1d3d63] min-w-[170px]">DỰ ÁN THI CÔNG</th>
               <th className="py-3 px-3.5 border-r border-[#1d3d63] min-w-[170px]">NHÀ CUNG CẤP / ĐƠN VỊ</th>
               <th className="py-3 px-3.5 border-r border-[#1d3d63] min-w-[140px]">NGƯỜI LẬP</th>
@@ -120,13 +120,18 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
 
                   {/* Mã PO */}
                   <td className="py-3 px-3.5 border-r border-slate-200 font-mono font-bold text-sky-800 whitespace-nowrap">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <button 
                         onClick={() => onViewDetails(item)}
                         className="hover:underline hover:text-sky-600 focus:outline-none"
                       >
                         {item.code}
                       </button>
+                      {(item.hasContract || item.contractNumber) && (
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          Có HĐ
+                        </span>
+                      )}
                     </div>
                   </td>
 

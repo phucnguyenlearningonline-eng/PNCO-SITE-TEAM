@@ -57,11 +57,11 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       <div className="px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
         <div>
           <h2 className="text-sm sm:text-base font-bold text-slate-800 tracking-tight flex items-center gap-2">
-            <span>BẢNG QUẢN LÝ ĐƠN MUA HÀNG & CHI TIÊU THI CÔNG</span>
+            <span>BẢNG QUẢN LÝ ĐƠN ĐẶT HÀNG MUA VẬT TƯ (PURCHASE ORDERS)</span>
             <span className="text-slate-400 font-normal">—</span>
             <span className="text-sky-800 uppercase font-bold">KỲ {currentMonthLabel}</span>
             <span className="text-xs font-normal text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-full">
-              {totalFilteredCount} giao dịch
+              {totalFilteredCount} đơn hàng PO
             </span>
           </h2>
         </div>
@@ -112,7 +112,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             type="text"
             value={filters.search}
             onChange={(e) => onFilterChange({ ...filters, search: e.target.value })}
-            placeholder="Tìm mã PO, vật tư, NCC, xe cẩu, kỹ sư..."
+            placeholder="Tìm mã đơn PO, tên vật tư, nhà cung cấp, kỹ sư..."
             className="w-full pl-9 pr-8 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-slate-50/50 hover:bg-white transition-colors"
           />
           {filters.search && (
@@ -141,22 +141,6 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           </select>
         </div>
 
-        {/* Category Selector (Vật tư, Vận chuyển, Cơm tăng ca...) */}
-        <div className="min-w-[160px]">
-          <select
-            value={filters.category}
-            onChange={(e) => onFilterChange({ ...filters, category: e.target.value })}
-            className="w-full py-2 px-3 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white cursor-pointer font-medium text-slate-700"
-          >
-            <option value="all">Tất cả phân loại chi</option>
-            <option value="material">🧱 Chi phí vật tư M&E</option>
-            <option value="transport">🚚 Chi phí vận chuyển & cẩu kéo</option>
-            <option value="overtime_meal">🍱 Chi phí đồ ăn tăng ca</option>
-            <option value="labor_sub">🛠️ Nhân công phụ & dịch vụ</option>
-            <option value="other">📌 Chi phí khác</option>
-          </select>
-        </div>
-
         {/* Status Selector */}
         <div className="min-w-[140px]">
           <select
@@ -180,7 +164,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               ? 'bg-amber-100 text-amber-900 border-amber-400 shadow-2xs'
               : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
           }`}
-          title="Lọc nhanh các khoản chi cần phê duyệt"
+          title="Lọc nhanh các đơn hàng cần phê duyệt"
         >
           <Filter className={`w-3.5 h-3.5 ${filters.onlyPending ? 'text-amber-700' : 'text-slate-500'}`} />
           <span>Chỉ hiện đơn chờ duyệt</span>
@@ -201,10 +185,10 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           {/* Tạo Đơn Mua Mới */}
           <button
             onClick={onOpenCreateModal}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-[#004e89] hover:bg-[#003865] text-white transition-all shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-[#004e89] hover:bg-[#003865] text-white transition-all shadow-sm cursor-pointer"
           >
             <PlusCircle className="w-3.5 h-3.5" />
-            <span>+ Tạo đơn mua mới</span>
+            <span>+ Tạo Đơn Hàng Mua Vật Tư (PO)</span>
           </button>
         </div>
       </div>

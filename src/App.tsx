@@ -457,6 +457,13 @@ export default function App() {
   // Filtered expenses calculation
   const filteredExpenses = useMemo(() => {
     return expenses.filter((item) => {
+      // Khi ở tab Đơn hàng (orders): CHỈ HIỂN THỊ ĐƠN HÀNG MUA VẬT TƯ (PO)
+      // Nhân công và các chi phí khác KHÔNG ĐƯỢC nằm trong đơn hàng!
+      if (activeTab === 'orders') {
+        if (item.type !== 'po') return false;
+        if (item.category !== 'material') return false;
+      }
+
       // Tab-specific filters
       if (activeTab === 'materials' && item.category !== 'material') {
         return false;
@@ -789,17 +796,22 @@ export default function App() {
     showToast('Đã khôi phục dữ liệu ban đầu của Phúc Nguyên M&E');
   };
 
-  // Tính toán số lượng đơn hàng có hợp đồng kinh tế
+  // Tính toán số lượng hợp đồng (gồm HĐ nhân công và HĐ mua bán vật tư)
   const contractsCount = useMemo(() => {
-    return expenses.filter((e) => Boolean(e.hasContract || e.contractNumber)).length;
+    return expenses.filter((e) => Boolean(e.hasContract || e.contractNumber || e.category === 'labor_sub')).length;
+  }, [expenses]);
+
+  // Tính toán số lượng đơn hàng mua vật tư (PO) thực tế (không gồm nhân công, chi phí khác)
+  const actualOrdersCount = useMemo(() => {
+    return expenses.filter((e) => e.type === 'po' && e.category === 'material').length;
   }, [expenses]);
 
   // Horizontal sub-tabs array matching screenshot
   const subTabs = [
     {
       id: 'orders' as ActiveTab,
-      label: 'ĐƠN HÀNG (PO)',
-      badge: pendingCount > 0 ? `${pendingCount}` : null,
+      label: 'ĐƠN HÀNG MUA VẬT TƯ (PO)',
+      badge: actualOrdersCount > 0 ? `${actualOrdersCount}` : null,
       icon: ShoppingCart,
     },
     {
@@ -900,7 +912,7 @@ export default function App() {
           }}
           onOpenBackupModal={() => setIsBackupModalOpen(true)}
           pendingCount={pendingCount}
-          ordersCount={expenses.length}
+          ordersCount={actualOrdersCount}
           projectsCount={projects.length}
           suppliersCount={actualSuppliersCount}
           clientsCount={actualClientsCount}

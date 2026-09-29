@@ -539,54 +539,73 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
         </div>
 
         {/* Chuyển đổi loại hồ sơ (Tabs) */}
-        <div className="bg-slate-100/90 border-b border-slate-200 px-5 py-2.5 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase">
-            <span>Phân Loại Hồ Sơ:</span>
-            <div className="inline-flex bg-white rounded-lg p-0.5 border border-slate-300 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setType('po');
-                  if (!code.startsWith('DH ')) {
-                    setCode(getNextOrderCode(expenses));
-                  }
-                }}
-                className={`py-1.5 px-3.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 ${
-                  type === 'po'
-                    ? 'bg-amber-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
+        {defaultType === 'po' ? (
+          <div className="bg-amber-50/90 border-b border-amber-200 px-5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded-md bg-amber-600 text-white font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5 shadow-2xs">
                 <ShoppingCart className="w-3.5 h-3.5" />
-                <span>Đơn Hàng (PO)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setType('expense');
-                  if (code.startsWith('DH ')) {
-                    setCode(`EXP-2026-${Math.floor(1000 + Math.random() * 9000)}`);
-                  }
-                }}
-                className={`py-1.5 px-3.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 ${
-                  type === 'expense'
-                    ? 'bg-sky-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Phiếu Chi Site</span>
-              </button>
+                <span>Đơn Hàng Mua Vật Tư (PO)</span>
+              </span>
+              <span className="text-slate-600 hidden md:inline">
+                • Chỉ dùng cho vật tư cần mua hàng (đơn lớn có thể kèm Hợp Đồng kinh tế mua bán)
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 text-slate-600">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Đã chọn <strong className="text-amber-800 font-bold font-mono">{selectedOrderItems.length}</strong> sản phẩm</span>
             </div>
           </div>
-
-          {type === 'po' && (
-            <div className="text-xs text-slate-600 font-medium hidden sm:flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Đã chọn <strong className="text-amber-700 font-bold font-mono">{selectedOrderItems.length}</strong> sản phẩm</span>
+        ) : (
+          <div className="bg-slate-100/90 border-b border-slate-200 px-5 py-2.5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase">
+              <span>Phân Loại Hồ Sơ:</span>
+              <div className="inline-flex bg-white rounded-lg p-0.5 border border-slate-300 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setType('po');
+                    if (!code.startsWith('DH ')) {
+                      setCode(getNextOrderCode(expenses));
+                    }
+                  }}
+                  className={`py-1.5 px-3.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 ${
+                    type === 'po'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <ShoppingCart className="w-3.5 h-3.5" />
+                  <span>Đơn Hàng (PO)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setType('expense');
+                    if (code.startsWith('DH ')) {
+                      setCode(`EXP-2026-${Math.floor(1000 + Math.random() * 9000)}`);
+                    }
+                  }}
+                  className={`py-1.5 px-3.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 ${
+                    type === 'expense'
+                      ? 'bg-sky-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Phiếu Chi Site</span>
+                </button>
+              </div>
             </div>
-          )}
-        </div>
+
+            {type === 'po' && (
+              <div className="text-xs text-slate-600 font-medium hidden sm:flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Đã chọn <strong className="text-amber-700 font-bold font-mono">{selectedOrderItems.length}</strong> sản phẩm</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Modal Form */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[76vh] overflow-y-auto">

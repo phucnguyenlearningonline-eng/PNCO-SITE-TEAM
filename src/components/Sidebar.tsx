@@ -56,8 +56,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const menuItems = [
     {
       id: 'orders' as ActiveTab,
-      label: 'Đơn Hàng (PO) & Chi Tiêu',
-      sublabel: 'Quản lý & duyệt chi tiêu site...',
+      label: 'Đơn Hàng Mua Vật Tư (PO)',
+      sublabel: 'Vật tư & thiết bị M&E cần mua...',
       icon: ShoppingCart,
       badge: pendingCount > 0 ? `${pendingCount} chờ duyệt` : null,
       badgeColor: 'bg-red-600 text-white',
@@ -65,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       id: 'contracts' as ActiveTab,
       label: 'Quản Lý Hợp Đồng',
-      sublabel: 'Hợp đồng kinh tế, tạm ứng & các đợt TT',
+      sublabel: 'HĐ nhân công & HĐ mua bán vật tư...',
       icon: FileSignature,
       count: contractsCount,
       badge: contractsCount > 0 ? `${contractsCount} HĐ` : null,
@@ -88,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       id: 'transactions' as ActiveTab,
       label: 'Giao Dịch (Thu - Chi)',
-      sublabel: 'Chi phí site: vật tư, xe, cơm ca...',
+      sublabel: 'Sổ thu CĐT, phiếu chi site & chi phí...',
       icon: ArrowLeftRight,
       count: ordersCount,
     },

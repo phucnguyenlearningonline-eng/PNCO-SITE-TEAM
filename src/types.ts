@@ -187,6 +187,9 @@ export interface ExpenseItem {
   linkedPoId?: string; // ID đơn hàng PO liên kết
   linkedPoCode?: string; // Mã đơn hàng PO liên kết (PO-2026-...)
   receiverOrPayer?: string; // Người nộp tiền (phiếu thu) hoặc người nhận tiền (phiếu chi)
+  paidAmount?: number; // Số tiền đã thanh toán tích lũy cho đơn hàng (VNĐ)
+  paymentStageTitle?: string; // Tên đợt thanh toán (VD: "Đợt 1 - Tạm ứng 30%", "Đợt 2 - Giao hàng 50%")
+  paymentStageIndex?: number; // Đợt 1, 2, 3...
 }
 
 export interface FilterState {

@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { ExpenseItem, Project, User, ContractPaymentStage } from '../types';
 import { formatVND, formatDateVN } from '../utils/formatters';
+import { CreateContractModal } from './contracts/CreateContractModal';
 
 interface ContractsViewProps {
   expenses: ExpenseItem[];
@@ -57,10 +58,14 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
   onEditOrder,
   onOpenCreateOrder,
 }) => {
-  // Chỉ lọc các đơn hàng có hợp đồng kinh tế
+  // Lọc các hợp đồng: gồm HĐ kinh tế mua bán vật tư và HĐ giao khoán nhân công / thầu phụ
   const contractExpenses = useMemo(() => {
-    return expenses.filter((e) => Boolean(e.hasContract || e.contractNumber));
+    return expenses.filter((e) => Boolean(e.hasContract || e.contractNumber || e.category === 'labor_sub'));
   }, [expenses]);
+
+  // Modal tạo hợp đồng mới
+  const [isCreateContractModalOpen, setIsCreateContractModalOpen] = useState(false);
+  const [contractTypeFilter, setContractTypeFilter] = useState<'all' | 'labor' | 'material'>('all');
 
   // Chế độ xem: Bảng (table) | Danh sách gọn (list) | Thẻ (cards)
   const [viewMode, setViewMode] = useState<ContractViewMode>(() => {
@@ -176,9 +181,14 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
         (paymentStatusFilter === 'in_progress' && status === 'in_progress') ||
         (paymentStatusFilter === 'pending_advance' && status === 'pending_advance');
 
-      return matchSearch && matchProject && matchStatus;
+      const matchType =
+        contractTypeFilter === 'all' ||
+        (contractTypeFilter === 'labor' && item.category === 'labor_sub') ||
+        (contractTypeFilter === 'material' && item.category !== 'labor_sub');
+
+      return matchSearch && matchProject && matchStatus && matchType;
     });
-  }, [contractExpenses, searchTerm, selectedProjectId, paymentStatusFilter]);
+  }, [contractExpenses, searchTerm, selectedProjectId, paymentStatusFilter, contractTypeFilter]);
 
   // Tổng hợp KPI toàn bộ hợp đồng
   const totalContractsCount = contractExpenses.length;
@@ -741,12 +751,24 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
               <option value="completed">Đã tất toán 100% hợp đồng</option>
             </select>
 
+            {/* Filter by Contract Type (Nhân công vs Mua bán vật tư) */}
+            <select
+              value={contractTypeFilter}
+              onChange={(e) => setContractTypeFilter(e.target.value as any)}
+              className="py-2 px-2.5 text-xs border border-slate-300 rounded-lg bg-white font-medium focus:ring-2 focus:ring-sky-500"
+            >
+              <option value="all">📑 Tất cả loại hợp đồng</option>
+              <option value="labor">👷 Hợp đồng nhân công &amp; Thầu phụ</option>
+              <option value="material">📦 Hợp đồng mua bán vật tư</option>
+            </select>
+
+            {/* Nút Tạo Hợp Đồng Mới */}
             <button
-              onClick={onOpenCreateOrder}
-              className="px-3.5 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+              onClick={() => setIsCreateContractModalOpen(true)}
+              className="px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Tạo Đơn Hàng Mới</span>
+              <span>+ Tạo Hợp Đồng Mới</span>
             </button>
           </div>
         </div>
@@ -898,10 +920,19 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                                 <span className="font-mono font-bold text-sky-950 text-xs bg-sky-100/80 px-2 py-0.5 rounded border border-sky-300">
                                   {contract.contractNumber || `HĐ-${contract.code.replace(/\s+/g, '')}/PN-2026`}
                                 </span>
+                                {contract.category === 'labor_sub' ? (
+                                  <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
+                                    👷 HĐ Nhân Công
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                                    📦 HĐ Mua Bán Vật Tư
+                                  </span>
+                                )}
                               </div>
                               <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500">
                                 <span className="font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
-                                  PO: {contract.code}
+                                  Mã: {contract.code}
                                 </span>
                                 <span>{formatDateVN(contract.contractDate || contract.date)}</span>
                               </div>
@@ -1556,6 +1587,22 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL TẠO HỢP ĐỒNG MỚI (HỢP ĐỒNG NHÂN CÔNG HOẶC HỢP ĐỒNG VẬT TƯ) */}
+      {/* ============================================================== */}
+      {isCreateContractModalOpen && (
+        <CreateContractModal
+          isOpen={isCreateContractModalOpen}
+          onClose={() => setIsCreateContractModalOpen(false)}
+          projects={projects}
+          currentUser={currentUser}
+          onSaveContract={(newContract) => {
+            onUpdateExpense(newContract);
+            setIsCreateContractModalOpen(false);
+          }}
+        />
       )}
     </div>
   );
