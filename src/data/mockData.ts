@@ -652,6 +652,7 @@ export const INITIAL_EXPENSES: ExpenseItem[] = [
     hasContract: true,
     contractNumber: 'HĐ-0361/PN-2026/CADIVI',
     contractDate: '2026-09-08',
+    contractFileUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/view?usp=sharing',
     contractAdvanceAmount: 31185000,
     contractAdvancePercentage: 30,
     contractPaymentStages: [
@@ -718,6 +719,7 @@ export const INITIAL_EXPENSES: ExpenseItem[] = [
     hasContract: true,
     contractNumber: 'HĐ-0091/PN-2026/CADIVI',
     contractDate: '2026-09-02',
+    contractFileUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/view?usp=sharing',
     contractAdvanceAmount: 161469000,
     contractAdvancePercentage: 30,
     contractPaymentStages: [

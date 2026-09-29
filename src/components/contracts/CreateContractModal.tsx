@@ -12,7 +12,9 @@ import {
   Percent, 
   Plus, 
   Trash2,
-  AlertCircle
+  AlertCircle,
+  Link2,
+  ExternalLink
 } from 'lucide-react';
 import { Project, ExpenseItem, ContractPaymentStage, User, ExpenseCategory } from '../../types';
 import { formatVND } from '../../utils/formatters';
@@ -50,6 +52,7 @@ export const CreateContractModal: React.FC<CreateContractModalProps> = ({
 
   // Điều khoản tạm ứng
   const [advancePercentage, setAdvancePercentage] = useState<number>(30);
+  const [contractFileUrl, setContractFileUrl] = useState<string>('');
   const [notes, setNotes] = useState<string>('Bảo hành trách nhiệm kỹ thuật 12 tháng sau khi nghiệm thu bàn giao');
 
   // Danh sách mốc thanh toán
@@ -246,6 +249,7 @@ export const CreateContractModal: React.FC<CreateContractModalProps> = ({
       contractAdvancePercentage: advancePercentage,
       contractAdvanceAmount: Math.round((totalAmount * advancePercentage) / 100),
       contractPaymentStages: stages,
+      contractFileUrl: contractFileUrl.trim() || undefined,
       contractNotes: notes.trim(),
     };
 
@@ -520,7 +524,38 @@ export const CreateContractModal: React.FC<CreateContractModalProps> = ({
             </div>
           </div>
 
-          {/* 7. GHI CHÚ ĐIỀU KHOẢN */}
+          {/* 7. LINK TÀI LIỆU HỢP ĐỒNG (FILE SCAN / GOOGLE DRIVE) */}
+          <div className="bg-sky-50/70 p-3 rounded-xl border border-sky-200 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block font-bold text-sky-950 text-xs flex items-center gap-1.5">
+                <Link2 className="w-4 h-4 text-sky-600" />
+                <span>Link Hợp Đồng (Google Drive / OneDrive / Scan PDF):</span>
+              </label>
+              {contractFileUrl.trim() && (
+                <a
+                  href={contractFileUrl.trim()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] font-bold text-sky-700 hover:text-sky-900 flex items-center gap-1 hover:underline"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  <span>Mở xem thử link</span>
+                </a>
+              )}
+            </div>
+            <input
+              type="url"
+              value={contractFileUrl}
+              onChange={(e) => setContractFileUrl(e.target.value)}
+              placeholder="Dán link file hợp đồng: https://drive.google.com/file/d/... hoặc link lưu trữ cloud"
+              className="w-full py-2 px-3 border border-sky-300 rounded-lg text-xs font-mono bg-white focus:ring-2 focus:ring-sky-500"
+            />
+            <p className="text-[10px] text-slate-500">
+              💡 Dán đường dẫn Google Drive, OneDrive hoặc Dropbox để toàn bộ đội ngũ có thể mở xem trực tiếp bản scan hợp đồng có chữ ký mộc đỏ.
+            </p>
+          </div>
+
+          {/* 8. GHI CHÚ ĐIỀU KHOẢN */}
           <div>
             <label className="block font-bold text-slate-700 mb-1">Ghi Chú Điều Khoản Hợp Đồng &amp; Bảo Hành</label>
             <textarea

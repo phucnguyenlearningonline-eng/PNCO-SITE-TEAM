@@ -21,7 +21,9 @@ import {
   ShoppingCart,
   Layers,
   ArrowRight,
-  FileSignature
+  FileSignature,
+  Link2,
+  ExternalLink
 } from 'lucide-react';
 import { 
   ExpenseCategory, 
@@ -100,6 +102,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   // Quản lý Hợp Đồng Kinh Tế (Đơn hàng lớn)
   const [hasContract, setHasContract] = useState(false);
   const [contractNumber, setContractNumber] = useState('');
+  const [contractFileUrl, setContractFileUrl] = useState('');
   const [contractAdvancePercentage, setContractAdvancePercentage] = useState<number>(30);
   const [contractAdvanceAmount, setContractAdvanceAmount] = useState<number>(0);
   const [contractNotes, setContractNotes] = useState('');
@@ -128,6 +131,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       setReceiptImage(initialData.receiptImage || '');
       setHasContract(Boolean(initialData.hasContract || initialData.contractNumber));
       setContractNumber(initialData.contractNumber || '');
+      setContractFileUrl(initialData.contractFileUrl || '');
       setContractAdvancePercentage(initialData.contractAdvancePercentage ?? 30);
       setContractAdvanceAmount(initialData.contractAdvanceAmount ?? 0);
       setContractNotes(initialData.contractNotes || '');
@@ -459,6 +463,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
         hasContract,
         contractNumber: hasContract ? (contractNumber.trim() || `HĐ-${code.trim().replace(/\s+/g, '')}/PN-2026/VTTB`) : undefined,
         contractDate: hasContract ? (date || new Date().toISOString().split('T')[0]) : undefined,
+        contractFileUrl: hasContract ? (contractFileUrl.trim() || undefined) : undefined,
         contractPaymentStages: hasContract ? (initialData?.contractPaymentStages || []) : undefined,
         contractNotes: hasContract ? contractNotes.trim() || undefined : undefined,
       };
@@ -985,6 +990,33 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                             onChange={(e) => setContractNumber(e.target.value)}
                             placeholder="VD: HĐ-010/PN-2026/VTTB..."
                             className="w-full py-1.5 px-2.5 text-xs font-mono font-bold text-sky-900 rounded-lg border border-sky-300 bg-white focus:ring-2 focus:ring-sky-500 shadow-2xs"
+                          />
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-0.5">
+                            <label className="block text-[11px] font-bold text-slate-700 uppercase flex items-center gap-1">
+                              <Link2 className="w-3.5 h-3.5 text-sky-600" />
+                              <span>Link File Hợp Đồng (Google Drive / Scan PDF)</span>
+                            </label>
+                            {contractFileUrl.trim() && (
+                              <a
+                                href={contractFileUrl.trim()}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10.5px] text-sky-700 font-bold hover:underline flex items-center gap-1"
+                              >
+                                <ExternalLink className="w-2.5 h-2.5" />
+                                Mở file
+                              </a>
+                            )}
+                          </div>
+                          <input
+                            type="url"
+                            value={contractFileUrl}
+                            onChange={(e) => setContractFileUrl(e.target.value)}
+                            placeholder="https://drive.google.com/file/d/... (hoặc link OneDrive, Scan PDF)"
+                            className="w-full py-1.5 px-2.5 text-xs font-mono text-slate-900 rounded-lg border border-sky-300 bg-white focus:ring-2 focus:ring-sky-500 shadow-2xs"
                           />
                         </div>
                       </div>

@@ -27,7 +27,9 @@ import {
   Wallet,
   ArrowUpDown,
   Sparkles,
-  Info
+  Info,
+  Link2,
+  ExternalLink
 } from 'lucide-react';
 import { ExpenseItem, Project, Customer, ProjectAddendum } from '../types';
 import { formatVND, formatDateVN, formatTy } from '../utils/formatters';
@@ -95,6 +97,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   const [formEndDate, setFormEndDate] = useState('2026-12-30');
   const [formContractNumber, setFormContractNumber] = useState('');
   const [formContractDate, setFormContractDate] = useState('2026-03-01');
+  const [formContractFileUrl, setFormContractFileUrl] = useState('');
   const [formVatRate, setFormVatRate] = useState(0);
   const [formOriginalContractValue, setFormOriginalContractValue] = useState(23577927234);
   const [formTotalBudget, setFormTotalBudget] = useState(19500000000);
@@ -105,6 +108,26 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   const [formManager, setFormManager] = useState('Trần Anh Minh');
   const [formLaborBudget, setFormLaborBudget] = useState(4200000000);
   const [formMaterialBudget, setFormMaterialBudget] = useState(13500000000);
+
+  // Tự động tính tiền VAT và Tổng giá trị HĐ sau VAT
+  const formVatAmount = useMemo(() => {
+    if (!formOriginalContractValue || formOriginalContractValue <= 0 || !formVatRate) return 0;
+    return Math.round(formOriginalContractValue * (formVatRate / 100));
+  }, [formOriginalContractValue, formVatRate]);
+
+  const formTotalContractValueWithVat = useMemo(() => {
+    return (formOriginalContractValue || 0) + formVatAmount;
+  }, [formOriginalContractValue, formVatAmount]);
+
+  // Cho phép nhập trực tiếp Tổng giá trị sau VAT để tự quy ngược ra Giá trị trước VAT
+  const handleTotalWithVatChange = (totalWithVat: number) => {
+    if (formVatRate > 0) {
+      const base = Math.round(totalWithVat / (1 + formVatRate / 100));
+      setFormOriginalContractValue(base);
+    } else {
+      setFormOriginalContractValue(totalWithVat);
+    }
+  };
 
   // Form thêm nhanh Khách hàng mới bên trong modal
   const [showQuickAddClient, setShowQuickAddClient] = useState(false);
@@ -183,7 +206,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     const addendums = p.addendums || [];
     const addendumTotal = addendums.reduce((sum, item) => sum + (item.totalAmount || 0), 0);
     const originalValue = p.originalContractValue || p.totalRevenue || 0;
-    const totalAfterPLHD = originalValue + addendumTotal;
+    const vatRate = p.vatRate || 0;
+    const vatAmount = p.vatAmount !== undefined ? p.vatAmount : Math.round(originalValue * (vatRate / 100));
+    const contractValueWithVat = p.totalContractValueWithVat || (originalValue + vatAmount);
+    const totalAfterPLHD = contractValueWithVat + addendumTotal;
 
     const collected = p.currentAdvance || 0;
     const remainingToCollect = Math.max(0, totalAfterPLHD - collected);
@@ -199,6 +225,9 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       transport,
       mealAndOther,
       originalValue,
+      vatRate,
+      vatAmount,
+      contractValueWithVat,
       addendumTotal,
       addendumsCount: addendums.length,
       totalAfterPLHD,
@@ -339,6 +368,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     setFormEndDate('2026-12-30');
     setFormContractNumber(`HĐ-PNC-2026/${nextCode}`);
     setFormContractDate('2026-03-01');
+    setFormContractFileUrl('');
     setFormVatRate(0);
     setFormOriginalContractValue(15000000000);
     setFormTotalBudget(12000000000);
@@ -367,6 +397,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     setFormEndDate(p.endDate || '2026-12-30');
     setFormContractNumber(p.contractNumber || '');
     setFormContractDate(p.contractDate || '2026-03-01');
+    setFormContractFileUrl(p.contractFileUrl || '');
     setFormVatRate(p.vatRate ?? 0);
     setFormOriginalContractValue(p.originalContractValue || p.totalRevenue || 0);
     setFormTotalBudget(p.totalBudget);
@@ -421,10 +452,11 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     e.preventDefault();
     if (!formName.trim() || !formClient.trim()) return;
 
-    // Tính toán lại tổng quyết toán sau phụ lục
+    // Tính toán lại tổng quyết toán sau phụ lục (HĐ gốc sau VAT + các phụ lục phát sinh)
     const existingAddendums = editingProject?.addendums || [];
     const addendumTotal = existingAddendums.reduce((sum, item) => sum + (item.totalAmount || 0), 0);
-    const finalTotalRevenue = formOriginalContractValue + addendumTotal;
+    const finalContractWithVat = formOriginalContractValue + formVatAmount;
+    const finalTotalRevenue = finalContractWithVat + addendumTotal;
 
     if (editingProject && onEditProject) {
       const updated: Project = {
@@ -441,8 +473,11 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         endDate: formEndDate,
         contractNumber: formContractNumber.trim(),
         contractDate: formContractDate,
+        contractFileUrl: formContractFileUrl.trim() || undefined,
         vatRate: formVatRate,
         originalContractValue: formOriginalContractValue,
+        vatAmount: formVatAmount,
+        totalContractValueWithVat: finalContractWithVat,
         totalRevenue: finalTotalRevenue,
         totalBudget: formTotalBudget,
         currentAdvance: formCurrentAdvance,
@@ -470,8 +505,11 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         endDate: formEndDate,
         contractNumber: formContractNumber.trim(),
         contractDate: formContractDate,
+        contractFileUrl: formContractFileUrl.trim() || undefined,
         vatRate: formVatRate,
         originalContractValue: formOriginalContractValue,
+        vatAmount: formVatAmount,
+        totalContractValueWithVat: finalContractWithVat,
         totalRevenue: finalTotalRevenue,
         totalBudget: formTotalBudget,
         currentAdvance: formCurrentAdvance,
@@ -939,6 +977,19 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                             <span className="font-mono font-bold text-[10.5px] px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300">
                               {p.code}
                             </span>
+                            {p.contractFileUrl && (
+                              <a
+                                href={p.contractFileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-300 hover:bg-emerald-100"
+                                title={`Mở file hợp đồng CĐT: ${p.contractFileUrl}`}
+                              >
+                                <Link2 className="w-2.5 h-2.5 text-emerald-600" />
+                                <span>File HĐ</span>
+                                <ExternalLink className="w-2 h-2 opacity-60" />
+                              </a>
+                            )}
                           </div>
                           <div className="font-bold text-slate-900 line-clamp-2 text-xs leading-snug" title={p.name}>
                             {p.name}
@@ -981,13 +1032,22 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
                         {/* 4. HĐ SAU THUẾ & PHỤ LỤC (PLHĐ) */}
                         <td className="py-3 px-3">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-bold text-slate-900 text-xs">
-                              {formatTy(fin.originalValue)}
-                            </span>
-                            <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1 py-0.2 rounded border border-slate-200">
-                              VAT {p.vatRate ?? 0}%
-                            </span>
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-mono font-black text-slate-900 text-xs">
+                                {formatTy(fin.contractValueWithVat)}
+                              </span>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                                fin.vatRate > 0 ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-100 text-slate-600 border-slate-200'
+                              }`}>
+                                VAT {fin.vatRate}%
+                              </span>
+                            </div>
+                            {fin.vatRate > 0 && (
+                              <div className="text-[10px] text-slate-500 font-mono">
+                                Chưa VAT: {formatTy(fin.originalValue)} (+{formatTy(fin.vatAmount)} VAT)
+                              </div>
+                            )}
                           </div>
                           <div className="mt-1">
                             {fin.addendumsCount > 0 ? (
@@ -1189,6 +1249,14 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
                   {/* Financial Grid */}
                   <div className="mt-4 pt-3 border-t border-slate-100 space-y-2 text-xs">
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-slate-500">Giá trị HĐ sau VAT:</span>
+                      <span className="font-bold text-slate-800 font-mono text-right">
+                        {formatVND(fin.contractValueWithVat)}
+                        {fin.vatRate > 0 && <span className="text-[10px] text-blue-600 font-semibold ml-1">(VAT {fin.vatRate}%)</span>}
+                      </span>
+                    </div>
+
                     <div className="flex justify-between">
                       <span className="text-slate-500">Tổng quyết toán sau PLHĐ:</span>
                       <span className="font-black text-slate-900 font-mono">{formatVND(fin.totalAfterPLHD)}</span>
@@ -1492,21 +1560,33 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
               {/* KHỐI 3: HỢP ĐỒNG, DỰ TOÁN & NHÂN CÔNG */}
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
-                <span className="font-black text-slate-900 uppercase text-[11px] block">
-                  3. Hợp Đồng, Ngân Sách Dự Toán &amp; Chi Phí Nhân Công
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-slate-900 uppercase text-[11px] block">
+                    3. Hợp Đồng, Ngân Sách Dự Toán &amp; Chi Phí Nhân Công
+                  </span>
+                  <span className="text-[10px] text-sky-800 font-bold bg-sky-100 px-2 py-0.5 rounded-full border border-sky-300">
+                    Tự động tính thuế &amp; tổng giá trị sau VAT
+                  </span>
+                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Hàng 1: HĐ Gốc, Thuế suất VAT, Tiền thuế VAT, Tổng giá trị HĐ sau VAT */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Giá Trị HĐ Gốc (VNĐ) <span className="text-rose-500">*</span></label>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Giá Trị HĐ Gốc (Chưa VAT) <span className="text-rose-500">*</span>
+                    </label>
                     <input
                       type="number"
-                      step="1000000"
-                      value={formOriginalContractValue}
+                      step="any"
+                      value={formOriginalContractValue || ''}
                       onChange={(e) => setFormOriginalContractValue(Number(e.target.value))}
                       required
-                      className="w-full py-2 px-3 border border-slate-300 rounded-lg font-mono font-bold bg-white"
+                      placeholder="Nhập giá trị trước VAT..."
+                      className="w-full py-2 px-3 border border-slate-300 rounded-lg font-mono font-bold bg-white focus:ring-2 focus:ring-sky-500"
                     />
+                    <div className="text-[10px] font-mono text-slate-500 mt-1 truncate">
+                      = {formatVND(formOriginalContractValue)}
+                    </div>
                   </div>
 
                   <div>
@@ -1514,60 +1594,152 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     <select
                       value={formVatRate}
                       onChange={(e) => setFormVatRate(Number(e.target.value))}
-                      className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white"
+                      className="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white font-bold focus:ring-2 focus:ring-sky-500"
                     >
                       <option value={0}>VAT 0% (Không thuế)</option>
-                      <option value={8}>VAT 8%</option>
-                      <option value={10}>VAT 10%</option>
+                      <option value={8}>VAT 8% (Nghị định 72)</option>
+                      <option value={10}>VAT 10% (Chuẩn)</option>
                     </select>
+                    <div className="text-[10px] text-slate-500 mt-1">
+                      {formVatRate > 0 ? `Áp dụng thuế suất ${formVatRate}%` : 'Không tính thuế VAT'}
+                    </div>
                   </div>
 
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Tiền Thuế VAT (VNĐ)</label>
+                    <div className="w-full py-2 px-3 border border-rose-200 bg-rose-50/70 rounded-lg font-mono font-bold text-rose-700 text-xs flex items-center justify-between">
+                      <span>{formatVND(formVatAmount)}</span>
+                      {formVatRate > 0 && <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-rose-200 font-bold">{formVatRate}%</span>}
+                    </div>
+                    <div className="text-[10px] text-rose-600 mt-1">
+                      {formVatRate > 0 ? `Tiền thuế VAT tương ứng` : '0 đ (Miễn thuế)'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-emerald-800 mb-1 flex items-center justify-between">
+                      <span>Tổng Giá Trị HĐ Sau VAT</span>
+                      <span className="text-[9.5px] text-emerald-600 font-normal">Có VAT</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={formTotalContractValueWithVat || ''}
+                      onChange={(e) => handleTotalWithVatChange(Number(e.target.value))}
+                      placeholder="Tổng tiền đã gồm VAT..."
+                      className="w-full py-2 px-3 border-2 border-emerald-400 bg-emerald-50 rounded-lg font-mono font-black text-emerald-900 text-xs focus:ring-2 focus:ring-emerald-600"
+                    />
+                    <div className="text-[10px] font-mono text-emerald-800 font-bold mt-1 truncate">
+                      = {formatVND(formTotalContractValueWithVat)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Banner phân rã chi tiết Hợp đồng trước VAT, Thuế VAT, và Tổng thanh toán sau VAT */}
+                <div className="p-3 bg-gradient-to-r from-sky-50 via-emerald-50 to-teal-50 rounded-xl border border-sky-300 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs shadow-2xs">
+                  <div>
+                    <span className="text-slate-500 block text-[10.5px]">1. Giá trị HĐ gốc (Chưa VAT):</span>
+                    <span className="font-mono font-bold text-slate-900 text-sm">{formatVND(formOriginalContractValue)}</span>
+                  </div>
+                  <div>
+                    <span className="text-rose-600 block text-[10.5px]">2. Tiền thuế VAT ({formVatRate}%):</span>
+                    <span className="font-mono font-bold text-rose-600 text-sm">+{formatVND(formVatAmount)}</span>
+                  </div>
+                  <div className="sm:border-l sm:border-slate-300 sm:pl-3">
+                    <span className="text-emerald-800 block text-[10.5px] font-black uppercase tracking-wider">3. TỔNG GIÁ TRỊ HỢP ĐỒNG SAU VAT:</span>
+                    <span className="font-mono font-black text-emerald-800 text-base">{formatVND(formTotalContractValueWithVat)}</span>
+                  </div>
+                </div>
+
+                {/* Ô LINK HỢP ĐỒNG KINH TẾ CĐT (GOOGLE DRIVE / SCAN PDF) */}
+                <div className="bg-sky-50/70 p-3 rounded-xl border border-sky-200 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-bold text-sky-950 text-xs flex items-center gap-1.5">
+                      <Link2 className="w-4 h-4 text-sky-600" />
+                      <span>Link Hợp Đồng CĐT (Google Drive / OneDrive / Scan PDF):</span>
+                    </label>
+                    {formContractFileUrl.trim() && (
+                      <a
+                        href={formContractFileUrl.trim()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] font-bold text-sky-700 hover:text-sky-900 hover:underline flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>Mở xem thử link</span>
+                      </a>
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    value={formContractFileUrl}
+                    onChange={(e) => setFormContractFileUrl(e.target.value)}
+                    placeholder="https://drive.google.com/file/d/... hoặc link lưu trữ cloud hợp đồng gốc"
+                    className="w-full py-2 px-3 border border-sky-300 rounded-lg text-xs font-mono bg-white focus:ring-2 focus:ring-sky-500 shadow-2xs"
+                  />
+                  <p className="text-[10px] text-slate-500">
+                    💡 Dán đường dẫn Google Drive hoặc link file PDF scan hợp đồng ký với Chủ Đầu Tư để toàn công ty có thể tra cứu nhanh.
+                  </p>
+                </div>
+
+                {/* Hàng 2: Đã thu CĐT, Dự toán nhân công, Dự toán vật tư, Tổng ngân sách */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Đã Thu CĐT (Tạm Ứng)</label>
                     <input
                       type="number"
-                      step="1000000"
-                      value={formCurrentAdvance}
+                      step="any"
+                      value={formCurrentAdvance || ''}
                       onChange={(e) => setFormCurrentAdvance(Number(e.target.value))}
                       className="w-full py-2 px-3 border border-emerald-300 bg-emerald-50 rounded-lg font-mono font-bold text-emerald-800"
                     />
+                    <div className="text-[10px] font-mono text-emerald-700 mt-1 truncate">
+                      = {formatVND(formCurrentAdvance)}
+                    </div>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Dự Toán Nhân Công (VNĐ)</label>
                     <input
                       type="number"
-                      step="1000000"
-                      value={formLaborBudget}
+                      step="any"
+                      value={formLaborBudget || ''}
                       onChange={(e) => setFormLaborBudget(Number(e.target.value))}
                       placeholder="VD: 4.200.000.000"
                       className="w-full py-2 px-3 border border-purple-300 bg-purple-50 rounded-lg font-mono font-bold text-purple-900"
                     />
+                    <div className="text-[10px] font-mono text-purple-700 mt-1 truncate">
+                      = {formatVND(formLaborBudget)}
+                    </div>
                   </div>
 
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Dự Toán Vật Tư (VNĐ)</label>
                     <input
                       type="number"
-                      step="1000000"
-                      value={formMaterialBudget}
+                      step="any"
+                      value={formMaterialBudget || ''}
                       onChange={(e) => setFormMaterialBudget(Number(e.target.value))}
                       placeholder="VD: 13.500.000.000"
                       className="w-full py-2 px-3 border border-blue-300 bg-blue-50 rounded-lg font-mono font-bold text-blue-900"
                     />
+                    <div className="text-[10px] font-mono text-blue-700 mt-1 truncate">
+                      = {formatVND(formMaterialBudget)}
+                    </div>
                   </div>
 
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Tổng Ngân Sách Dự Toán</label>
                     <input
                       type="number"
-                      step="1000000"
-                      value={formTotalBudget}
+                      step="any"
+                      value={formTotalBudget || ''}
                       onChange={(e) => setFormTotalBudget(Number(e.target.value))}
                       className="w-full py-2 px-3 border border-slate-300 rounded-lg font-mono font-bold bg-white"
                     />
+                    <div className="text-[10px] font-mono text-slate-600 mt-1 truncate">
+                      = {formatVND(formTotalBudget)}
+                    </div>
                   </div>
                 </div>
 

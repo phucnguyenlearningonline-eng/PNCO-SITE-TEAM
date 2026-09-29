@@ -29,7 +29,9 @@ import {
   List as ListIcon,
   LayoutGrid,
   ChevronRight,
-  Eye
+  Eye,
+  Link2,
+  ExternalLink
 } from 'lucide-react';
 import { ExpenseItem, Project, User, ContractPaymentStage } from '../types';
 import { formatVND, formatDateVN } from '../utils/formatters';
@@ -84,6 +86,26 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
 
   // Modal xem và quản lý mốc thanh toán độc lập
   const [managingMilestonesContract, setManagingMilestonesContract] = useState<ExpenseItem | null>(null);
+
+  // Modal gắn / sửa Link Hợp Đồng (Google Drive / Scan PDF)
+  const [quickLinkContract, setQuickLinkContract] = useState<ExpenseItem | null>(null);
+  const [quickLinkUrl, setQuickLinkUrl] = useState<string>('');
+
+  const handleOpenQuickLinkModal = (contract: ExpenseItem) => {
+    setQuickLinkContract(contract);
+    setQuickLinkUrl(contract.contractFileUrl || '');
+  };
+
+  const handleSaveQuickLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickLinkContract) return;
+    const updatedContract: ExpenseItem = {
+      ...quickLinkContract,
+      contractFileUrl: quickLinkUrl.trim() || undefined,
+    };
+    onUpdateExpense(updatedContract);
+    setQuickLinkContract(null);
+  };
 
   // Modal thêm / sửa mốc thanh toán
   const [activeContractForStage, setActiveContractForStage] = useState<ExpenseItem | null>(null);
@@ -975,6 +997,33 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                                 </span>
                                 <span>{formatDateVN(contract.contractDate || contract.date)}</span>
                               </div>
+
+                              {/* Ô LINK HỢP ĐỒNG (THEO YÊU CẦU CỦA USER) */}
+                              <div className="mt-1.5 flex items-center gap-1.5">
+                                {contract.contractFileUrl ? (
+                                  <a
+                                    href={contract.contractFileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 transition-colors shadow-2xs group"
+                                    title={`Bấm để mở file scan hợp đồng:\n${contract.contractFileUrl}`}
+                                  >
+                                    <Link2 className="w-3 h-3 text-emerald-600 group-hover:scale-110 transition-transform" />
+                                    <span>Link Hợp Đồng</span>
+                                    <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                                  </a>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenQuickLinkModal(contract)}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold text-slate-500 hover:text-sky-700 hover:bg-sky-50 border border-dashed border-slate-300 hover:border-sky-400 transition-colors cursor-pointer"
+                                    title="Gắn link file scan hợp đồng (Google Drive / OneDrive / PDF)"
+                                  >
+                                    <Link2 className="w-2.5 h-2.5 text-slate-400" />
+                                    <span>+ Link HĐ</span>
+                                  </button>
+                                )}
+                              </div>
                             </td>
 
                             {/* Nhà Cung Cấp */}
@@ -1088,6 +1137,20 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                                   <Printer className="w-3.5 h-3.5" />
                                 </button>
 
+                                {/* Gắn / Mở Link Hợp Đồng */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenQuickLinkModal(contract)}
+                                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                    contract.contractFileUrl
+                                      ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 ring-1 ring-emerald-300'
+                                      : 'bg-slate-100 text-slate-600 hover:text-sky-700 hover:bg-sky-50'
+                                  }`}
+                                  title={contract.contractFileUrl ? `Xem / Đổi link hợp đồng: ${contract.contractFileUrl}` : "Gắn link hợp đồng (Google Drive / Scan PDF)"}
+                                >
+                                  <Link2 className="w-3.5 h-3.5" />
+                                </button>
+
                                 {/* Chỉnh sửa */}
                                 <button
                                   type="button"
@@ -1147,6 +1210,29 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                           <span className="text-[11px] text-slate-500">
                             {formatDateVN(contract.contractDate || contract.date)}
                           </span>
+                          {contract.contractFileUrl ? (
+                            <a
+                              href={contract.contractFileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300"
+                              title={`Mở file hợp đồng: ${contract.contractFileUrl}`}
+                            >
+                              <Link2 className="w-2.5 h-2.5 text-emerald-600" />
+                              <span>Link HĐ</span>
+                              <ExternalLink className="w-2 h-2 opacity-60" />
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenQuickLinkModal(contract)}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-slate-500 hover:text-sky-700 hover:bg-sky-50 border border-dashed border-slate-300 cursor-pointer"
+                              title="Gắn link file hợp đồng"
+                            >
+                              <Link2 className="w-2.5 h-2.5 text-slate-400" />
+                              <span>+ Link HĐ</span>
+                            </button>
+                          )}
                         </div>
                         <div className="font-bold text-sm text-slate-900 truncate" title={contract.supplier}>
                           {contract.supplier}
@@ -1239,6 +1325,19 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
 
                         <button
                           type="button"
+                          onClick={() => handleOpenQuickLinkModal(contract)}
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                            contract.contractFileUrl
+                              ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 ring-1 ring-emerald-300'
+                              : 'bg-slate-100 text-slate-600 hover:text-sky-700 hover:bg-sky-50'
+                          }`}
+                          title={contract.contractFileUrl ? `Xem / Đổi link hợp đồng: ${contract.contractFileUrl}` : "Gắn link hợp đồng (Google Drive / Scan PDF)"}
+                        >
+                          <Link2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => onEditOrder(contract)}
                           className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:text-amber-700 hover:bg-amber-50 transition-colors cursor-pointer"
                           title="Sửa hợp đồng / PO"
@@ -1283,6 +1382,31 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                             <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                               Đơn PO: {contract.code}
                             </span>
+
+                            {/* Link Hợp Đồng */}
+                            {contract.contractFileUrl ? (
+                              <a
+                                href={contract.contractFileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[11px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 rounded-full flex items-center gap-1 transition-colors"
+                                title={`Mở file hợp đồng: ${contract.contractFileUrl}`}
+                              >
+                                <Link2 className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Link File HĐ</span>
+                                <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                              </a>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenQuickLinkModal(contract)}
+                                className="text-[11px] font-semibold text-slate-500 bg-white border border-dashed border-slate-300 hover:border-sky-400 hover:text-sky-700 px-2.5 py-0.5 rounded-full flex items-center gap-1 transition-colors cursor-pointer"
+                                title="Gắn link file hợp đồng"
+                              >
+                                <Link2 className="w-3 h-3 text-slate-400" />
+                                <span>+ Gắn Link HĐ</span>
+                              </button>
+                            )}
 
                             {status === 'completed' ? (
                               <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-300 px-2.5 py-0.5 rounded-full flex items-center gap-1">
@@ -1344,6 +1468,19 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                               title="Xem chi tiết đơn hàng & In PDF"
                             >
                               <Printer className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenQuickLinkModal(contract)}
+                              className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                                contract.contractFileUrl
+                                  ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white ring-1 ring-emerald-300'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-sky-600 hover:text-white'
+                              }`}
+                              title={contract.contractFileUrl ? `Xem / Đổi link hợp đồng: ${contract.contractFileUrl}` : "Gắn link hợp đồng (Google Drive / Scan PDF)"}
+                            >
+                              <Link2 className="w-4 h-4" />
                             </button>
 
                             <button
@@ -1771,6 +1908,115 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
             setIsCreateContractModalOpen(false);
           }}
         />
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL GẮN / CẬP NHẬT LINK FILE HỢP ĐỒNG (GOOGLE DRIVE / PDF)   */}
+      {/* ============================================================== */}
+      {quickLinkContract && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="bg-[#102742] text-white px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center">
+                  <Link2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm">Gắn Link File Hợp Đồng</h4>
+                  <p className="text-[11px] text-sky-200 font-mono">
+                    {quickLinkContract.contractNumber || quickLinkContract.code}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickLinkContract(null)}
+                className="text-slate-400 hover:text-white cursor-pointer p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveQuickLink} className="p-5 space-y-4">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
+                <div className="text-slate-500">Đối tác / Nhà cung cấp:</div>
+                <div className="font-bold text-slate-900 text-sm">{quickLinkContract.supplier}</div>
+                <div className="text-slate-600 text-[11px] truncate">
+                  Công trình: <strong>{quickLinkContract.projectName}</strong>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase">
+                    Đường Dẫn / Link Hợp Đồng (URL) <span className="text-rose-500">*</span>
+                  </label>
+                  {quickLinkUrl.trim() && (
+                    <a
+                      href={quickLinkUrl.trim()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-bold text-sky-700 hover:text-sky-900 hover:underline flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>Mở xem thử</span>
+                    </a>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  required
+                  value={quickLinkUrl}
+                  onChange={(e) => setQuickLinkUrl(e.target.value)}
+                  placeholder="https://drive.google.com/file/d/... hoặc OneDrive, Scan PDF"
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 bg-white focus:ring-2 focus:ring-sky-500 shadow-2xs"
+                  autoFocus
+                />
+                <p className="text-[10.5px] text-slate-500 mt-1.5 leading-relaxed">
+                  💡 Hỗ trợ link file scan từ Google Drive, OneDrive, Dropbox hoặc máy chủ cloud để toàn bộ đội ngũ có thể mở xem trực tiếp hợp đồng có chữ ký dấu mộc.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                {quickLinkContract.contractFileUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated: ExpenseItem = {
+                        ...quickLinkContract,
+                        contractFileUrl: undefined,
+                      };
+                      onUpdateExpense(updated);
+                      setQuickLinkContract(null);
+                    }}
+                    className="px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 rounded-lg font-bold transition-colors cursor-pointer"
+                  >
+                    Xóa link này
+                  </button>
+                ) : (
+                  <span />
+                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setQuickLinkContract(null)}
+                    className="px-4 py-2 border border-slate-300 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-50 cursor-pointer"
+                  >
+                    Đóng
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Lưu Link Hợp Đồng</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

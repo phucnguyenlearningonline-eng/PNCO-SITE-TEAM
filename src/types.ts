@@ -75,8 +75,11 @@ export interface Project {
   endDate?: string; // YYYY-MM-DD
   contractNumber?: string; // Số hợp đồng kinh tế
   contractDate?: string; // Ngày ký hợp đồng
+  contractFileUrl?: string; // Link file tài liệu hợp đồng CĐT (Google Drive, Scan PDF...)
   vatRate?: number; // % VAT (0, 8, 10)
-  originalContractValue?: number; // Giá trị HĐ gốc
+  originalContractValue?: number; // Giá trị HĐ gốc trước VAT
+  vatAmount?: number; // Tiền thuế VAT của hợp đồng gốc
+  totalContractValueWithVat?: number; // Tổng giá trị HĐ gốc sau VAT
   totalBudget: number; // Ngân sách dự toán
   totalRevenue: number; // Tổng quyết toán sau PLHĐ
   currentAdvance: number; // Đã thu CĐT
@@ -182,6 +185,7 @@ export interface ExpenseItem {
   hasContract?: boolean; // Đơn hàng này có hợp đồng kinh tế hay không
   contractNumber?: string; // Số hợp đồng (VD: "HĐ-011/PN-2026/VTTB")
   contractDate?: string; // Ngày ký hợp đồng
+  contractFileUrl?: string; // Link file tài liệu hợp đồng (Google Drive, OneDrive, Scan PDF...)
   contractAdvanceAmount?: number; // Giá trị thanh toán tạm ứng (VNĐ)
   contractAdvancePercentage?: number; // % Tạm ứng hợp đồng (VD: 30%)
   contractPaymentStages?: ContractPaymentStage[]; // Danh sách các lần thanh toán tiếp theo
