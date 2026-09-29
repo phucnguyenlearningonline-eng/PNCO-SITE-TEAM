@@ -94,6 +94,8 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
   const [stageTitle, setStageTitle] = useState('');
   const [stageAmount, setStageAmount] = useState<number>(0);
   const [stagePercentage, setStagePercentage] = useState<number>(30);
+  const [stageHasVat, setStageHasVat] = useState<boolean>(true);
+  const [stageVatRate, setStageVatRate] = useState<number>(10);
   const [stageDueDate, setStageDueDate] = useState('');
   const [stageStatus, setStageStatus] = useState<'pending' | 'paid'>('pending');
   const [stagePaymentMethod, setStagePaymentMethod] = useState<'transfer' | 'cash'>('transfer');
@@ -288,6 +290,9 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
     setStageDueDate(new Date().toISOString().split('T')[0]);
     setStageStatus('pending');
     setStagePaymentMethod('transfer');
+    const contractHasVat = contract.vatRate !== undefined ? contract.vatRate > 0 : true;
+    setStageHasVat(contractHasVat);
+    setStageVatRate(contract.vatRate || 10);
     setIsStageModalOpen(true);
   };
 
@@ -298,6 +303,8 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
     setStageTitle(stage.title);
     setStageAmount(stage.amount);
     setStagePercentage(stage.percentage || (contract.totalAmount > 0 ? Math.round((stage.amount / contract.totalAmount) * 100) : 0));
+    setStageHasVat(stage.hasVat ?? (contract.vatRate !== undefined ? contract.vatRate > 0 : true));
+    setStageVatRate(stage.vatRate ?? (contract.vatRate ?? 10));
     setStageDueDate(stage.dueDate || stage.paidDate || new Date().toISOString().split('T')[0]);
     setStageStatus(stage.status);
     setStagePaymentMethod(stage.paymentMethod || 'transfer');
@@ -389,6 +396,14 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
     const existingStages: ContractPaymentStage[] = activeContractForStage.contractPaymentStages || [];
     let updatedStages: ContractPaymentStage[] = [];
 
+    const effectiveVatRate = stageHasVat ? stageVatRate : 0;
+    const subtotal = stageHasVat && stageVatRate > 0
+      ? Math.round(stageAmount / (1 + stageVatRate / 100))
+      : stageAmount;
+    const vatAmt = stageHasVat && stageVatRate > 0
+      ? stageAmount - subtotal
+      : 0;
+
     if (editingStageId) {
       // Đang sửa
       updatedStages = existingStages.map((s) => {
@@ -398,6 +413,10 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
             title: stageTitle.trim(),
             percentage: stagePercentage,
             amount: stageAmount,
+            hasVat: stageHasVat,
+            vatRate: effectiveVatRate,
+            vatAmount: vatAmt,
+            subtotalAmount: subtotal,
             dueDate: stageDueDate,
             paidDate: stageStatus === 'paid' ? (s.paidDate || stageDueDate || new Date().toISOString().split('T')[0]) : undefined,
             status: stageStatus,
@@ -415,6 +434,10 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
         title: stageTitle.trim() || `Thanh toán đợt ${existingStages.length + 1}`,
         percentage: stagePercentage,
         amount: stageAmount,
+        hasVat: stageHasVat,
+        vatRate: effectiveVatRate,
+        vatAmount: vatAmt,
+        subtotalAmount: subtotal,
         dueDate: stageDueDate || new Date().toISOString().split('T')[0],
         paidDate: stageStatus === 'paid' ? (stageDueDate || new Date().toISOString().split('T')[0]) : undefined,
         status: stageStatus,
@@ -563,14 +586,30 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                       #{idx + 1}
                     </td>
                     <td className="py-2 px-2.5">
-                      <div className="font-bold text-slate-900">{stage.title}</div>
+                      <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                        <span>{stage.title}</span>
+                        {stage.hasVat && stage.vatRate ? (
+                          <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                            VAT {stage.vatRate}%
+                          </span>
+                        ) : stage.hasVat === false ? (
+                          <span className="text-[9.5px] px-1.5 py-0.2 rounded font-medium bg-slate-100 text-slate-600">
+                            0% VAT
+                          </span>
+                        ) : null}
+                      </div>
                       {stage.notes && <div className="text-[10.5px] text-slate-500 mt-0.5">{stage.notes}</div>}
                     </td>
                     <td className="py-2 px-2 text-center font-mono font-semibold text-slate-600">
                       {stage.percentage ? `${stage.percentage}%` : '-'}
                     </td>
                     <td className="py-2 px-2.5 text-right font-mono font-bold text-slate-900">
-                      {formatVND(stage.amount)}
+                      <div>{formatVND(stage.amount)}</div>
+                      {stage.hasVat && stage.vatAmount ? (
+                        <div className="text-[9.5px] text-rose-600 font-normal">
+                          (VAT: {formatVND(stage.vatAmount)})
+                        </div>
+                      ) : null}
                     </td>
                     <td className="py-2 px-2.5 text-center font-mono text-[11px] text-slate-600">
                       {stage.status === 'paid' && stage.paidDate
@@ -1473,40 +1512,169 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 uppercase mb-1">
-                    % Tỷ Lệ Hợp Đồng
-                  </label>
-                  <div className="relative">
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block font-bold text-slate-700 uppercase">
+                        % Tỷ Lệ Hợp Đồng
+                      </label>
+                      <span className="text-[10px] text-sky-700 font-semibold">Tự tính số tiền</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step="any"
+                        value={stagePercentage || ''}
+                        onChange={(e) => {
+                          const valStr = e.target.value;
+                          const pct = parseFloat(valStr);
+                          const val = isNaN(pct) ? 0 : pct;
+                          setStagePercentage(val);
+                          if (activeContractForStage && activeContractForStage.totalAmount > 0) {
+                            const calculatedAmount = Math.round(activeContractForStage.totalAmount * (val / 100));
+                            setStageAmount(calculatedAmount);
+                          }
+                        }}
+                        placeholder="Nhập %..."
+                        className="w-full py-2 px-3 pr-7 border border-slate-300 rounded-lg font-mono font-bold text-slate-900 focus:ring-2 focus:ring-sky-500 bg-white"
+                      />
+                      <span className="absolute right-2.5 top-2 text-slate-400 font-bold">%</span>
+                    </div>
+
+                    {/* Quick percentage buttons */}
+                    <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                      {[10, 20, 30, 40, 50].map((pct) => (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => {
+                            setStagePercentage(pct);
+                            if (activeContractForStage && activeContractForStage.totalAmount > 0) {
+                              setStageAmount(Math.round(activeContractForStage.totalAmount * (pct / 100)));
+                            }
+                          }}
+                          className={`px-1.5 py-0.5 text-[10px] font-bold rounded border transition-all cursor-pointer ${
+                            stagePercentage === pct
+                              ? 'bg-sky-600 text-white border-sky-600'
+                              : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                          }`}
+                        >
+                          {pct}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block font-bold text-slate-700 uppercase">
+                        Số Tiền Thanh Toán <span className="text-rose-500">*</span>
+                      </label>
+                      <span className="text-[10px] text-emerald-700 font-semibold">Tự tính %</span>
+                    </div>
                     <input
                       type="number"
-                      min={1}
-                      max={100}
-                      value={stagePercentage}
+                      required
+                      min={0}
+                      step="1000"
+                      value={stageAmount || ''}
                       onChange={(e) => {
-                        const pct = Number(e.target.value);
-                        setStagePercentage(pct);
-                        setStageAmount(Math.round(activeContractForStage.totalAmount * (pct / 100)));
+                        const valStr = e.target.value;
+                        const amt = parseFloat(valStr);
+                        const val = isNaN(amt) ? 0 : amt;
+                        setStageAmount(val);
+                        if (activeContractForStage && activeContractForStage.totalAmount > 0) {
+                          const rawPct = (val / activeContractForStage.totalAmount) * 100;
+                          const formattedPct = Math.round(rawPct * 100) / 100;
+                          setStagePercentage(formattedPct);
+                        }
                       }}
-                      className="w-full py-2 px-3 pr-7 border border-slate-300 rounded-lg font-mono font-bold focus:ring-2 focus:ring-sky-500"
+                      placeholder="Nhập số tiền..."
+                      className="w-full py-2 px-3 border border-slate-300 rounded-lg font-mono font-bold text-emerald-800 focus:ring-2 focus:ring-emerald-500 bg-white"
                     />
-                    <span className="absolute right-2.5 top-2 text-slate-400 font-bold">%</span>
+                    <div className="text-[11px] font-mono text-emerald-700 font-bold mt-1 truncate">
+                      = {formatVND(stageAmount)}
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block font-bold text-slate-700 uppercase mb-1">
-                    Số Tiền Thanh Toán (VNĐ) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    value={stageAmount}
-                    onChange={(e) => setStageAmount(Number(e.target.value))}
-                    className="w-full py-2 px-3 border border-slate-300 rounded-lg font-mono font-bold text-emerald-800 focus:ring-2 focus:ring-emerald-500"
-                  />
+                {/* Ô CÓ THUẾ VAT HAY KHÔNG (THEO YÊU CẦU CỦA USER) */}
+                <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={stageHasVat}
+                        onChange={(e) => setStageHasVat(e.target.checked)}
+                        className="w-4 h-4 text-sky-600 rounded border-slate-300 focus:ring-sky-500 cursor-pointer"
+                      />
+                      <span className="font-bold text-slate-800 text-xs uppercase flex items-center gap-1.5">
+                        <span>Thuế VAT (Hóa đơn GTGT):</span>
+                        {stageHasVat ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">
+                            ✓ Có VAT
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold">
+                            ✕ Không có VAT (0%)
+                          </span>
+                        )}
+                      </span>
+                    </label>
+
+                    {stageHasVat && (
+                      <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                        <span className="text-[11px] font-semibold text-slate-600">Thuế suất:</span>
+                        <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5 shadow-2xs">
+                          {[10, 8, 5, 0].map((rate) => (
+                            <button
+                              key={rate}
+                              type="button"
+                              onClick={() => setStageVatRate(rate)}
+                              className={`px-2.5 py-0.5 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                                stageVatRate === rate
+                                  ? 'bg-sky-600 text-white shadow-xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                            >
+                              {rate}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Chi tiết phân rã số tiền trước thuế & tiền thuế VAT */}
+                  {stageHasVat && stageVatRate > 0 ? (
+                    <div className="pt-2 border-t border-slate-200 grid grid-cols-3 gap-2 text-[11px]">
+                      <div className="bg-white p-2 rounded-lg border border-slate-200">
+                        <div className="text-slate-500 text-[10px]">Tiền trước thuế:</div>
+                        <div className="font-mono font-bold text-slate-800">
+                          {formatVND(Math.round(stageAmount / (1 + stageVatRate / 100)))}
+                        </div>
+                      </div>
+                      <div className="bg-white p-2 rounded-lg border border-slate-200">
+                        <div className="text-rose-600 text-[10px]">Tiền thuế VAT ({stageVatRate}%):</div>
+                        <div className="font-mono font-bold text-rose-600">
+                          {formatVND(stageAmount - Math.round(stageAmount / (1 + stageVatRate / 100)))}
+                        </div>
+                      </div>
+                      <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                        <div className="text-emerald-800 text-[10px] font-bold">Tổng thanh toán mốc:</div>
+                        <div className="font-mono font-black text-emerald-800">
+                          {formatVND(stageAmount)}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-slate-500 italic bg-white p-2 rounded-lg border border-slate-200">
+                      Mốc thanh toán không tính thuế VAT (hoặc chi phí nhân công / trọn gói đã miễn VAT 0%).
+                    </div>
+                  )}
                 </div>
               </div>
 

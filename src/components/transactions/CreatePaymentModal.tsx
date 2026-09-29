@@ -106,6 +106,8 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
   const [supplier, setSupplier] = useState<string>(currentPo?.supplier || '');
   const [receiverName, setReceiverName] = useState<string>(currentPo?.supplier || '');
   const [amount, setAmount] = useState<number>(poRemainingValue || 50000000);
+  const [hasVat, setHasVat] = useState<boolean>(true);
+  const [vatRate, setVatRate] = useState<number>(10);
   const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState<'transfer' | 'cash' | 'advance_fund'>('transfer');
   const [notes, setNotes] = useState<string>('');
@@ -296,9 +298,9 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
       createdByName: 'Trần Anh Minh',
       createdByRole: 'Chỉ Huy Trưởng',
       date: date,
-      amount: amount,
-      vatRate: 0,
-      vatAmount: 0,
+      amount: hasVat && vatRate > 0 ? Math.round(amount / (1 + vatRate / 100)) : amount,
+      vatRate: hasVat ? vatRate : 0,
+      vatAmount: hasVat && vatRate > 0 ? amount - Math.round(amount / (1 + vatRate / 100)) : 0,
       totalAmount: amount,
       priority: 'normal',
       status: 'paid',
@@ -779,45 +781,125 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
             />
           </div>
 
-          {/* Số tiền & Phương thức */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">
-                Số Tiền Chi Đợt Này (VNĐ) <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="number"
-                step="100000"
-                value={amount}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setAmount(val);
-                  setPoStageType('custom');
-                }}
-                required
-                className="w-full py-2 px-3 border border-rose-300 bg-rose-50/60 rounded-xl font-mono font-black text-rose-900 text-sm"
-              />
-              <div className="text-[10.5px] text-slate-400 mt-1 font-mono flex items-center justify-between">
-                <span>{formatVND(amount)}</span>
-                {sourceType === 'po' && poOriginalValue > 0 && (
-                  <span className="text-amber-800 font-bold font-mono">
-                    ~ {currentPercentage.toFixed(1)}% đơn hàng
-                  </span>
-                )}
+          {/* Số tiền & Phương thức & Tỷ lệ % */}
+          <div className="space-y-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-slate-700">
+                    Số Tiền Chi Đợt Này (VNĐ) <span className="text-rose-500">*</span>
+                  </label>
+                  {sourceType === 'po' && poOriginalValue > 0 && (
+                    <span className="text-[10.5px] text-amber-800 font-bold font-mono">
+                      ~ {currentPercentage.toFixed(1)}% đơn hàng
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  step="1000"
+                  value={amount || ''}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setAmount(val);
+                    setPoStageType('custom');
+                  }}
+                  required
+                  placeholder="Nhập số tiền..."
+                  className="w-full py-2 px-3 border border-rose-300 bg-rose-50/60 rounded-xl font-mono font-black text-rose-900 text-sm focus:ring-2 focus:ring-rose-500"
+                />
+                <div className="text-[11px] text-slate-500 mt-1 font-mono font-bold">
+                  = {formatVND(amount)}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Hình Thức Chi</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value as any)}
+                  className="w-full py-2 px-3 border border-slate-300 rounded-xl bg-white font-medium"
+                >
+                  <option value="transfer">Chuyển khoản công ty</option>
+                  <option value="cash">Tiền mặt thủ quỹ</option>
+                  <option value="advance_fund">Quỹ tạm ứng site</option>
+                </select>
               </div>
             </div>
 
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Hình Thức Chi</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full py-2 px-3 border border-slate-300 rounded-xl bg-white font-medium"
-              >
-                <option value="transfer">Chuyển khoản công ty</option>
-                <option value="cash">Tiền mặt thủ quỹ</option>
-                <option value="advance_fund">Quỹ tạm ứng site</option>
-              </select>
+            {/* Ô CÓ THUẾ VAT HAY KHÔNG */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={hasVat}
+                    onChange={(e) => setHasVat(e.target.checked)}
+                    className="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
+                  />
+                  <span className="font-bold text-slate-800 text-xs uppercase flex items-center gap-1.5">
+                    <span>Thuế VAT (Hóa đơn GTGT):</span>
+                    {hasVat ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">
+                        ✓ Có VAT
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold">
+                        ✕ Không có VAT (0%)
+                      </span>
+                    )}
+                  </span>
+                </label>
+
+                {hasVat && (
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                    <span className="text-[11px] font-semibold text-slate-600">Thuế suất:</span>
+                    <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5 shadow-2xs">
+                      {[10, 8, 5, 0].map((rate) => (
+                        <button
+                          key={rate}
+                          type="button"
+                          onClick={() => setVatRate(rate)}
+                          className={`px-2.5 py-0.5 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                            vatRate === rate
+                              ? 'bg-rose-700 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {rate}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {hasVat && vatRate > 0 ? (
+                <div className="pt-2 border-t border-slate-200 grid grid-cols-3 gap-2 text-[11px]">
+                  <div className="bg-white p-2 rounded-lg border border-slate-200">
+                    <div className="text-slate-500 text-[10px]">Tiền trước thuế:</div>
+                    <div className="font-mono font-bold text-slate-800">
+                      {formatVND(Math.round(amount / (1 + vatRate / 100)))}
+                    </div>
+                  </div>
+                  <div className="bg-white p-2 rounded-lg border border-slate-200">
+                    <div className="text-rose-600 text-[10px]">Tiền thuế VAT ({vatRate}%):</div>
+                    <div className="font-mono font-bold text-rose-600">
+                      {formatVND(amount - Math.round(amount / (1 + vatRate / 100)))}
+                    </div>
+                  </div>
+                  <div className="bg-rose-50 p-2 rounded-lg border border-rose-200">
+                    <div className="text-rose-800 text-[10px] font-bold">Tổng thanh toán:</div>
+                    <div className="font-mono font-black text-rose-900">
+                      {formatVND(amount)}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-[10.5px] text-slate-500 italic bg-white p-2 rounded-lg border border-slate-200">
+                  Khoản thanh toán không chịu thuế VAT (hoặc chi phí đã bao gồm thuế VAT).
+                </div>
+              )}
             </div>
           </div>
 

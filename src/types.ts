@@ -138,6 +138,10 @@ export interface ContractPaymentStage {
   title: string; // VD: "Tạm ứng hợp đồng (Đợt 1)", "Giao hàng đợt 1 (Đợt 2)", "Nghiệm thu quyết toán (Đợt 3)"
   percentage?: number; // % của hợp đồng (VD: 30%)
   amount: number; // Số tiền thanh toán (VNĐ)
+  hasVat?: boolean; // Có tính thuế VAT hay không
+  vatRate?: number; // Thuế suất VAT (0, 8, 10%)
+  vatAmount?: number; // Tiền thuế VAT
+  subtotalAmount?: number; // Tiền trước thuế VAT
   dueDate?: string; // Ngày dự kiến YYYY-MM-DD
   paidDate?: string; // Ngày đã thanh toán YYYY-MM-DD
   status: 'pending' | 'paid'; // 'pending' = Chưa thanh toán, 'paid' = Đã thanh toán
