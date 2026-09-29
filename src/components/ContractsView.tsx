@@ -1579,7 +1579,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                       type="number"
                       required
                       min={0}
-                      step="1000"
+                      step="any"
                       value={stageAmount || ''}
                       onChange={(e) => {
                         const valStr = e.target.value;

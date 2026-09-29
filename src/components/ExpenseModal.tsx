@@ -1291,7 +1291,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                   <input
                     type="number"
                     min="0"
-                    step="1000"
+                    step="any"
                     value={amount || ''}
                     onChange={(e) => setAmount(Number(e.target.value))}
                     placeholder="0"

@@ -410,7 +410,7 @@ export const CreateContractModal: React.FC<CreateContractModalProps> = ({
               </label>
               <input
                 type="number"
-                step="1000000"
+                step="any"
                 value={totalAmount}
                 onChange={(e) => handleTotalAmountChange(Number(e.target.value))}
                 required

@@ -797,7 +797,7 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
                 </div>
                 <input
                   type="number"
-                  step="1000"
+                  step="any"
                   value={amount || ''}
                   onChange={(e) => {
                     const val = Number(e.target.value);

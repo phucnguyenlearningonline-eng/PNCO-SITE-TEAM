@@ -180,7 +180,7 @@ export const CreateReceiptModal: React.FC<CreateReceiptModalProps> = ({
               </label>
               <input
                 type="number"
-                step="1000000"
+                step="any"
                 value={amount}
                 onChange={(e) => setAmount(Number(e.target.value))}
                 required
