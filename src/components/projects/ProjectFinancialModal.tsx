@@ -36,8 +36,13 @@ export const ProjectFinancialModal: React.FC<ProjectFinancialModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  // Lọc chi phí của dự án này
-  const projectExpenses = expenses.filter((e) => e.projectId === project.id);
+  // Lọc chi phí của dự án này (chỉ lấy các khoản chi thực tế, loại trừ phiếu thu revenue)
+  const projectExpenses = expenses.filter(
+    (e) =>
+      (e.projectId === project.id || e.projectId === project.code || (e.projectName && project.name && e.projectName.trim().toLowerCase() === project.name.trim().toLowerCase())) &&
+      e.type !== 'revenue' &&
+      e.status !== 'rejected'
+  );
 
   // Phân loại chi phí
   const laborExpenses = projectExpenses.filter((e) => 
@@ -46,11 +51,11 @@ export const ProjectFinancialModal: React.FC<ProjectFinancialModalProps> = ({
     (e.title && e.title.toLowerCase().includes('lương')) ||
     (e.title && e.title.toLowerCase().includes('thợ'))
   );
-  const materialExpenses = projectExpenses.filter((e) => e.category === 'material');
+  const materialExpenses = projectExpenses.filter((e) => e.category === 'material' && !laborExpenses.includes(e));
   const transportExpenses = projectExpenses.filter((e) => e.category === 'transport');
   const mealExpenses = projectExpenses.filter((e) => e.category === 'overtime_meal');
   const otherExpenses = projectExpenses.filter((e) => 
-    e.category === 'other' && !laborExpenses.includes(e)
+    !laborExpenses.includes(e) && !materialExpenses.includes(e) && !transportExpenses.includes(e) && !mealExpenses.includes(e)
   );
 
   const laborTotal = laborExpenses.reduce((sum, e) => sum + e.totalAmount, 0);
@@ -59,7 +64,7 @@ export const ProjectFinancialModal: React.FC<ProjectFinancialModalProps> = ({
   const mealTotal = mealExpenses.reduce((sum, e) => sum + e.totalAmount, 0);
   const otherTotal = otherExpenses.reduce((sum, e) => sum + e.totalAmount, 0);
 
-  const totalSpent = laborTotal + materialTotal + transportTotal + mealTotal + otherTotal;
+  const totalSpent = projectExpenses.reduce((sum, e) => sum + e.totalAmount, 0);
 
   // Thu từ CĐT
   const totalRevenue = project.totalRevenue || 0;

@@ -120,7 +120,16 @@ export default function App() {
         if (Array.isArray(parsed) && parsed.length > 0) {
           const existingIds = new Set(parsed.map((e: any) => e.id));
           const missing = INITIAL_EXPENSES.filter((ie) => !existingIds.has(ie.id));
-          return [...missing, ...parsed];
+          return [...parsed, ...missing].map((item) => {
+            if (item.id === 'exp-nc-02' || item.code === 'EXP-2026-NC02') {
+              return {
+                ...item,
+                projectId: 'prj-pnc-da01',
+                projectName: 'Thi Công Hệ Thống PCCC - Coherent Vsip 3',
+              };
+            }
+            return item;
+          });
         }
       } catch (e) { /* ignore */ }
     }
@@ -341,27 +350,44 @@ export default function App() {
         fetchMaterialsFromSupabase(),
       ]);
 
-      // If remote expenses exist (even empty array after deletions), sync it
+      // If remote expenses exist (even empty array after deletions), sync it without changing order
       if (remoteExpenses !== null) {
         setExpenses((prevLocal) => {
-          return remoteExpenses.map((remote) => {
-            const local = prevLocal.find(
-              (l) => l.id === remote.id || (remote.code && l.code.trim().toLowerCase() === remote.code.trim().toLowerCase())
-            );
-            return {
-              ...remote,
-              hasContract: remote.hasContract ?? local?.hasContract,
-              contractNumber: remote.contractNumber || local?.contractNumber,
-              contractDate: remote.contractDate || local?.contractDate,
-              contractAdvanceAmount: remote.contractAdvanceAmount ?? local?.contractAdvanceAmount,
-              contractAdvancePercentage: remote.contractAdvancePercentage ?? local?.contractAdvancePercentage,
-              contractPaymentStages:
-                remote.contractPaymentStages && remote.contractPaymentStages.length > 0
-                  ? remote.contractPaymentStages
-                  : local?.contractPaymentStages,
-              contractNotes: remote.contractNotes || local?.contractNotes,
-            };
+          if (!remoteExpenses || remoteExpenses.length === 0) return prevLocal;
+          const remoteById = new Map<string, ExpenseItem>();
+          const remoteByCode = new Map<string, ExpenseItem>();
+          remoteExpenses.forEach((r) => {
+            if (r.id) remoteById.set(r.id, r);
+            if (r.code) remoteByCode.set(r.code.trim().toLowerCase(), r);
           });
+
+          // Giữ nguyên thứ tự tuyệt đối của prevLocal khi cập nhật
+          const handledRemoteIds = new Set<string>();
+          const updatedLocal = prevLocal.map((local) => {
+            const remote = remoteById.get(local.id) || (local.code ? remoteByCode.get(local.code.trim().toLowerCase()) : undefined);
+            if (remote) {
+              handledRemoteIds.add(remote.id);
+              return {
+                ...remote,
+                contractFileUrl: remote.contractFileUrl || local.contractFileUrl,
+                hasContract: remote.hasContract ?? local.hasContract,
+                contractNumber: remote.contractNumber || local.contractNumber,
+                contractDate: remote.contractDate || local.contractDate,
+                contractAdvanceAmount: remote.contractAdvanceAmount ?? local.contractAdvanceAmount,
+                contractAdvancePercentage: remote.contractAdvancePercentage ?? local.contractAdvancePercentage,
+                contractPaymentStages:
+                  remote.contractPaymentStages && remote.contractPaymentStages.length > 0
+                    ? remote.contractPaymentStages
+                    : local.contractPaymentStages,
+                contractNotes: remote.contractNotes || local.contractNotes,
+              };
+            }
+            return local;
+          });
+
+          // Chỉ thêm các bản ghi hoàn toàn mới từ server xuống cuối mảng
+          const brandNewRemotes = remoteExpenses.filter((r) => !handledRemoteIds.has(r.id));
+          return [...updatedLocal, ...brandNewRemotes];
         });
       }
       if (remoteProjects && remoteProjects.length > 0) setProjects(remoteProjects);

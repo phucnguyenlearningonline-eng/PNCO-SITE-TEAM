@@ -28,6 +28,8 @@ interface CreatePaymentModalProps {
   projects: Project[];
   expenses: ExpenseItem[];
   preselectedPo?: ExpenseItem | null;
+  preselectedProjectId?: string;
+  initialData?: ExpenseItem | null;
   onSavePayment: (
     payment: ExpenseItem, 
     syncedPoId?: string,
@@ -43,6 +45,8 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
   projects,
   expenses,
   preselectedPo,
+  preselectedProjectId,
+  initialData,
   onSavePayment,
 }) => {
   if (!isOpen) return null;
@@ -64,12 +68,24 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
   }, [allOrders, expenses]);
 
   // 3 chế độ nguồn chi: 'po' (Từ đơn hàng) | 'labor_contract' (Hợp đồng nhân công) | 'other' (Tự nhập)
-  const [sourceType, setSourceType] = useState<PaymentSourceType>(
-    preselectedPo ? 'po' : payableOrders.length > 0 ? 'po' : 'other'
-  );
+  const defaultSourceType: PaymentSourceType = initialData
+    ? initialData.linkedPoId
+      ? 'po'
+      : initialData.category === 'labor_sub'
+      ? 'labor_contract'
+      : 'other'
+    : preselectedPo
+    ? 'po'
+    : payableOrders.length > 0
+    ? 'po'
+    : 'other';
+
+  const [sourceType, setSourceType] = useState<PaymentSourceType>(defaultSourceType);
 
   // States cho Ref PO
-  const [selectedPoId, setSelectedPoId] = useState<string>(preselectedPo?.id || payableOrders[0]?.id || '');
+  const [selectedPoId, setSelectedPoId] = useState<string>(
+    initialData?.linkedPoId || preselectedPo?.id || payableOrders[0]?.id || ''
+  );
 
   // Lấy chi tiết đơn hàng PO đang chọn
   const currentPo = useMemo(() => {
@@ -80,17 +96,17 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
   const poAlreadyPaid = useMemo(() => {
     if (!currentPo) return 0;
     const historyPaid = expenses
-      .filter((e) => e.linkedPoId === currentPo.id && e.status === 'paid')
+      .filter((e) => e.linkedPoId === currentPo.id && e.status === 'paid' && e.id !== initialData?.id)
       .reduce((sum, e) => sum + e.totalAmount, 0);
     return Math.max(currentPo.paidAmount || 0, historyPaid);
-  }, [currentPo, expenses]);
+  }, [currentPo, expenses, initialData]);
 
   const poOriginalValue = currentPo ? currentPo.totalAmount : 0;
   const poRemainingValue = Math.max(0, poOriginalValue - poAlreadyPaid);
 
   // Giai đoạn thanh toán cho PO: 'full' | 'stage_1' | 'stage_2' | 'stage_3' | 'custom'
   const [poStageType, setPoStageType] = useState<'full' | 'stage_1' | 'stage_2' | 'stage_3' | 'custom'>('full');
-  const [stageName, setStageName] = useState<string>('Tất toán toàn bộ đơn hàng');
+  const [stageName, setStageName] = useState<string>(initialData?.paymentStageTitle || 'Tất toán toàn bộ đơn hàng');
 
   // States cho Hợp đồng nhân công
   const [laborContractCode, setLaborContractCode] = useState<string>('HĐNC-01/COHERENT');
@@ -100,17 +116,17 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
   const [isCustomLaborContract, setIsCustomLaborContract] = useState<boolean>(false);
 
   // Form Fields Chung
-  const [projectId, setProjectId] = useState<string>(currentPo?.projectId || projects[0]?.id || '');
-  const [category, setCategory] = useState<ExpenseCategory>(currentPo?.category || 'material');
-  const [title, setTitle] = useState<string>('');
-  const [supplier, setSupplier] = useState<string>(currentPo?.supplier || '');
-  const [receiverName, setReceiverName] = useState<string>(currentPo?.supplier || '');
-  const [amount, setAmount] = useState<number>(poRemainingValue || 50000000);
-  const [hasVat, setHasVat] = useState<boolean>(true);
-  const [vatRate, setVatRate] = useState<number>(10);
-  const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [paymentMethod, setPaymentMethod] = useState<'transfer' | 'cash' | 'advance_fund'>('transfer');
-  const [notes, setNotes] = useState<string>('');
+  const [projectId, setProjectId] = useState<string>(initialData?.projectId || preselectedProjectId || currentPo?.projectId || projects[0]?.id || '');
+  const [category, setCategory] = useState<ExpenseCategory>(initialData?.category || currentPo?.category || 'material');
+  const [title, setTitle] = useState<string>(initialData?.title || '');
+  const [supplier, setSupplier] = useState<string>(initialData?.supplier || currentPo?.supplier || '');
+  const [receiverName, setReceiverName] = useState<string>(initialData?.receiverOrPayer || initialData?.supplier || currentPo?.supplier || '');
+  const [amount, setAmount] = useState<number>(initialData?.totalAmount || poRemainingValue || 50000000);
+  const [hasVat, setHasVat] = useState<boolean>(initialData ? Boolean(initialData.vatRate && initialData.vatRate > 0) : true);
+  const [vatRate, setVatRate] = useState<number>(initialData?.vatRate ?? 10);
+  const [date, setDate] = useState<string>(initialData?.date || (() => new Date().toISOString().split('T')[0]));
+  const [paymentMethod, setPaymentMethod] = useState<'transfer' | 'cash' | 'advance_fund'>(initialData?.paymentMethod || 'transfer');
+  const [notes, setNotes] = useState<string>(initialData?.notes || '');
 
   // Hàm cập nhật số tiền và nội dung khi chọn đợt thanh toán PO
   const applyPoPaymentStage = (
@@ -171,6 +187,9 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
 
   // Khởi tạo khi mở modal với preselectedPo hoặc khi mount
   useEffect(() => {
+    // Nếu đang chỉnh sửa phiếu chi đã có (initialData), KHÔNG được ghi đè thông tin
+    if (initialData) return;
+
     if (preselectedPo) {
       setSourceType('po');
       setSelectedPoId(preselectedPo.id);
@@ -284,8 +303,9 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
     }
 
     const paymentItem: ExpenseItem = {
-      id: `pay-${Date.now()}`,
-      code: `PC-${new Date().getFullYear()}-${String(Math.floor(100 + Math.random() * 900))}`,
+      ...initialData,
+      id: initialData?.id || `pay-${Date.now()}`,
+      code: initialData?.code || `PC-${new Date().getFullYear()}-${String(Math.floor(100 + Math.random() * 900))}`,
       type: 'expense',
       category: category,
       title: title.trim(),
@@ -294,16 +314,16 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
       projectName: selectedProj?.name || '',
       supplier: supplier.trim() || (sourceType === 'labor_contract' ? laborTeamName : 'Đối tác / Nhà cung cấp'),
       receiverOrPayer: receiverName.trim() || supplier.trim(),
-      createdById: 'u-1',
-      createdByName: 'Trần Anh Minh',
-      createdByRole: 'Chỉ Huy Trưởng',
+      createdById: initialData?.createdById || 'u-1',
+      createdByName: initialData?.createdByName || 'Trần Anh Minh',
+      createdByRole: initialData?.createdByRole || 'Chỉ Huy Trưởng',
       date: date,
       amount: hasVat && vatRate > 0 ? Math.round(amount / (1 + vatRate / 100)) : amount,
       vatRate: hasVat ? vatRate : 0,
       vatAmount: hasVat && vatRate > 0 ? amount - Math.round(amount / (1 + vatRate / 100)) : 0,
       totalAmount: amount,
-      priority: 'normal',
-      status: 'paid',
+      priority: initialData?.priority || 'normal',
+      status: initialData?.status || 'paid',
       paymentMethod: paymentMethod,
       notes: notes.trim(),
       linkedPoId: matchedPo?.id,
@@ -330,8 +350,12 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
               <CreditCard className="w-5 h-5" />
             </span>
             <div>
-              <h3 className="font-bold text-base">Lập Phiếu Chi Tiền Dự Án</h3>
-              <p className="text-xs text-rose-200">Ref từ đơn hàng PO (link giá trị, đợt 1, đợt 2), HĐ nhân công hoặc chi tự do</p>
+              <h3 className="font-bold text-base">
+                {initialData ? 'Cập Nhật Phiếu Chi Tiền' : 'Lập Phiếu Chi Tiền Dự Án'}
+              </h3>
+              <p className="text-xs text-rose-200">
+                {initialData ? `Mã phiếu: ${initialData.code}` : 'Ref từ đơn hàng PO (link giá trị, đợt 1, đợt 2), HĐ nhân công hoặc chi tự do'}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="text-rose-200 hover:text-white p-1 rounded-lg">

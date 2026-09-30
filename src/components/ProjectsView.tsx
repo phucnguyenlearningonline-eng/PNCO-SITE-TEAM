@@ -183,14 +183,20 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
   // Helper tính toán tài chính chi tiết của từng dự án
   const getProjectFinances = (p: Project) => {
-    const prjExpenses = expenses.filter((e) => e.projectId === p.id);
+    // Chỉ lấy các khoản CHI CỦA DỰ ÁN (loại trừ phiếu thu revenue và các khoản bị từ chối)
+    const prjExpenses = expenses.filter(
+      (e) =>
+        (e.projectId === p.id || e.projectId === p.code || (e.projectName && p.name && e.projectName.trim().toLowerCase() === p.name.trim().toLowerCase())) &&
+        e.type !== 'revenue' &&
+        e.status !== 'rejected'
+    );
 
     const labor = prjExpenses
       .filter((e) => e.category === 'labor_sub' || (e.title && /nhân công|lương|thợ/i.test(e.title)))
       .reduce((sum, e) => sum + e.totalAmount, 0);
 
     const material = prjExpenses
-      .filter((e) => e.category === 'material')
+      .filter((e) => e.category === 'material' && !(e.title && /nhân công|lương|thợ/i.test(e.title)))
       .reduce((sum, e) => sum + e.totalAmount, 0);
 
     const transport = prjExpenses
@@ -201,7 +207,9 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       .filter((e) => e.category === 'overtime_meal' || (e.category === 'other' && !/nhân công|lương|thợ/i.test(e.title)))
       .reduce((sum, e) => sum + e.totalAmount, 0);
 
-    const totalSpent = labor + material + transport + mealAndOther;
+    // Tổng chi phí thực tế = tổng tất cả các khoản chi của dự án
+    const totalSpent = prjExpenses.reduce((sum, e) => sum + e.totalAmount, 0);
+    const expensesCount = prjExpenses.length;
 
     const addendums = p.addendums || [];
     const addendumTotal = addendums.reduce((sum, item) => sum + (item.totalAmount || 0), 0);
@@ -220,6 +228,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
     return {
       totalSpent,
+      expensesCount,
       labor,
       material,
       transport,

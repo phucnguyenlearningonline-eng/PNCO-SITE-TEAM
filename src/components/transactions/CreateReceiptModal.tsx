@@ -8,6 +8,7 @@ interface CreateReceiptModalProps {
   onClose: () => void;
   projects: Project[];
   preselectedProjectId?: string;
+  initialData?: ExpenseItem | null;
   onSaveReceipt: (item: ExpenseItem) => void;
 }
 
@@ -16,22 +17,24 @@ export const CreateReceiptModal: React.FC<CreateReceiptModalProps> = ({
   onClose,
   projects,
   preselectedProjectId,
+  initialData,
   onSaveReceipt,
 }) => {
   if (!isOpen) return null;
 
-  const initialProject = projects.find((p) => p.id === preselectedProjectId) || projects[0];
+  const targetProjectId = initialData?.projectId || preselectedProjectId;
+  const initialProject = projects.find((p) => p.id === targetProjectId || p.code === targetProjectId) || projects[0];
 
-  const [projectId, setProjectId] = useState<string>(initialProject?.id || '');
-  const [amount, setAmount] = useState<number>(200000000);
-  const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [projectId, setProjectId] = useState<string>(initialData?.projectId || initialProject?.id || '');
+  const [amount, setAmount] = useState<number>(initialData?.totalAmount || 200000000);
+  const [date, setDate] = useState<string>(initialData?.date || (() => new Date().toISOString().split('T')[0]));
   const [stageType, setStageType] = useState<string>('advance');
-  const [title, setTitle] = useState<string>('Thu tiền tạm ứng đợt 1 từ Chủ Đầu Tư');
-  const [payerName, setPayerName] = useState<string>(initialProject?.client || '');
-  const [paymentMethod, setPaymentMethod] = useState<'transfer' | 'cash'>('transfer');
-  const [notes, setNotes] = useState<string>('');
+  const [title, setTitle] = useState<string>(initialData?.title || 'Thu tiền tạm ứng đợt 1 từ Chủ Đầu Tư');
+  const [payerName, setPayerName] = useState<string>(initialData?.receiverOrPayer || initialData?.supplier || initialProject?.client || '');
+  const [paymentMethod, setPaymentMethod] = useState<'transfer' | 'cash'>(initialData?.paymentMethod === 'cash' ? 'cash' : 'transfer');
+  const [notes, setNotes] = useState<string>(initialData?.notes || '');
 
-  const selectedProj = projects.find((p) => p.id === projectId);
+  const selectedProj = projects.find((p) => p.id === projectId || p.code === projectId) || initialProject;
 
   const handleProjectChange = (id: string) => {
     setProjectId(id);
@@ -59,26 +62,27 @@ export const CreateReceiptModal: React.FC<CreateReceiptModalProps> = ({
     if (!selectedProj || amount <= 0) return;
 
     const receiptItem: ExpenseItem = {
-      id: `rcp-${Date.now()}`,
-      code: `PT-${new Date().getFullYear()}-${String(Math.floor(100 + Math.random() * 900))}`,
+      ...initialData,
+      id: initialData?.id || `rcp-${Date.now()}`,
+      code: initialData?.code || `PT-${new Date().getFullYear()}-${String(Math.floor(100 + Math.random() * 900))}`,
       type: 'revenue',
       category: 'other',
       title: title.trim(),
-      subDescription: `Thu tiền dự án: ${selectedProj.name} (${selectedProj.code})`,
+      subDescription: initialData?.subDescription || `Thu tiền dự án: ${selectedProj.name} (${selectedProj.code})`,
       projectId: selectedProj.id,
       projectName: selectedProj.name,
       supplier: payerName.trim() || selectedProj.client,
       receiverOrPayer: payerName.trim() || selectedProj.client,
-      createdById: 'u-1',
-      createdByName: 'Trần Anh Minh',
-      createdByRole: 'Chỉ Huy Trưởng',
+      createdById: initialData?.createdById || 'u-1',
+      createdByName: initialData?.createdByName || 'Trần Anh Minh',
+      createdByRole: initialData?.createdByRole || 'Chỉ Huy Trưởng',
       date: date,
       amount: amount,
       vatRate: 0,
       vatAmount: 0,
       totalAmount: amount,
-      priority: 'normal',
-      status: 'paid',
+      priority: initialData?.priority || 'normal',
+      status: initialData?.status || 'paid',
       paymentMethod: paymentMethod,
       notes: notes.trim(),
     };
@@ -97,8 +101,12 @@ export const CreateReceiptModal: React.FC<CreateReceiptModalProps> = ({
               <DollarSign className="w-5 h-5" />
             </span>
             <div>
-              <h3 className="font-bold text-base">Lập Phiếu Thu Tiền Dự Án</h3>
-              <p className="text-xs text-emerald-200">Ghi nhận dòng tiền thu từ Chủ Đầu Tư &amp; Khách Hàng</p>
+              <h3 className="font-bold text-base">
+                {initialData ? 'Cập Nhật Phiếu Thu Tiền' : 'Lập Phiếu Thu Tiền Dự Án'}
+              </h3>
+              <p className="text-xs text-emerald-200">
+                {initialData ? `Mã phiếu: ${initialData.code}` : 'Ghi nhận dòng tiền thu từ Chủ Đầu Tư & Khách Hàng'}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="text-emerald-200 hover:text-white p-1 rounded-lg">
@@ -237,9 +245,10 @@ export const CreateReceiptModal: React.FC<CreateReceiptModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold shadow-xs cursor-pointer"
+              className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
             >
-              Lưu &amp; Ghi Sổ Thu Tiền
+              <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+              <span>{initialData ? 'Cập Nhật Phiếu Thu' : 'Lưu & Ghi Sổ Thu Tiền'}</span>
             </button>
           </div>
         </form>

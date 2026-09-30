@@ -21,13 +21,18 @@ import {
   PieChart,
   BarChart3,
   Calendar,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Trash2,
+  Edit3,
+  Printer,
+  Eye
 } from 'lucide-react';
 import { Project, ExpenseItem, ExpenseCategory } from '../types';
 import { formatVND, formatDateVN, formatTy } from '../utils/formatters';
 import { CreateReceiptModal } from './transactions/CreateReceiptModal';
 import { CreatePaymentModal } from './transactions/CreatePaymentModal';
 import { PendingPayablesTable } from './transactions/PendingPayablesTable';
+import { PrintVoucherModal } from './transactions/PrintVoucherModal';
 
 interface TransactionsViewProps {
   projects: Project[];
@@ -55,8 +60,21 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   // Modals
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [editingReceipt, setEditingReceipt] = useState<ExpenseItem | null>(null);
+  const [editingPayment, setEditingPayment] = useState<ExpenseItem | null>(null);
+  const [viewingVoucher, setViewingVoucher] = useState<ExpenseItem | null>(null);
+  const [deletingVoucher, setDeletingVoucher] = useState<ExpenseItem | null>(null);
+
   const [preselectedPoForPayment, setPreselectedPoForPayment] = useState<ExpenseItem | null>(null);
   const [preselectedProjForAction, setPreselectedProjForAction] = useState<string | undefined>(undefined);
+
+  // Helper khớp nối khoản chi với dự án chính xác (ID, Code hoặc Tên dự án)
+  const isMatchProject = (e: ExpenseItem, p: Project) => {
+    if (!e || !p) return false;
+    if (e.projectId === p.id || e.projectId === p.code) return true;
+    if (e.projectName && p.name && e.projectName.trim().toLowerCase() === p.name.trim().toLowerCase()) return true;
+    return false;
+  };
 
   // Đơn hàng PO chưa thanh toán hoặc còn nợ (Dự chi)
   const pendingOrders = useMemo(() => {
@@ -64,10 +82,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       const isOrder = e.type === 'po' || e.type === 'expense';
       if (!isOrder) return false;
       const paid = e.paidAmount || expenses
-        .filter((exp) => exp.linkedPoId === e.id && exp.status === 'paid')
+        .filter((exp) => exp.linkedPoId === e.id && (exp.status === 'paid' || exp.code.startsWith('PC-')))
         .reduce((sum, exp) => sum + exp.totalAmount, 0);
       const rem = e.totalAmount - paid;
-      return e.status !== 'paid' || rem > 0;
+      return (e.status !== 'paid' && !e.code.startsWith('PC-')) || rem > 0;
     });
   }, [expenses]);
 
@@ -76,8 +94,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     return expenses.filter((e) => {
       // Thu tiền từ CĐT
       const isRevenue = e.type === 'revenue';
-      // Chi tiền thực tế đã chi
-      const isPaidExpense = e.status === 'paid' && (e.type === 'expense' || e.type === 'po' || e.type === 'advance');
+      // Chi tiền thực tế: Đã chi hoặc có mã PC- (phiếu chi kế toán)
+      const isPaidExpense = (e.status === 'paid' || e.code.startsWith('PC-')) && (e.type === 'expense' || e.type === 'po' || e.type === 'advance');
       return isRevenue || isPaidExpense;
     });
   }, [expenses]);
@@ -87,7 +105,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     return projects.map((p) => {
       // 1. Thu tiền CĐT của dự án này
       const prjRevenues = expenses.filter(
-        (e) => e.projectId === p.id && e.type === 'revenue' && e.status === 'paid'
+        (e) => isMatchProject(e, p) && e.type === 'revenue' && (e.status === 'paid' || e.code.startsWith('PT-'))
       );
       const totalRevenueFromItems = prjRevenues.reduce((sum, item) => sum + item.totalAmount, 0);
       // Kết hợp cả currentAdvance của dự án nếu lớn hơn
@@ -95,23 +113,23 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
       // 2. Chi phí đã chi thực tế
       const prjPaidExpenses = expenses.filter(
-        (e) => e.projectId === p.id && e.type !== 'revenue' && e.status === 'paid'
+        (e) => isMatchProject(e, p) && e.type !== 'revenue' && (e.status === 'paid' || e.code.startsWith('PC-'))
       );
       const totalPaidExpenses = prjPaidExpenses.reduce((sum, item) => sum + item.totalAmount, 0);
 
       // 3. Dự chi từ đơn hàng PO chưa thanh toán (tính theo số tiền còn nợ sau các đợt đã chi)
       const prjPendingOrders = expenses.filter((e) => {
-        const isOrder = (e.type === 'po' || e.type === 'expense') && e.projectId === p.id;
+        const isOrder = (e.type === 'po' || e.type === 'expense') && isMatchProject(e, p);
         if (!isOrder) return false;
         const paid = e.paidAmount || expenses
-          .filter((exp) => exp.linkedPoId === e.id && exp.status === 'paid')
+          .filter((exp) => exp.linkedPoId === e.id && (exp.status === 'paid' || exp.code.startsWith('PC-')))
           .reduce((sum, exp) => sum + exp.totalAmount, 0);
         const rem = e.totalAmount - paid;
-        return e.status !== 'paid' || rem > 0;
+        return (e.status !== 'paid' && !e.code.startsWith('PC-')) || rem > 0;
       });
       const totalPendingOrdersAmount = prjPendingOrders.reduce((sum, item) => {
         const paid = item.paidAmount || expenses
-          .filter((exp) => exp.linkedPoId === item.id && exp.status === 'paid')
+          .filter((exp) => exp.linkedPoId === item.id && (exp.status === 'paid' || exp.code.startsWith('PC-')))
           .reduce((s, exp) => s + exp.totalAmount, 0);
         return sum + Math.max(0, item.totalAmount - paid);
       }, 0);
@@ -153,7 +171,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   // Lọc danh sách dự án hiển thị
   const filteredProjectBalances = useMemo(() => {
     return projectBalances.filter((item) => {
-      if (selectedProjectId !== 'all' && item.project.id !== selectedProjectId) return false;
+      if (selectedProjectId !== 'all' && item.project.id !== selectedProjectId && item.project.code !== selectedProjectId) return false;
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
         const matchName = item.project.name.toLowerCase().includes(q);
@@ -165,20 +183,26 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     });
   }, [projectBalances, selectedProjectId, searchTerm]);
 
-  // Tổng cộng toàn công ty
-  const companyTotals = useMemo(() => {
+  // Tổng cộng theo phạm vi lọc (Nếu chọn 1 dự án thì hiển thị chuẩn theo dự án đó; nếu chọn tất cả thì tổng toàn công ty)
+  const currentScopeTotals = useMemo(() => {
     let totalContract = 0;
     let totalIncome = 0;
     let totalExpense = 0;
     let totalPending = 0;
-    let totalTransactions = 0;
+    let revenuesCount = 0;
+    let expensesCount = 0;
 
-    projectBalances.forEach((item) => {
+    const listToSum = selectedProjectId === 'all' 
+      ? filteredProjectBalances 
+      : filteredProjectBalances.filter((item) => item.project.id === selectedProjectId || item.project.code === selectedProjectId);
+
+    listToSum.forEach((item) => {
       totalContract += item.contractValue;
       totalIncome += item.totalIncome;
       totalExpense += item.totalPaidExpenses;
       totalPending += item.totalPendingOrdersAmount;
-      totalTransactions += item.revenuesCount + item.expensesCount;
+      revenuesCount += item.revenuesCount;
+      expensesCount += item.expensesCount;
     });
 
     const netCashflow = totalIncome - totalExpense;
@@ -191,14 +215,22 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       totalPending,
       netCashflow,
       profitMargin,
-      totalTransactions,
+      revenuesCount,
+      expensesCount,
     };
-  }, [projectBalances]);
+  }, [filteredProjectBalances, selectedProjectId]);
 
-  // Lọc nhật ký giao dịch
+  // Lọc nhật ký giao dịch (Giữ nguyên thứ tự gốc, không tự ý xáo trộn)
   const filteredTransactions = useMemo(() => {
     return transactionItems.filter((item) => {
-      if (selectedProjectId !== 'all' && item.projectId !== selectedProjectId) return false;
+      if (selectedProjectId !== 'all') {
+        const selectedPrj = projects.find((p) => p.id === selectedProjectId || p.code === selectedProjectId);
+        if (selectedPrj) {
+          if (!isMatchProject(item, selectedPrj)) return false;
+        } else if (item.projectId !== selectedProjectId) {
+          return false;
+        }
+      }
       if (ledgerTypeFilter === 'revenue' && item.type !== 'revenue') return false;
       if (ledgerTypeFilter === 'expense' && item.type === 'revenue') return false;
       if (searchTerm.trim()) {
@@ -210,8 +242,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         if (!matchCode && !matchTitle && !matchPrj && !matchSup) return false;
       }
       return true;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [transactionItems, selectedProjectId, ledgerTypeFilter, searchTerm]);
+    });
+  }, [transactionItems, selectedProjectId, projects, ledgerTypeFilter, searchTerm]);
 
   // Xử lý lưu phiếu thu
   const handleSaveReceipt = (receipt: ExpenseItem) => {
@@ -382,16 +414,23 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         {/* Thẻ 1: Tổng thu nhập dự án */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 text-xs uppercase font-bold tracking-wider mb-1">
-            <span>TỔNG THU NHẬP DỰ ÁN</span>
-            <span className="p-1 rounded-lg bg-emerald-50 text-emerald-600"><TrendingUp className="w-4 h-4" /></span>
+            <span className="flex items-center gap-1.5 truncate">
+              <span>TỔNG THU NHẬP DỰ ÁN</span>
+              {selectedProjectId !== 'all' && (
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 font-mono font-bold shrink-0">
+                  {projects.find((p) => p.id === selectedProjectId || p.code === selectedProjectId)?.code}
+                </span>
+              )}
+            </span>
+            <span className="p-1 rounded-lg bg-emerald-50 text-emerald-600 shrink-0"><TrendingUp className="w-4 h-4" /></span>
           </div>
           <div className="text-xl sm:text-2xl font-black font-mono text-emerald-800 mt-1">
-            {formatVND(companyTotals.totalIncome)}
+            {formatVND(currentScopeTotals.totalIncome)}
           </div>
           <div className="text-[11px] text-slate-500 mt-2 flex items-center justify-between">
-            <span>Đã thu từ CĐT &amp; nghiệm thu</span>
+            <span>Đã thu từ CĐT &amp; tạm ứng</span>
             <span className="font-semibold text-slate-700 font-mono">
-              {filteredTransactions.filter((t) => t.type === 'revenue').length} phiếu thu
+              {currentScopeTotals.revenuesCount} phiếu thu
             </span>
           </div>
         </div>
@@ -399,16 +438,23 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         {/* Thẻ 2: Tổng chi phí dự án */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 text-xs uppercase font-bold tracking-wider mb-1">
-            <span>TỔNG CHI PHÍ DỰ ÁN</span>
-            <span className="p-1 rounded-lg bg-rose-50 text-rose-600"><TrendingDown className="w-4 h-4" /></span>
+            <span className="flex items-center gap-1.5 truncate">
+              <span>TỔNG CHI PHÍ DỰ ÁN</span>
+              {selectedProjectId !== 'all' && (
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 font-mono font-bold shrink-0">
+                  {projects.find((p) => p.id === selectedProjectId || p.code === selectedProjectId)?.code}
+                </span>
+              )}
+            </span>
+            <span className="p-1 rounded-lg bg-rose-50 text-rose-600 shrink-0"><TrendingDown className="w-4 h-4" /></span>
           </div>
           <div className="text-xl sm:text-2xl font-black font-mono text-rose-700 mt-1">
-            {formatVND(companyTotals.totalExpense)}
+            {formatVND(currentScopeTotals.totalExpense)}
           </div>
           <div className="text-[11px] text-slate-500 mt-2 flex items-center justify-between">
             <span>Vật tư + Thầu phụ + Nhân công</span>
             <span className="font-semibold text-slate-700 font-mono">
-              {filteredTransactions.filter((t) => t.type !== 'revenue').length} phiếu chi
+              {currentScopeTotals.expensesCount} phiếu chi
             </span>
           </div>
         </div>
@@ -419,12 +465,12 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <span>DÒNG TIỀN RÒNG (THU - CHI)</span>
             <span className="p-1 rounded-lg bg-sky-50 text-sky-600"><CreditCard className="w-4 h-4" /></span>
           </div>
-          <div className={`text-xl sm:text-2xl font-black font-mono mt-1 ${companyTotals.netCashflow >= 0 ? 'text-sky-900' : 'text-rose-700'}`}>
-            {companyTotals.netCashflow >= 0 ? '+' : ''}{formatVND(companyTotals.netCashflow)}
+          <div className={`text-xl sm:text-2xl font-black font-mono mt-1 ${currentScopeTotals.netCashflow >= 0 ? 'text-sky-900' : 'text-rose-700'}`}>
+            {currentScopeTotals.netCashflow >= 0 ? '+' : ''}{formatVND(currentScopeTotals.netCashflow)}
           </div>
           <div className="text-[11px] text-slate-500 mt-2 flex items-center justify-between">
             <span>Chênh lệch Thu thuần - Chi phí</span>
-            <span className="font-bold text-emerald-700">Biên LN: {companyTotals.profitMargin.toFixed(1)}%</span>
+            <span className="font-bold text-emerald-700">Biên LN: {currentScopeTotals.profitMargin.toFixed(1)}%</span>
           </div>
         </div>
 
@@ -435,7 +481,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <span className="p-1 rounded-lg bg-amber-50 text-amber-600"><Clock className="w-4 h-4" /></span>
           </div>
           <div className="text-xl sm:text-2xl font-black font-mono text-amber-700 mt-1">
-            {formatVND(companyTotals.totalPending)}
+            {formatVND(currentScopeTotals.totalPending)}
           </div>
           <div className="text-[11px] text-slate-500 mt-2 flex items-center justify-between">
             <span>{pendingOrders.length} đơn PO chưa thanh toán</span>
@@ -688,6 +734,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                             <button
                               type="button"
                               onClick={() => {
+                                setPreselectedProjForAction(item.project.id);
                                 setPreselectedPoForPayment(null);
                                 setIsPaymentModalOpen(true);
                               }}
@@ -704,29 +751,29 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   })}
                 </tbody>
 
-                {/* HÀNG TỔNG CỘNG TOÀN CÔNG TY */}
+                {/* HÀNG TỔNG CỘNG THEO PHẠM VI (TOÀN CÔNG TY HOẶC DỰ ÁN ĐANG CHỌN) */}
                 <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-300 text-xs">
                   <tr>
                     <td colSpan={2} className="py-3.5 px-4 text-center font-black uppercase text-slate-900">
-                      TỔNG CỘNG TOÀN CÔNG TY:
+                      {selectedProjectId === 'all' ? 'TỔNG CỘNG TOÀN CÔNG TY:' : `TỔNG CỘNG ${projects.find(p => p.id === selectedProjectId || p.code === selectedProjectId)?.code || 'DỰ ÁN'}:`}
                     </td>
                     <td className="py-3.5 px-3 text-right font-mono font-black text-slate-900">
-                      {formatVND(companyTotals.totalContract)}
+                      {formatVND(currentScopeTotals.totalContract)}
                     </td>
                     <td className="py-3.5 px-3 text-right font-mono font-black text-emerald-800 bg-emerald-100/50">
-                      +{formatVND(companyTotals.totalIncome)}
+                      +{formatVND(currentScopeTotals.totalIncome)}
                     </td>
                     <td className="py-3.5 px-3 text-right font-mono font-black text-rose-700 bg-rose-100/50">
-                      -{formatVND(companyTotals.totalExpense)}
+                      -{formatVND(currentScopeTotals.totalExpense)}
                     </td>
                     <td className="py-3.5 px-3 text-right font-mono font-black text-sky-950">
-                      {companyTotals.netCashflow >= 0 ? '+' : ''}{formatVND(companyTotals.netCashflow)}
+                      {currentScopeTotals.netCashflow >= 0 ? '+' : ''}{formatVND(currentScopeTotals.netCashflow)}
                     </td>
                     <td className="py-3.5 px-3 text-center font-mono font-black text-emerald-700">
-                      {companyTotals.profitMargin.toFixed(1)}%
+                      {currentScopeTotals.profitMargin.toFixed(1)}%
                     </td>
                     <td colSpan={2} className="py-3.5 px-3 text-center text-slate-500 font-semibold text-[11px]">
-                      {companyTotals.totalTransactions} giao dịch được ghi nhận
+                      {currentScopeTotals.revenuesCount + currentScopeTotals.expensesCount} giao dịch được ghi nhận
                     </td>
                   </tr>
                 </tfoot>
@@ -735,7 +782,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           </div>
 
           {/* Dòng Thống Kê Phân Tích Dự Chi Cần Chuẩn Bị Vốn */}
-          {companyTotals.totalPending > 0 && (
+          {currentScopeTotals.totalPending > 0 && (
             <div className="bg-amber-50/80 p-4 rounded-2xl border border-amber-300 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2.5">
                 <span className="p-2 rounded-xl bg-amber-500 text-white shrink-0">
@@ -743,12 +790,12 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 </span>
                 <div>
                   <div className="font-black text-amber-950 text-sm">
-                    Kế Hoạch Dòng Tiền &amp; Nhu Cầu Dự Chi: {formatVND(companyTotals.totalPending)}
+                    Kế Hoạch Dòng Tiền &amp; Nhu Cầu Dự Chi: {formatVND(currentScopeTotals.totalPending)}
                   </div>
                   <p className="text-slate-600 mt-0.5 text-[11px]">
                     Hiện có <strong>{pendingOrders.length}</strong> đơn hàng PO chưa thanh toán. Dòng tiền ròng thực tế sau khi tất toán toàn bộ PO dự kiến là:{' '}
                     <strong className="text-sky-950 font-mono font-black">
-                      {formatVND(companyTotals.netCashflow - companyTotals.totalPending)}
+                      {formatVND(currentScopeTotals.netCashflow - currentScopeTotals.totalPending)}
                     </strong>.
                   </p>
                 </div>
@@ -831,12 +878,13 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   <th className="py-2.5 px-3 text-right w-32">Số Tiền (VNĐ)</th>
                   <th className="py-2.5 px-3 text-center w-24">Ngày Ghi Sổ</th>
                   <th className="py-2.5 px-3 text-center w-28">Hình Thức</th>
+                  <th className="py-2.5 px-3 text-center w-36">Thao Tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-10 text-center text-slate-400">
+                    <td colSpan={10} className="py-10 text-center text-slate-400">
                       Không tìm thấy giao dịch nào phù hợp với điều kiện tìm kiếm.
                     </td>
                   </tr>
@@ -901,6 +949,49 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                           <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
                             {tx.paymentMethod === 'transfer' ? 'Chuyển khoản' : tx.paymentMethod === 'cash' ? 'Tiền mặt' : 'Tạm ứng'}
                           </span>
+                        </td>
+
+                        {/* Thao tác: In phiếu, Sửa, Xóa */}
+                        <td className="py-2.5 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            {/* In Phiếu Chuẩn Bộ Tài Chính */}
+                            <button
+                              type="button"
+                              onClick={() => setViewingVoucher(tx)}
+                              className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer"
+                              title={`In / Xem ${isRev ? 'Phiếu Thu' : 'Phiếu Chi'} (${tx.code})`}
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Sửa Phiếu */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isRev) {
+                                  setEditingReceipt(tx);
+                                } else {
+                                  setEditingPayment(tx);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-100 transition-colors cursor-pointer"
+                              title={`Chỉnh sửa ${isRev ? 'phiếu thu' : 'phiếu chi'} (${tx.code})`}
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Xóa Phiếu */}
+                            {onDeleteExpense && (
+                              <button
+                                type="button"
+                                onClick={() => setDeletingVoucher(tx)}
+                                className="p-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer"
+                                title={`Xóa ${isRev ? 'phiếu thu' : 'phiếu chi'} (${tx.code})`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -981,30 +1072,122 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       )}
 
       {/* ============================================================== */}
-      {/* 8. MODALS LẬP PHIẾU THU & LẬP PHIẾU CHI                         */}
+      {/* 8. MODALS LẬP / SỬA PHIẾU THU & PHIẾU CHI                      */}
       {/* ============================================================== */}
-      {isReceiptModalOpen && (
+      {(isReceiptModalOpen || editingReceipt) && (
         <CreateReceiptModal
-          isOpen={isReceiptModalOpen}
-          onClose={() => setIsReceiptModalOpen(false)}
+          isOpen={Boolean(isReceiptModalOpen || editingReceipt)}
+          onClose={() => {
+            setIsReceiptModalOpen(false);
+            setEditingReceipt(null);
+            setPreselectedProjForAction(undefined);
+          }}
           projects={projects}
           preselectedProjectId={preselectedProjForAction}
-          onSaveReceipt={handleSaveReceipt}
+          initialData={editingReceipt}
+          onSaveReceipt={(saved) => {
+            handleSaveReceipt(saved);
+            setEditingReceipt(null);
+            setIsReceiptModalOpen(false);
+          }}
         />
       )}
 
-      {isPaymentModalOpen && (
+      {(isPaymentModalOpen || editingPayment) && (
         <CreatePaymentModal
-          isOpen={isPaymentModalOpen}
+          isOpen={Boolean(isPaymentModalOpen || editingPayment)}
           onClose={() => {
             setIsPaymentModalOpen(false);
+            setEditingPayment(null);
             setPreselectedPoForPayment(null);
+            setPreselectedProjForAction(undefined);
           }}
           projects={projects}
           expenses={expenses}
           preselectedPo={preselectedPoForPayment}
-          onSavePayment={handleSavePayment}
+          preselectedProjectId={preselectedProjForAction}
+          initialData={editingPayment}
+          onSavePayment={(saved, syncedPoId, stageDetails) => {
+            handleSavePayment(saved, syncedPoId, stageDetails);
+            setEditingPayment(null);
+            setIsPaymentModalOpen(false);
+          }}
         />
+      )}
+
+      {/* ============================================================== */}
+      {/* 9. MODAL IN PHIẾU THU / CHI CHUẨN KẾ TOÁN (BỘ TÀI CHÍNH)       */}
+      {/* ============================================================== */}
+      {viewingVoucher && (
+        <PrintVoucherModal
+          voucher={viewingVoucher}
+          project={projects.find((p) => isMatchProject(viewingVoucher, p))}
+          isOpen={Boolean(viewingVoucher)}
+          onClose={() => setViewingVoucher(null)}
+          onEdit={(v) => {
+            setViewingVoucher(null);
+            if (v.type === 'revenue') {
+              setEditingReceipt(v);
+            } else {
+              setEditingPayment(v);
+            }
+          }}
+        />
+      )}
+
+      {/* ============================================================== */}
+      {/* 10. MODAL XÁC NHẬN XÓA PHIẾU THU / CHI                          */}
+      {/* ============================================================== */}
+      {deletingVoucher && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/75 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden p-6 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <span className="p-2.5 rounded-xl bg-rose-100 text-rose-700">
+                <Trash2 className="w-6 h-6" />
+              </span>
+              <div>
+                <h3 className="font-bold text-base text-slate-900">
+                  Xác Nhận Xóa {deletingVoucher.type === 'revenue' ? 'Phiếu Thu' : 'Phiếu Chi'}
+                </h3>
+                <span className="font-mono text-xs font-bold text-rose-700">
+                  {deletingVoucher.code}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
+              <div><strong>Nội dung:</strong> {deletingVoucher.title}</div>
+              <div><strong>Dự án:</strong> {deletingVoucher.projectName}</div>
+              <div><strong>Số tiền:</strong> <span className="font-mono font-bold text-rose-700">{formatVND(deletingVoucher.totalAmount)}</span></div>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Bạn có chắc chắn muốn xóa phiếu này không? Dữ liệu thống kê doanh thu, chi phí dự án và dòng tiền sẽ được cập nhật tự động lại ngay sau khi xóa.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingVoucher(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteExpense && deletingVoucher) {
+                    onDeleteExpense(deletingVoucher);
+                  }
+                  setDeletingVoucher(null);
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-xs cursor-pointer"
+              >
+                Xóa Vĩnh Viễn
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

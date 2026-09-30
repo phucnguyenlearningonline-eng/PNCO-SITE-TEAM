@@ -13,6 +13,7 @@ export function mapRowToExpense(row: any): ExpenseItem {
   let contractAdvancePercentage = typeof row.contract_advance_percentage === 'number' ? row.contract_advance_percentage : (typeof row.contractAdvancePercentage === 'number' ? row.contractAdvancePercentage : undefined);
   let contractPaymentStages = row.contract_payment_stages || row.contractPaymentStages;
   let contractNotes = row.contract_notes || row.contractNotes;
+  let contractFileUrl = row.contract_file_url || row.contractFileUrl;
   let cleanNotes = row.notes;
 
   // Extract embedded contract JSON comment from notes if available
@@ -24,6 +25,7 @@ export function mapRowToExpense(row: any): ExpenseItem {
         if (meta.hasContract !== undefined) hasContract = Boolean(meta.hasContract);
         if (meta.contractNumber) contractNumber = meta.contractNumber;
         if (meta.contractDate) contractDate = meta.contractDate;
+        if (meta.contractFileUrl) contractFileUrl = meta.contractFileUrl;
         if (meta.contractAdvanceAmount !== undefined) contractAdvanceAmount = meta.contractAdvanceAmount;
         if (meta.contractAdvancePercentage !== undefined) contractAdvancePercentage = meta.contractAdvancePercentage;
         if (meta.contractPaymentStages) contractPaymentStages = meta.contractPaymentStages;
@@ -65,6 +67,7 @@ export function mapRowToExpense(row: any): ExpenseItem {
     hasContract: hasContract || Boolean(contractNumber),
     contractNumber: contractNumber || undefined,
     contractDate: contractDate || undefined,
+    contractFileUrl: contractFileUrl || undefined,
     contractAdvanceAmount: contractAdvanceAmount,
     contractAdvancePercentage: contractAdvancePercentage,
     contractPaymentStages: Array.isArray(contractPaymentStages) ? contractPaymentStages : undefined,
@@ -103,11 +106,12 @@ export async function upsertExpenseToSupabase(item: ExpenseItem): Promise<boolea
   try {
     // Encode contract info into notes so it's guaranteed to persist across all database schemas
     let serializedNotes = item.notes ? item.notes.replace(/<!--CONTRACT_META:.*?-->/s, '').trim() : '';
-    if (item.hasContract || item.contractNumber) {
+    if (item.hasContract || item.contractNumber || item.contractFileUrl) {
       const contractMeta = {
         hasContract: Boolean(item.hasContract),
         contractNumber: item.contractNumber,
         contractDate: item.contractDate,
+        contractFileUrl: item.contractFileUrl,
         contractAdvanceAmount: item.contractAdvanceAmount,
         contractAdvancePercentage: item.contractAdvancePercentage,
         contractPaymentStages: item.contractPaymentStages,
