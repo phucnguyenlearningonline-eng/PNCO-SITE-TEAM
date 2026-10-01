@@ -499,10 +499,13 @@ export default function App() {
   const filteredExpenses = useMemo(() => {
     return expenses.filter((item) => {
       // Khi ở tab Đơn hàng (orders): CHỈ HIỂN THỊ ĐƠN HÀNG MUA VẬT TƯ (PO)
-      // Nhân công và các chi phí khác KHÔNG ĐƯỢC nằm trong đơn hàng!
+      // Nhân công, chi phí khác và phiếu chi/thu KHÔNG ĐƯỢC nằm trong đơn hàng!
       if (activeTab === 'orders') {
         if (item.type !== 'po') return false;
         if (item.category !== 'material') return false;
+        if (item.linkedPoId) return false;
+        const codeUpper = (item.code || '').trim().toUpperCase();
+        if (codeUpper.startsWith('PC-') || codeUpper.startsWith('PNCO-PC-') || codeUpper.includes('PC') || codeUpper.startsWith('PT-') || codeUpper.startsWith('PNCO-PT-')) return false;
       }
 
       // Tab-specific filters
@@ -842,9 +845,14 @@ export default function App() {
     return expenses.filter((e) => Boolean(e.hasContract || e.contractNumber || e.category === 'labor_sub')).length;
   }, [expenses]);
 
-  // Tính toán số lượng đơn hàng mua vật tư (PO) thực tế (không gồm nhân công, chi phí khác)
+  // Tính toán số lượng đơn hàng mua vật tư (PO) thực tế (không gồm nhân công, chi phí khác hay phiếu chi)
   const actualOrdersCount = useMemo(() => {
-    return expenses.filter((e) => e.type === 'po' && e.category === 'material').length;
+    return expenses.filter((e) => {
+      if (e.type !== 'po' || e.category !== 'material' || e.linkedPoId) return false;
+      const codeUpper = (e.code || '').trim().toUpperCase();
+      if (codeUpper.startsWith('PC-') || codeUpper.startsWith('PNCO-PC-') || codeUpper.includes('PC') || codeUpper.startsWith('PT-') || codeUpper.startsWith('PNCO-PT-')) return false;
+      return true;
+    }).length;
   }, [expenses]);
 
   // Horizontal sub-tabs array matching screenshot

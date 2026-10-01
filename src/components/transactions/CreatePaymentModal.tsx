@@ -17,10 +17,12 @@ import {
   ArrowRight,
   Percent,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Hash
 } from 'lucide-react';
 import { Project, ExpenseItem, ExpenseCategory } from '../../types';
 import { formatVND, formatTy, formatDateVN } from '../../utils/formatters';
+import { generateNextVoucherCode, isPaymentVoucher, isReceiptVoucher } from '../../utils/voucherCode';
 
 interface CreatePaymentModalProps {
   isOpen: boolean;
@@ -51,21 +53,59 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  // Lọc các đơn hàng PO: hiển thị cả đơn chưa thanh toán hoặc đã thanh toán một phần
-  const allOrders = useMemo(() => {
-    return expenses.filter((e) => e.type === 'po' || e.type === 'expense');
-  }, [expenses]);
-
+  // Lọc danh sách ĐƠN HÀNG THỰC TẾ (TUYỆT ĐỐI KHÔNG LẤY PHIẾU CHI PC- HOẶC PHIẾU THU PT-)
+  // CHỈ lấy đơn hàng còn nợ mốc thanh toán (đơn đã thanh toán đủ thì KHÔNG show lên)
   const payableOrders = useMemo(() => {
-    return allOrders.filter((po) => {
-      // Tính số tiền đã chi cho PO này
-      const paidSoFar = po.paidAmount || expenses
-        .filter((e) => e.linkedPoId === po.id && e.status === 'paid')
-        .reduce((sum, e) => sum + e.totalAmount, 0);
-      const isUnfinished = po.status !== 'paid' || paidSoFar < po.totalAmount;
-      return isUnfinished;
+    return expenses.filter((e) => {
+      // 1. TUYỆT ĐỐI KHÔNG SHOW PHIẾU CHI VÀ PHIẾU THU TRONG MỤC ĐƠN HÀNG
+      if (isPaymentVoucher(e) || isReceiptVoucher(e)) return false;
+      const codeUpper = (e.code || '').trim().toUpperCase();
+      if (
+        codeUpper.startsWith('PC-') || 
+        codeUpper.startsWith('PNCO-PC-') || 
+        codeUpper.includes('PC') || 
+        codeUpper.startsWith('PT-') || 
+        codeUpper.startsWith('PNCO-PT-')
+      ) return false;
+      if (e.id?.startsWith('pay-') || e.id?.startsWith('pc-') || e.id?.startsWith('rcp-') || e.id?.startsWith('pt-')) return false;
+      if (e.type === 'revenue') return false;
+      // Phiếu chi liên kết đơn hàng PO khác -> tuyệt đối không phải đơn hàng
+      if (e.linkedPoId) return false;
+
+      // 2. PHẢI LÀ ĐƠN HÀNG THỰC SỰ (PO / DH mua sắm vật tư thiết bị)
+      const isOrder = e.type === 'po' || codeUpper.startsWith('PO') || codeUpper.startsWith('DH');
+      if (!isOrder) return false;
+
+      // 3. Nếu đang mở modal chỉnh sửa phiếu chi này thì luôn giữ đơn hàng đang liên kết
+      if (initialData?.linkedPoId && e.id === initialData.linkedPoId) {
+        return true;
+      }
+      if (preselectedPo && e.id === preselectedPo.id) {
+        return true;
+      }
+
+      // 4. CHỈ LIÊN KẾT VỚI ĐƠN HÀNG CÒN NỢ MỐC THANH TOÁN (ĐÃ THANH TOÁN ĐỦ THÌ KHÔNG CẦN SHOW LÊN)
+      const vouchersPaid = expenses
+        .filter((item) => item.linkedPoId === e.id && (item.status === 'paid' || isPaymentVoucher(item)) && item.id !== initialData?.id)
+        .reduce((sum, item) => sum + (item.totalAmount || 0), 0);
+
+      const paidSoFar = Math.max(e.paidAmount || 0, vouchersPaid);
+      const remainingDebt = Math.max(0, e.totalAmount - paidSoFar);
+
+      // Nếu đơn hàng có các mốc thanh toán trong hợp đồng (contractPaymentStages)
+      const hasContractStages = e.contractPaymentStages && e.contractPaymentStages.length > 0;
+      const hasUnpaidStage = hasContractStages
+        ? e.contractPaymentStages!.some((st) => st.status === 'pending')
+        : remainingDebt > 1000;
+
+      // Đơn hàng thanh toán rồi (còn nợ <= 0 hoặc trạng thái paid và không còn mốc nợ) thì KHÔNG CẦN SHOW LÊN
+      if (remainingDebt <= 1000 && !hasUnpaidStage) return false;
+      if (e.status === 'paid' && remainingDebt <= 1000) return false;
+      if (remainingDebt <= 0) return false;
+
+      return true;
     });
-  }, [allOrders, expenses]);
+  }, [expenses, initialData, preselectedPo]);
 
   // 3 chế độ nguồn chi: 'po' (Từ đơn hàng) | 'labor_contract' (Hợp đồng nhân công) | 'other' (Tự nhập)
   const defaultSourceType: PaymentSourceType = initialData
@@ -89,14 +129,14 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
 
   // Lấy chi tiết đơn hàng PO đang chọn
   const currentPo = useMemo(() => {
-    return allOrders.find((p) => p.id === selectedPoId) || preselectedPo || payableOrders[0];
-  }, [allOrders, selectedPoId, preselectedPo, payableOrders]);
+    return payableOrders.find((p) => p.id === selectedPoId) || preselectedPo || payableOrders[0] || null;
+  }, [payableOrders, selectedPoId, preselectedPo]);
 
   // Tính số tiền PO đã trả trước đó
   const poAlreadyPaid = useMemo(() => {
     if (!currentPo) return 0;
     const historyPaid = expenses
-      .filter((e) => e.linkedPoId === currentPo.id && e.status === 'paid' && e.id !== initialData?.id)
+      .filter((e) => e.linkedPoId === currentPo.id && (e.status === 'paid' || isPaymentVoucher(e)) && e.id !== initialData?.id)
       .reduce((sum, e) => sum + e.totalAmount, 0);
     return Math.max(currentPo.paidAmount || 0, historyPaid);
   }, [currentPo, expenses, initialData]);
@@ -125,6 +165,10 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
   const [hasVat, setHasVat] = useState<boolean>(initialData ? Boolean(initialData.vatRate && initialData.vatRate > 0) : true);
   const [vatRate, setVatRate] = useState<number>(initialData?.vatRate ?? 10);
   const [date, setDate] = useState<string>(initialData?.date || (() => new Date().toISOString().split('T')[0]));
+  const [voucherCode, setVoucherCode] = useState<string>(() => {
+    if (initialData?.code) return initialData.code;
+    return generateNextVoucherCode('payment', expenses, initialData?.date || new Date().toISOString().split('T')[0]);
+  });
   const [paymentMethod, setPaymentMethod] = useState<'transfer' | 'cash' | 'advance_fund'>(initialData?.paymentMethod || 'transfer');
   const [notes, setNotes] = useState<string>(initialData?.notes || '');
 
@@ -179,7 +223,7 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
   // Khởi tạo form khi đổi đơn hàng PO
   const handleSelectPo = (poId: string) => {
     setSelectedPoId(poId);
-    const po = allOrders.find((item) => item.id === poId);
+    const po = payableOrders.find((item) => item.id === poId);
     if (po) {
       applyPoPaymentStage('full', po);
     }
@@ -305,7 +349,7 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
     const paymentItem: ExpenseItem = {
       ...initialData,
       id: initialData?.id || `pay-${Date.now()}`,
-      code: initialData?.code || `PC-${new Date().getFullYear()}-${String(Math.floor(100 + Math.random() * 900))}`,
+      code: voucherCode.trim() || generateNextVoucherCode('payment', expenses, date),
       type: 'expense',
       category: category,
       title: title.trim(),
@@ -446,27 +490,39 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
                     <span>Chọn Đơn Hàng PO Để Liên Kết:</span>
                   </span>
                   <span className="text-[10.5px] font-semibold text-rose-700">
-                    {payableOrders.length} đơn hàng cần thanh toán
+                    {payableOrders.length} đơn hàng còn nợ thanh toán
                   </span>
                 </div>
 
-                <select
-                  value={selectedPoId}
-                  onChange={(e) => handleSelectPo(e.target.value)}
-                  className="w-full py-2 px-2.5 border border-rose-300 rounded-lg bg-white font-bold text-slate-900 text-xs focus:ring-2 focus:ring-rose-500"
-                >
-                  {allOrders.map((po) => {
-                    const paid = po.paidAmount || expenses
-                      .filter((e) => e.linkedPoId === po.id && e.status === 'paid')
-                      .reduce((sum, e) => sum + e.totalAmount, 0);
-                    const rem = Math.max(0, po.totalAmount - paid);
-                    return (
-                      <option key={po.id} value={po.id}>
-                        [{po.code}] {po.title} - {po.supplier} (Tổng: {formatTy(po.totalAmount)}{rem > 0 ? ` • Còn nợ: ${formatTy(rem)}` : ' • Đã trả đủ'})
-                      </option>
-                    );
-                  })}
-                </select>
+                {payableOrders.length === 0 ? (
+                  <div className="p-3 bg-white rounded-lg border border-amber-300 text-xs text-amber-900 space-y-1">
+                    <div className="font-bold flex items-center gap-1.5 text-amber-800">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Không có đơn hàng nào còn nợ mốc thanh toán</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600">
+                      Tất cả các đơn hàng PO đã được thanh toán hoàn tất. Nếu muốn chi tiền cho các mục khác (không theo đơn hàng), vui lòng chọn <strong>Hợp Đồng Nhân Công</strong> hoặc <strong>Chi Phí Khác (Tự nhập)</strong> ở trên.
+                    </p>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedPoId}
+                    onChange={(e) => handleSelectPo(e.target.value)}
+                    className="w-full py-2 px-2.5 border border-rose-300 rounded-lg bg-white font-bold text-slate-900 text-xs focus:ring-2 focus:ring-rose-500"
+                  >
+                    {payableOrders.map((po) => {
+                      const paid = po.paidAmount || expenses
+                        .filter((e) => e.linkedPoId === po.id && (e.status === 'paid' || isPaymentVoucher(e)) && e.id !== initialData?.id)
+                        .reduce((sum, e) => sum + (e.totalAmount || 0), 0);
+                      const rem = Math.max(0, po.totalAmount - paid);
+                      return (
+                        <option key={po.id} value={po.id}>
+                          [{po.code}] {po.title} - {po.supplier} (Còn nợ: {formatVND(rem)} / Tổng đơn: {formatTy(po.totalAmount)})
+                        </option>
+                      );
+                    })}
+                  </select>
+                )}
               </div>
 
               {/* BẢNG LINK GIÁ TRỊ ĐƠN HÀNG CHI TIẾT (ĐÁP ỨNG TRỰC TIẾP YÊU CẦU USER) */}
@@ -758,33 +814,63 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
             </select>
           </div>
 
-          {/* Hạng mục & Ngày chi */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Số Phiếu Chi & Ngày Chi Tiền */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Hạng Mục Chi Phí</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value as any)}
-                className="w-full py-2 px-3 border border-slate-300 rounded-xl bg-white font-medium"
-              >
-                <option value="material">📦 Vật tư &amp; Thiết bị M&amp;E</option>
-                <option value="labor_sub">👷 Nhân công / Lương thợ thi công</option>
-                <option value="transport">🚚 Xe cẩu &amp; Vận chuyển</option>
-                <option value="overtime_meal">🍲 Cơm ca &amp; Tiếp khách site</option>
-                <option value="other">⚡ Chi phí khác</option>
-              </select>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-bold text-slate-700 flex items-center gap-1">
+                  <Hash className="w-3.5 h-3.5 text-rose-700" />
+                  <span>Số Phiếu Chi</span> <span className="text-rose-500">*</span>
+                </label>
+                <span className="text-[10px] bg-rose-100 text-rose-800 font-bold px-1.5 py-0.2 rounded font-mono">
+                  PNCO-Năm-0001
+                </span>
+              </div>
+              <input
+                type="text"
+                value={voucherCode}
+                onChange={(e) => setVoucherCode(e.target.value)}
+                required
+                placeholder="PNCO-PC-2026-0001"
+                className="w-full py-2 px-3 border border-rose-300 rounded-xl font-mono font-black text-rose-900 bg-rose-50/50 text-xs focus:ring-2 focus:ring-rose-500"
+              />
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Ngày Chi Tiền</label>
+              <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <span>Ngày Chi Tiền</span> <span className="text-rose-500">*</span>
+              </label>
               <input
                 type="date"
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  setDate(newDate);
+                  if (!initialData) {
+                    setVoucherCode(generateNextVoucherCode('payment', expenses, newDate));
+                  }
+                }}
                 required
-                className="w-full py-2 px-3 border border-slate-300 rounded-xl font-mono bg-white"
+                className="w-full py-2 px-3 border border-slate-300 rounded-xl font-mono bg-white text-xs"
               />
             </div>
+          </div>
+
+          {/* Hạng mục chi phí */}
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Hạng Mục Chi Phí</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value as any)}
+              className="w-full py-2 px-3 border border-slate-300 rounded-xl bg-white font-medium text-xs"
+            >
+              <option value="material">📦 Vật tư &amp; Thiết bị M&amp;E</option>
+              <option value="labor_sub">👷 Nhân công / Lương thợ thi công</option>
+              <option value="transport">🚚 Xe cẩu &amp; Vận chuyển</option>
+              <option value="overtime_meal">🍲 Cơm ca &amp; Tiếp khách site</option>
+              <option value="other">⚡ Chi phí khác</option>
+            </select>
           </div>
 
           {/* Nội Dung Phiếu Chi (Cho phép tự đánh vào hoặc sửa từ gợi ý) */}

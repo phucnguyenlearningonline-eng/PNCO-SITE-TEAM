@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { X, DollarSign, Building2, Calendar, FileText, CheckCircle2, User } from 'lucide-react';
+import { X, DollarSign, Building2, Calendar, FileText, CheckCircle2, User, RefreshCw, Hash } from 'lucide-react';
 import { Project, ExpenseItem } from '../../types';
 import { formatVND } from '../../utils/formatters';
+import { generateNextVoucherCode } from '../../utils/voucherCode';
 
 interface CreateReceiptModalProps {
   isOpen: boolean;
   onClose: () => void;
   projects: Project[];
+  expenses?: ExpenseItem[];
   preselectedProjectId?: string;
   initialData?: ExpenseItem | null;
   onSaveReceipt: (item: ExpenseItem) => void;
@@ -16,6 +18,7 @@ export const CreateReceiptModal: React.FC<CreateReceiptModalProps> = ({
   isOpen,
   onClose,
   projects,
+  expenses = [],
   preselectedProjectId,
   initialData,
   onSaveReceipt,
@@ -26,8 +29,12 @@ export const CreateReceiptModal: React.FC<CreateReceiptModalProps> = ({
   const initialProject = projects.find((p) => p.id === targetProjectId || p.code === targetProjectId) || projects[0];
 
   const [projectId, setProjectId] = useState<string>(initialData?.projectId || initialProject?.id || '');
-  const [amount, setAmount] = useState<number>(initialData?.totalAmount || 200000000);
   const [date, setDate] = useState<string>(initialData?.date || (() => new Date().toISOString().split('T')[0]));
+  const [voucherCode, setVoucherCode] = useState<string>(() => {
+    if (initialData?.code) return initialData.code;
+    return generateNextVoucherCode('receipt', expenses, initialData?.date || new Date().toISOString().split('T')[0]);
+  });
+  const [amount, setAmount] = useState<number>(initialData?.totalAmount || 200000000);
   const [stageType, setStageType] = useState<string>('advance');
   const [title, setTitle] = useState<string>(initialData?.title || 'Thu tiền tạm ứng đợt 1 từ Chủ Đầu Tư');
   const [payerName, setPayerName] = useState<string>(initialData?.receiverOrPayer || initialData?.supplier || initialProject?.client || '');
@@ -64,7 +71,7 @@ export const CreateReceiptModal: React.FC<CreateReceiptModalProps> = ({
     const receiptItem: ExpenseItem = {
       ...initialData,
       id: initialData?.id || `rcp-${Date.now()}`,
-      code: initialData?.code || `PT-${new Date().getFullYear()}-${String(Math.floor(100 + Math.random() * 900))}`,
+      code: voucherCode.trim() || generateNextVoucherCode('receipt', expenses, date),
       type: 'revenue',
       category: 'other',
       title: title.trim(),
@@ -135,34 +142,64 @@ export const CreateReceiptModal: React.FC<CreateReceiptModalProps> = ({
             </select>
           </div>
 
-          {/* Giai đoạn thu */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Số Phiếu Thu & Ngày Thu Tiền */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Đợt Thu Tiền</label>
-              <select
-                value={stageType}
-                onChange={(e) => handleStageChange(e.target.value)}
-                className="w-full py-2 px-3 border border-slate-300 rounded-xl bg-white font-medium"
-              >
-                <option value="advance">Tạm ứng hợp đồng</option>
-                <option value="stage_1">Thanh toán đợt 1</option>
-                <option value="stage_2">Thanh toán đợt 2</option>
-                <option value="stage_3">Thanh toán đợt 3</option>
-                <option value="final">Quyết toán tất toán</option>
-                <option value="custom">Khoản thu phát sinh khác</option>
-              </select>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-bold text-slate-700 flex items-center gap-1">
+                  <Hash className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Số Phiếu Thu</span> <span className="text-rose-500">*</span>
+                </label>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded font-mono">
+                  PNCO-Năm-0001
+                </span>
+              </div>
+              <input
+                type="text"
+                value={voucherCode}
+                onChange={(e) => setVoucherCode(e.target.value)}
+                required
+                placeholder="PNCO-PT-2026-0001"
+                className="w-full py-2 px-3 border border-emerald-300 rounded-xl font-mono font-black text-emerald-800 bg-emerald-50/50 text-xs focus:ring-2 focus:ring-emerald-500"
+              />
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Ngày Thu Tiền</label>
+              <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <span>Ngày Thu Tiền</span> <span className="text-rose-500">*</span>
+              </label>
               <input
                 type="date"
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  setDate(newDate);
+                  if (!initialData) {
+                    setVoucherCode(generateNextVoucherCode('receipt', expenses, newDate));
+                  }
+                }}
                 required
-                className="w-full py-2 px-3 border border-slate-300 rounded-xl font-mono bg-white"
+                className="w-full py-2 px-3 border border-slate-300 rounded-xl font-mono bg-white text-xs"
               />
             </div>
+          </div>
+
+          {/* Giai đoạn thu */}
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Đợt Thu Tiền</label>
+            <select
+              value={stageType}
+              onChange={(e) => handleStageChange(e.target.value)}
+              className="w-full py-2 px-3 border border-slate-300 rounded-xl bg-white font-medium"
+            >
+              <option value="advance">Tạm ứng hợp đồng</option>
+              <option value="stage_1">Thanh toán đợt 1</option>
+              <option value="stage_2">Thanh toán đợt 2</option>
+              <option value="stage_3">Thanh toán đợt 3</option>
+              <option value="final">Quyết toán tất toán</option>
+              <option value="custom">Khoản thu phát sinh khác</option>
+            </select>
           </div>
 
           {/* Tiêu đề nội dung */}
@@ -239,7 +276,7 @@ export const CreateReceiptModal: React.FC<CreateReceiptModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold"
+              className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold cursor-pointer"
             >
               Hủy
             </button>
@@ -256,3 +293,4 @@ export const CreateReceiptModal: React.FC<CreateReceiptModalProps> = ({
     </div>
   );
 };
+

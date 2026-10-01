@@ -2,6 +2,7 @@ import React from 'react';
 import { ShoppingCart, CreditCard, AlertCircle, Clock, CheckCircle2, ChevronRight, ArrowRight, DollarSign } from 'lucide-react';
 import { ExpenseItem, Project } from '../../types';
 import { formatVND, formatDateVN, formatTy } from '../../utils/formatters';
+import { isPaymentVoucher, isReceiptVoucher } from '../../utils/voucherCode';
 
 interface PendingPayablesTableProps {
   expenses: ExpenseItem[];
@@ -18,7 +19,7 @@ export const PendingPayablesTable: React.FC<PendingPayablesTableProps> = ({
 }) => {
   const getPoPaid = (po: ExpenseItem) => {
     return po.paidAmount || expenses
-      .filter((exp) => exp.linkedPoId === po.id && exp.status === 'paid')
+      .filter((exp) => exp.linkedPoId === po.id && (exp.status === 'paid' || isPaymentVoucher(exp)))
       .reduce((sum, exp) => sum + exp.totalAmount, 0);
   };
 
@@ -27,13 +28,20 @@ export const PendingPayablesTable: React.FC<PendingPayablesTableProps> = ({
     return Math.max(0, po.totalAmount - paid);
   };
 
-  // Lọc các đơn hàng PO chưa thanh toán hoặc còn nợ
+  // Lọc các đơn hàng PO thực tế còn nợ (Tuyệt đối loại bỏ Phiếu Chi PC- và Đơn đã trả đủ)
   const pendingOrders = expenses.filter((e) => {
-    const isOrder = e.type === 'po' || e.type === 'expense';
+    if (isPaymentVoucher(e) || isReceiptVoucher(e)) return false;
+    const codeUpper = (e.code || '').trim().toUpperCase();
+    if (codeUpper.startsWith('PC-') || codeUpper.startsWith('PNCO-PC-') || codeUpper.includes('PC') || codeUpper.startsWith('PT-') || codeUpper.startsWith('PNCO-PT-')) return false;
+    if (e.id?.startsWith('pay-') || e.id?.startsWith('pc-') || e.id?.startsWith('rcp-') || e.id?.startsWith('pt-')) return false;
+    if (e.type === 'revenue') return false;
+    if (e.linkedPoId) return false;
+
+    const isOrder = e.type === 'po' || codeUpper.startsWith('PO') || codeUpper.startsWith('DH');
     if (!isOrder) return false;
+
     const rem = getPoRemaining(e);
-    const isUnpaid = e.status !== 'paid' || rem > 0;
-    if (!isUnpaid) return false;
+    if (rem <= 1000 || e.status === 'paid') return false;
     if (selectedProjectId !== 'all' && e.projectId !== selectedProjectId) return false;
     return true;
   });
@@ -43,10 +51,15 @@ export const PendingPayablesTable: React.FC<PendingPayablesTableProps> = ({
   // Nhóm theo dự án
   const projectSummary = projects.map((p) => {
     const prjPos = expenses.filter((e) => {
-      const isOrder = (e.type === 'po' || e.type === 'expense') && e.projectId === p.id;
+      if (isPaymentVoucher(e) || isReceiptVoucher(e)) return false;
+      const codeUpper = (e.code || '').trim().toUpperCase();
+      if (codeUpper.startsWith('PC-') || codeUpper.startsWith('PNCO-PC-') || codeUpper.includes('PC') || codeUpper.startsWith('PT-') || codeUpper.startsWith('PNCO-PT-')) return false;
+      if (e.id?.startsWith('pay-') || e.id?.startsWith('pc-') || e.id?.startsWith('rcp-') || e.id?.startsWith('pt-')) return false;
+      if (e.type === 'revenue' || e.linkedPoId) return false;
+      const isOrder = (e.type === 'po' || codeUpper.startsWith('PO') || codeUpper.startsWith('DH')) && e.projectId === p.id;
       if (!isOrder) return false;
       const rem = getPoRemaining(e);
-      return e.status !== 'paid' || rem > 0;
+      return rem > 1000 && e.status !== 'paid';
     });
     const amount = prjPos.reduce((sum, item) => sum + getPoRemaining(item), 0);
     return {

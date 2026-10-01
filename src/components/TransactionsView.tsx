@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { Project, ExpenseItem, ExpenseCategory } from '../types';
 import { formatVND, formatDateVN, formatTy } from '../utils/formatters';
+import { isPaymentVoucher, isReceiptVoucher } from '../utils/voucherCode';
 import { CreateReceiptModal } from './transactions/CreateReceiptModal';
 import { CreatePaymentModal } from './transactions/CreatePaymentModal';
 import { PendingPayablesTable } from './transactions/PendingPayablesTable';
@@ -80,29 +81,29 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   // Đơn hàng PO chưa thanh toán hoặc còn nợ (Dự chi)
   const pendingOrders = useMemo(() => {
     return expenses.filter((e) => {
-      const isOrder = e.type === 'po' || e.type === 'expense';
+      const isOrder = (e.type === 'po' || e.code?.startsWith('PO-') || e.category === 'material') && !isPaymentVoucher(e) && !isReceiptVoucher(e);
       if (!isOrder) return false;
       const paid = e.paidAmount || expenses
-        .filter((exp) => exp.linkedPoId === e.id && (exp.status === 'paid' || exp.code.startsWith('PC-')))
+        .filter((exp) => exp.linkedPoId === e.id && (exp.status === 'paid' || isPaymentVoucher(exp)))
         .reduce((sum, exp) => sum + exp.totalAmount, 0);
       const rem = e.totalAmount - paid;
-      return (e.status !== 'paid' && !e.code.startsWith('PC-')) || rem > 0;
+      return (e.status !== 'paid' && !isPaymentVoucher(e)) || rem > 0;
     });
   }, [expenses]);
 
   // Danh sách giao dịch thu - chi thực tế đã phát sinh (CHỈ Phiếu Thu & Phiếu Chi thực tế)
   const transactionItems = useMemo(() => {
     return expenses.filter((e) => {
-      // 1. Thu tiền CĐT (Phiếu Thu: PT-... hoặc type === 'revenue' hoặc id rcp-)
-      if (e.type === 'revenue' || e.code.startsWith('PT-') || (e.id && e.id.startsWith('rcp-'))) {
+      // 1. Thu tiền CĐT (Phiếu Thu)
+      if (isReceiptVoucher(e)) {
         return true;
       }
-      // 2. Chi tiền thực tế (Phiếu Chi: PC-... hoặc id pay-/pc-)
-      if (e.code.startsWith('PC-') || (e.id && (e.id.startsWith('pay-') || e.id.startsWith('pc-')))) {
+      // 2. Chi tiền thực tế (Phiếu Chi)
+      if (isPaymentVoucher(e)) {
         return true;
       }
       // 3. Đơn hàng PO (type === 'po' hoặc code PO-) TUYỆT ĐỐI KHÔNG PHẢI là Phiếu Chi
-      if (e.type === 'po' || e.code.startsWith('PO-')) {
+      if (e.type === 'po' || (e.code && e.code.startsWith('PO-'))) {
         return false;
       }
       // 4. Các khoản chi phí kế toán trực tiếp (không phải PO) đã thanh toán
@@ -118,7 +119,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     return projects.map((p) => {
       // 1. Thu tiền CĐT của dự án này
       const prjRevenues = expenses.filter(
-        (e) => isMatchProject(e, p) && e.type === 'revenue' && (e.status === 'paid' || e.code.startsWith('PT-'))
+        (e) => isMatchProject(e, p) && isReceiptVoucher(e)
       );
       const totalRevenueFromItems = prjRevenues.reduce((sum, item) => sum + item.totalAmount, 0);
       // Kết hợp cả currentAdvance của dự án nếu lớn hơn
@@ -126,14 +127,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
       // 2. Chi phí đã chi thực tế
       const prjPaidExpenses = expenses.filter((e) => {
-        if (!isMatchProject(e, p) || e.type === 'revenue' || e.code.startsWith('PT-')) return false;
+        if (!isMatchProject(e, p) || isReceiptVoucher(e)) return false;
         // Phiếu chi thực tế
-        if (e.code.startsWith('PC-') || (e.id && (e.id.startsWith('pay-') || e.id.startsWith('pc-')))) return true;
+        if (isPaymentVoucher(e)) return true;
         // Chi phí trực tiếp (không phải PO) đã thanh toán
         if (e.type !== 'po' && !e.code.startsWith('PO-') && e.status === 'paid') return true;
         // Đơn hàng PO đã thanh toán nhưng chưa có phiếu chi riêng biệt
         if ((e.type === 'po' || e.code.startsWith('PO-')) && e.status === 'paid') {
-          const hasLinkedPayment = expenses.some((pc) => pc.linkedPoId === e.id && pc.code.startsWith('PC-'));
+          const hasLinkedPayment = expenses.some((pc) => pc.linkedPoId === e.id && isPaymentVoucher(pc));
           return !hasLinkedPayment;
         }
         return false;
@@ -142,13 +143,13 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
       // 3. Dự chi từ đơn hàng PO chưa thanh toán (tính theo số tiền còn nợ sau các đợt đã chi)
       const prjPendingOrders = expenses.filter((e) => {
-        const isOrder = (e.type === 'po' || e.code.startsWith('PO-') || e.category === 'material') && !e.code.startsWith('PC-') && isMatchProject(e, p);
+        const isOrder = (e.type === 'po' || e.code.startsWith('PO-') || e.category === 'material') && !isPaymentVoucher(e) && isMatchProject(e, p);
         if (!isOrder) return false;
         const paid = e.paidAmount || expenses
-          .filter((exp) => exp.linkedPoId === e.id && (exp.status === 'paid' || exp.code.startsWith('PC-')))
+          .filter((exp) => exp.linkedPoId === e.id && (exp.status === 'paid' || isPaymentVoucher(exp)))
           .reduce((sum, exp) => sum + exp.totalAmount, 0);
         const rem = e.totalAmount - paid;
-        return (e.status !== 'paid' && !e.code.startsWith('PC-')) || rem > 0;
+        return (e.status !== 'paid' && !isPaymentVoucher(e)) || rem > 0;
       });
       const totalPendingOrdersAmount = prjPendingOrders.reduce((sum, item) => {
         const paid = item.paidAmount || expenses
@@ -1321,6 +1322,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             setPreselectedProjForAction(undefined);
           }}
           projects={projects}
+          expenses={expenses}
           preselectedProjectId={preselectedProjForAction}
           initialData={editingReceipt}
           onSaveReceipt={(saved) => {

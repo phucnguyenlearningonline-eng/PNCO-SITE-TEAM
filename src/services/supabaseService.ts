@@ -671,7 +671,10 @@ export async function deleteTransactionFromSupabase(id: string): Promise<boolean
 export function isTransactionRecord(item: { type?: string; code?: string; id?: string }): boolean {
   if (!item) return false;
   if (item.type === 'revenue') return true;
-  if (item.code && (item.code.startsWith('PT-') || item.code.startsWith('PC-'))) return true;
+  if (item.code) {
+    const c = item.code.toUpperCase();
+    if (c.startsWith('PT-') || c.startsWith('PC-') || c.startsWith('PNCO-') || c.includes('PC') || c.includes('PT')) return true;
+  }
   if (item.id && (item.id.startsWith('pay-') || item.id.startsWith('rcp-') || item.id.startsWith('pt-') || item.id.startsWith('pc-'))) return true;
   return false;
 }
