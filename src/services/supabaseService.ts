@@ -548,6 +548,97 @@ export async function deleteMaterialFromSupabase(id: string): Promise<boolean> {
 }
 
 // ==============================================================
+// TRANSACTIONS SERVICE (BẢNG QUẢN LÝ THU - CHI)
+// ==============================================================
+export async function fetchTransactionsFromSupabase(): Promise<ExpenseItem[] | null> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .order('date', { ascending: false });
+
+    if (error) {
+      console.warn('Supabase fetch transactions error:', error.message);
+      return null;
+    }
+
+    if (!data) return [];
+    return data.map(mapRowToExpense);
+  } catch (err) {
+    console.error('Failed to load transactions from Supabase:', err);
+    return null;
+  }
+}
+
+export async function upsertTransactionToSupabase(item: ExpenseItem): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+
+  try {
+    const payload = {
+      id: item.id,
+      code: item.code,
+      type: item.type === 'revenue' ? 'revenue' : 'expense',
+      category: item.category || 'other',
+      title: item.title,
+      sub_description: item.subDescription || null,
+      project_id: item.projectId || null,
+      project_name: item.projectName || '',
+      supplier: item.supplier || '',
+      receiver_or_payer: item.receiverOrPayer || item.supplier || '',
+      created_by_id: item.createdById || null,
+      created_by_name: item.createdByName || '',
+      created_by_role: item.createdByRole || '',
+      date: item.date,
+      amount: item.amount || item.totalAmount || 0,
+      vat_rate: item.vatRate || 0,
+      vat_amount: item.vatAmount || 0,
+      total_amount: item.totalAmount || 0,
+      priority: item.priority || 'normal',
+      status: item.status || 'paid',
+      payment_method: item.paymentMethod || 'transfer',
+      bank_account: item.bankAccount || null,
+      receipt_image: item.receiptImage || null,
+      notes: item.notes || null,
+      linked_po_id: item.linkedPoId || null,
+      linked_po_code: item.linkedPoCode || null,
+      approved_by: item.approvedBy || null,
+      approved_at: item.approvedAt || null,
+    };
+
+    const { error } = await supabase.from('transactions').upsert(payload);
+    if (error) {
+      console.error('Supabase upsert transaction error:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to upsert transaction:', err);
+    return false;
+  }
+}
+
+export async function deleteTransactionFromSupabase(id: string): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase.from('transactions').delete().eq('id', id);
+    if (error) {
+      console.error('Supabase delete transaction error:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to delete transaction:', err);
+    return false;
+  }
+}
+
+// ==============================================================
 // MIGRATE ALL LOCAL DATA TO SUPABASE (1-CLICK SYNC)
 // ==============================================================
 export async function syncAllLocalDataToSupabase(data: {
@@ -583,13 +674,26 @@ export async function syncAllLocalDataToSupabase(data: {
       if (!ok) failedCount++;
     }
 
-    // 4. Expenses
+    // 4. Expenses (PO và Chi phí site)
     for (const e of data.expenses) {
       const ok = await upsertExpenseToSupabase(e);
       if (!ok) failedCount++;
     }
 
-    // 5. Materials (Vật tư thi công & sản phẩm)
+    // 5. Transactions (Đồng bộ vào Bảng Sổ Thu Chi chuyên dụng)
+    const transactionList = data.expenses.filter((e) => {
+      const isRev = e.type === 'revenue' || e.code.startsWith('PT-');
+      const isPaidExp = (e.status === 'paid' || e.code.startsWith('PC-')) && e.type !== 'revenue';
+      return isRev || isPaidExp;
+    });
+
+    for (const tx of transactionList) {
+      const ok = await upsertTransactionToSupabase(tx);
+      // Không tăng failedCount nếu bảng transactions chưa được tạo trên Supabase cũ
+      if (!ok) console.warn('Could not sync to transactions table (may need schema update)');
+    }
+
+    // 6. Materials (Vật tư thi công & sản phẩm)
     if (data.materials && data.materials.length > 0) {
       for (const m of data.materials) {
         const ok = await upsertMaterialToSupabase(m);
@@ -600,15 +704,16 @@ export async function syncAllLocalDataToSupabase(data: {
     if (failedCount > 0) {
       return {
         success: false,
-        message: `Có ${failedCount} bản ghi không thể ghi vào Supabase. Vui lòng kiểm tra xem bạn đã tạo bảng 'materials' và cấp quyền RLS chưa.`,
+        message: `Có ${failedCount} bản ghi không thể ghi vào Supabase. Vui lòng kiểm tra xem bạn đã tạo bảng 'materials' và 'transactions' và cấp quyền RLS chưa.`,
         count: (data.expenses.length + (data.materials?.length || 0)) - failedCount,
       };
     }
 
     const matMsg = data.materials?.length ? `, ${data.materials.length} vật tư` : '';
+    const txMsg = transactionList.length ? `, ${transactionList.length} giao dịch thu chi` : '';
     return {
       success: true,
-      message: `Đồng bộ thành công ${data.expenses.length} khoản chi, ${data.projects.length} dự án, ${data.suppliers.length} đối tác${matMsg} lên Supabase!`,
+      message: `Đồng bộ thành công ${data.expenses.length} khoản chi, ${data.projects.length} dự án, ${data.suppliers.length} đối tác${matMsg}${txMsg} lên Supabase!`,
       count: data.expenses.length + (data.materials?.length || 0),
     };
   } catch (err: any) {

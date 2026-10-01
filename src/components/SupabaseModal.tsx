@@ -54,8 +54,46 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
   const [copiedSql, setCopiedSql] = useState(false);
 
   const FIX_SQL = `-- ================================================================
--- 1. TẠO BẢNG VẬT TƯ THI CÔNG & SẢN PHẨM M&E (NẾU CHƯA CÓ)
+-- 1. TẠO BẢNG SỔ NHẬT KÝ THU - CHI (TRANSACTIONS) & VẬT TƯ (MATERIALS)
 -- ================================================================
+CREATE TABLE IF NOT EXISTS public.transactions (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    type TEXT NOT NULL CHECK (type IN ('revenue', 'expense')),
+    category TEXT NOT NULL CHECK (category IN ('material', 'transport', 'overtime_meal', 'labor_sub', 'client_advance', 'contract_payment', 'other')),
+    title TEXT NOT NULL,
+    sub_description TEXT,
+    project_id TEXT,
+    project_name TEXT,
+    supplier TEXT,
+    receiver_or_payer TEXT,
+    created_by_id TEXT,
+    created_by_name TEXT,
+    created_by_role TEXT,
+    date DATE NOT NULL,
+    amount BIGINT DEFAULT 0,
+    vat_rate NUMERIC DEFAULT 0,
+    vat_amount BIGINT DEFAULT 0,
+    total_amount BIGINT NOT NULL DEFAULT 0,
+    priority TEXT DEFAULT 'normal',
+    status TEXT DEFAULT 'paid',
+    payment_method TEXT DEFAULT 'transfer',
+    bank_account TEXT,
+    receipt_image TEXT,
+    notes TEXT,
+    linked_po_id TEXT,
+    linked_po_code TEXT,
+    approved_by TEXT,
+    approved_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_code ON public.transactions(code);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON public.transactions(type);
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON public.transactions(date);
+CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON public.transactions(project_id);
+
 CREATE TABLE IF NOT EXISTS public.materials (
     id TEXT PRIMARY KEY,
     code TEXT NOT NULL UNIQUE,
@@ -89,6 +127,7 @@ ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.materials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Public Read Expenses" ON public.expenses;
 DROP POLICY IF EXISTS "Public Insert/Update Expenses" ON public.expenses;
@@ -115,6 +154,11 @@ DROP POLICY IF EXISTS "Public Insert/Update Materials" ON public.materials;
 DROP POLICY IF EXISTS "Allow All Materials" ON public.materials;
 CREATE POLICY "Allow All Materials" ON public.materials FOR ALL USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Public Read Transactions" ON public.transactions;
+DROP POLICY IF EXISTS "Public Insert/Update Transactions" ON public.transactions;
+DROP POLICY IF EXISTS "Allow All Transactions" ON public.transactions;
+CREATE POLICY "Allow All Transactions" ON public.transactions FOR ALL USING (true) WITH CHECK (true);
+
 -- ================================================================
 -- 3. KÍCH HOẠT ĐỒNG BỘ REALTIME ĐA THIẾT BỊ
 -- ================================================================
@@ -134,6 +178,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'materials') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.materials;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'transactions') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.transactions;
   END IF;
 END $$;`;
 

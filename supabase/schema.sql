@@ -97,6 +97,40 @@ CREATE TABLE IF NOT EXISTS public.materials (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
+-- 6. BẢNG SỔ NHẬT KÝ THU - CHI & DÒNG TIỀN (TRANSACTIONS)
+CREATE TABLE IF NOT EXISTS public.transactions (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    type TEXT NOT NULL CHECK (type IN ('revenue', 'expense')),
+    category TEXT NOT NULL CHECK (category IN ('material', 'transport', 'overtime_meal', 'labor_sub', 'client_advance', 'contract_payment', 'other')),
+    title TEXT NOT NULL,
+    sub_description TEXT,
+    project_id TEXT REFERENCES public.projects(id) ON DELETE SET NULL,
+    project_name TEXT,
+    supplier TEXT,
+    receiver_or_payer TEXT,
+    created_by_id TEXT,
+    created_by_name TEXT,
+    created_by_role TEXT,
+    date DATE NOT NULL,
+    amount BIGINT DEFAULT 0,
+    vat_rate NUMERIC DEFAULT 0,
+    vat_amount BIGINT DEFAULT 0,
+    total_amount BIGINT NOT NULL DEFAULT 0,
+    priority TEXT DEFAULT 'normal' CHECK (priority IN ('normal', 'high', 'urgent')),
+    status TEXT DEFAULT 'paid' CHECK (status IN ('pending', 'approved', 'paid', 'cancelled', 'rejected')),
+    payment_method TEXT DEFAULT 'transfer' CHECK (payment_method IN ('cash', 'transfer', 'advance_fund')),
+    bank_account TEXT,
+    receipt_image TEXT,
+    notes TEXT,
+    linked_po_id TEXT,
+    linked_po_code TEXT,
+    approved_by TEXT,
+    approved_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
 -- TẠO CHỈ MỤC TĂNG TỐC ĐỘ TRUY VẤN
 CREATE INDEX IF NOT EXISTS idx_expenses_date ON public.expenses(date);
 CREATE INDEX IF NOT EXISTS idx_expenses_category ON public.expenses(category);
@@ -104,6 +138,10 @@ CREATE INDEX IF NOT EXISTS idx_expenses_status ON public.expenses(status);
 CREATE INDEX IF NOT EXISTS idx_expenses_project_id ON public.expenses(project_id);
 CREATE INDEX IF NOT EXISTS idx_materials_code ON public.materials(code);
 CREATE INDEX IF NOT EXISTS idx_materials_category ON public.materials(category);
+CREATE INDEX IF NOT EXISTS idx_transactions_code ON public.transactions(code);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON public.transactions(type);
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON public.transactions(date);
+CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON public.transactions(project_id);
 
 -- ================================================================
 -- CẤU HÌNH BẢO MẬT & QUYỀN TRUY CẬP (TOÀN QUYỀN ĐỌC, GHI, SỬA, XÓA)
@@ -113,6 +151,7 @@ ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.materials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 
 -- Xóa các policy cũ để tránh trùng lặp
 DROP POLICY IF EXISTS "Public Read Projects" ON public.projects;
@@ -139,6 +178,11 @@ DROP POLICY IF EXISTS "Public Read Materials" ON public.materials;
 DROP POLICY IF EXISTS "Public Insert/Update Materials" ON public.materials;
 DROP POLICY IF EXISTS "Allow All Materials" ON public.materials;
 CREATE POLICY "Allow All Materials" ON public.materials FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public Read Transactions" ON public.transactions;
+DROP POLICY IF EXISTS "Public Insert/Update Transactions" ON public.transactions;
+DROP POLICY IF EXISTS "Allow All Transactions" ON public.transactions;
+CREATE POLICY "Allow All Transactions" ON public.transactions FOR ALL USING (true) WITH CHECK (true);
 
 -- ================================================================
 -- KÍCH HOẠT ĐỒNG BỘ REALTIME TỨC THỜI CHO CÁC MÁY TÍNH & ĐIỆN THOẠI
@@ -178,6 +222,13 @@ BEGIN
     WHERE pubname = 'supabase_realtime' AND tablename = 'materials'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.materials;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'transactions'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.transactions;
   END IF;
 END $$;
 
@@ -229,3 +280,14 @@ VALUES
     ('exp-8', 'EXP-2026-0813', 'expense', 'overtime_meal', 'Tiền cơm hộp & nước uống tăng ca ca đêm (21h - 03h sáng)', 'Phục vụ 28 anh em thợ điện & kỹ sư kéo tuyến cáp ngầm qua đường hầm', 'prj-1', 'Tòa nhà phức hợp Phúc Nguyên Landmark', 'Quán Cơm Tấm & Suất Ăn Công Nghiệp Minh Ký', 'u-2', 'Trần Ngọc Hoàng Huy', 'Kỹ thuật thi công', '2026-09-09', 1960000, 0, 0, 1960000, 'normal', 'paid', 'advance_fund', '28 suất x 70k/suất (cơm tấm sườn bì chả + canh + nước sâm mát)'),
     ('exp-9', 'EXP-2026-0814', 'expense', 'overtime_meal', 'Cơm ca chiều & cà phê tăng ca hàn ống cứu hỏa trục chính xưởng B', '16 công nhân cơ điện & 2 kỹ sư giám sát tăng ca đến 22h00', 'prj-2', 'Nhà xưởng Cơ điện VSIP II', 'Quán Cơm Niêu & Cơm Bình Dân Phúc An', 'u-3', 'Hán Văn Quang', 'Kỹ thuật hiện trường', '2026-09-07', 1260000, 0, 0, 1260000, 'normal', 'paid', 'advance_fund', NULL)
 ON CONFLICT (id) DO NOTHING;
+
+-- 5. Insert Sample Transactions (Bảng Sổ Thu Chi)
+INSERT INTO public.transactions (id, code, type, category, title, sub_description, project_id, project_name, supplier, receiver_or_payer, created_by_id, created_by_name, created_by_role, date, amount, vat_rate, vat_amount, total_amount, priority, status, payment_method, notes)
+VALUES
+    ('pt-01', 'PT-2026-001', 'revenue', 'client_advance', 'Thu tiền tạm ứng đợt 1 Hợp đồng M&E Phúc Nguyên Landmark', 'Tạm ứng 20% theo hợp đồng ký kết', 'prj-1', 'Tòa nhà phức hợp Phúc Nguyên Landmark', 'Tập đoàn Bất động sản Thịnh Vượng', 'Tập đoàn Bất động sản Thịnh Vượng', 'u-4', 'Nguyễn Thị Kim Dung', 'Kế Toán Trưởng', '2026-05-15', 2500000000, 0, 0, 2500000000, 'normal', 'paid', 'transfer', 'Đã chuyển vào tài khoản Vietcombank'),
+    ('pt-02', 'PT-2026-002', 'revenue', 'client_advance', 'Thu tiền tạm ứng Hợp đồng Nhà xưởng VSIP II', 'Tạm ứng thi công đợt 1', 'prj-2', 'Nhà xưởng Cơ điện VSIP II', 'Công ty Cổ phần Công Nghiệp Sài Gòn', 'Công ty Cổ phần Công Nghiệp Sài Gòn', 'u-4', 'Nguyễn Thị Kim Dung', 'Kế Toán Trưởng', '2026-06-01', 1750000000, 0, 0, 1750000000, 'normal', 'paid', 'transfer', 'Tài khoản công ty'),
+    ('pt-03', 'PT-2026-003', 'revenue', 'client_advance', 'Thu tiền tạm ứng Hợp đồng Xin phép Xây dựng Coherent Vsip 3', 'Tạm ứng 25% giá trị hợp đồng', 'prj-pnc-da02', 'Thực Hiện Hồ Sơ Xin Phép Xây Dựng - Coherent Vsip 3', 'Công Ty TNHH Tialoc Việt Nam', 'Công Ty TNHH Tialoc Việt Nam', 'u-1', 'Trần Anh Minh', 'Chỉ Huy Trưởng', '2026-05-15', 200000000, 0, 0, 200000000, 'normal', 'paid', 'transfer', 'Đã nhận tạm ứng qua tài khoản Techcombank'),
+    ('pc-01', 'PC-2026-001', 'expense', 'other', 'Nộp lệ phí thẩm duyệt PCCC & Thẩm định thiết kế xây dựng cơ sở', 'Lệ phí nộp cơ quan nhà nước và BQL KCN', 'prj-pnc-da02', 'Thực Hiện Hồ Sơ Xin Phép Xây Dựng - Coherent Vsip 3', 'Cục Cảnh Sát PCCC & CNCH - Kho bạc Nhà nước', 'Kho bạc Nhà nước', 'u-1', 'Trần Anh Minh', 'Chỉ Huy Trưởng', '2026-05-20', 100000000, 0, 0, 100000000, 'high', 'paid', 'transfer', 'Biên lai lệ phí nhà nước'),
+    ('pc-02', 'PC-2026-002', 'expense', 'other', 'Chi phí đo đạc trích lục bản đồ địa chính & Khảo sát địa chất hiện trạng', 'Đo vẽ hiện trạng mốc ranh lô đất dự án Coherent', 'prj-pnc-da02', 'Thực Hiện Hồ Sơ Xin Phép Xây Dựng - Coherent Vsip 3', 'Công Ty Đo Đạc Địa Chính Miền Đông', 'Công Ty Đo Đạc Địa Chính Miền Đông', 'u-1', 'Trần Anh Minh', 'Chỉ Huy Trưởng', '2026-06-05', 80000000, 0, 0, 80000000, 'normal', 'paid', 'transfer', 'Đã hoàn tất bàn giao hồ sơ đo đạc')
+ON CONFLICT (id) DO NOTHING;
+

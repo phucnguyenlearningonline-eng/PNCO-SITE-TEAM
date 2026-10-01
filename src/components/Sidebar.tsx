@@ -87,8 +87,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'transactions' as ActiveTab,
-      label: 'Giao Dịch (Thu - Chi)',
-      sublabel: 'Sổ thu CĐT, phiếu chi site & chi phí...',
+      label: 'Bảng Quản Lý Thu - Chi',
+      sublabel: 'Bảng kê thu CĐT, phiếu chi site & dòng tiền...',
       icon: ArrowLeftRight,
       count: ordersCount,
     },

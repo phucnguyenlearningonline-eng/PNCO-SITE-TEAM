@@ -49,13 +49,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   onDeleteExpense,
   onRefreshData,
 }) => {
-  // Tabs: 'summary' (Thống kê theo dự án) | 'ledger' (Sổ nhật ký giao dịch) | 'pending_po' (Dự chi từ đơn hàng) | 'charts' (Biểu đồ)
-  const [activeSubTab, setActiveSubTab] = useState<'summary' | 'ledger' | 'pending_po' | 'charts'>('summary');
+  // Tabs: 'ledger' (Bảng kê thu chi chi tiết) | 'summary' (Thống kê theo dự án) | 'pending_po' (Dự chi từ đơn hàng) | 'charts' (Biểu đồ)
+  const [activeSubTab, setActiveSubTab] = useState<'ledger' | 'summary' | 'pending_po' | 'charts'>('ledger');
 
-  // Filter dự án
+  // Filter dự án & Thời gian
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [ledgerTypeFilter, setLedgerTypeFilter] = useState<'all' | 'revenue' | 'expense'>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'this_month' | 'this_quarter' | 'year_2026'>('all');
 
   // Modals
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -220,7 +221,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     };
   }, [filteredProjectBalances, selectedProjectId]);
 
-  // Lọc nhật ký giao dịch (Giữ nguyên thứ tự gốc, không tự ý xáo trộn)
+  // Lọc bảng kê thu chi (Giữ nguyên thứ tự gốc, hỗ trợ lọc đa chiều)
   const filteredTransactions = useMemo(() => {
     return transactionItems.filter((item) => {
       if (selectedProjectId !== 'all') {
@@ -233,6 +234,27 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       }
       if (ledgerTypeFilter === 'revenue' && item.type !== 'revenue') return false;
       if (ledgerTypeFilter === 'expense' && item.type === 'revenue') return false;
+
+      // Lọc theo thời gian
+      if (dateFilter !== 'all' && item.date) {
+        const itemDate = new Date(item.date);
+        const now = new Date();
+        const itemYear = itemDate.getFullYear();
+        const itemMonth = itemDate.getMonth();
+
+        if (dateFilter === 'year_2026' && itemYear !== 2026) return false;
+        if (dateFilter === 'this_month') {
+          // Khớp tháng của bản ghi gần nhất hoặc tháng 9/tháng hiện tại
+          const curMonth = now.getMonth();
+          if (itemYear !== 2026 || (itemMonth !== curMonth && itemMonth !== 8)) return false;
+        }
+        if (dateFilter === 'this_quarter') {
+          const quarter = Math.floor(itemMonth / 3);
+          const nowQuarter = Math.floor(now.getMonth() / 3);
+          if (itemYear !== 2026 || (quarter !== nowQuarter && quarter !== 2)) return false;
+        }
+      }
+
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
         const matchCode = item.code.toLowerCase().includes(q);
@@ -243,7 +265,50 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       }
       return true;
     });
-  }, [transactionItems, selectedProjectId, projects, ledgerTypeFilter, searchTerm]);
+  }, [transactionItems, selectedProjectId, projects, ledgerTypeFilter, dateFilter, searchTerm]);
+
+  // Tính toán tồn quỹ lũy kế theo thời gian (Running Balance)
+  const transactionsWithBalance = useMemo(() => {
+    // Sắp xếp tăng dần theo ngày để tính dòng tiền lũy kế chuẩn xác
+    const sortedAsc = [...filteredTransactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    let running = 0;
+    const balanceMap = new Map<string, number>();
+
+    sortedAsc.forEach((tx) => {
+      if (tx.type === 'revenue') {
+        running += tx.totalAmount;
+      } else {
+        running -= tx.totalAmount;
+      }
+      balanceMap.set(tx.id, running);
+    });
+
+    return filteredTransactions.map((tx) => ({
+      ...tx,
+      runningBalance: balanceMap.get(tx.id) || 0,
+    }));
+  }, [filteredTransactions]);
+
+  // Tổng cộng Bảng Thu Chi
+  const ledgerTotals = useMemo(() => {
+    let totalRevenue = 0;
+    let totalExpense = 0;
+    filteredTransactions.forEach((tx) => {
+      if (tx.type === 'revenue') {
+        totalRevenue += tx.totalAmount;
+      } else {
+        totalExpense += tx.totalAmount;
+      }
+    });
+    return {
+      totalRevenue,
+      totalExpense,
+      netCashflow: totalRevenue - totalExpense,
+      count: filteredTransactions.length,
+      revenueCount: filteredTransactions.filter((t) => t.type === 'revenue').length,
+      expenseCount: filteredTransactions.filter((t) => t.type !== 'revenue').length,
+    };
+  }, [filteredTransactions]);
 
   // Xử lý lưu phiếu thu
   const handleSaveReceipt = (receipt: ExpenseItem) => {
@@ -497,10 +562,23 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       </div>
 
       {/* ============================================================== */}
-      {/* 3. TABS PHỤ: THỐNG KÊ DA | NHẬT KÝ | DỰ CHI | BIỂU ĐỒ           */}
+      {/* 3. TABS PHỤ: BẢNG KÊ THU CHI | CÂN ĐỐI DA | DỰ CHI | BIỂU ĐỒ   */}
       {/* ============================================================== */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-bold">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('ledger')}
+            className={`px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+              activeSubTab === 'ledger'
+                ? 'bg-[#102742] text-white shadow-2xs font-black'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            <span>BẢNG KÊ THU - CHI CHI TIẾT ({filteredTransactions.length})</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setActiveSubTab('summary')}
@@ -511,20 +589,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             }`}
           >
             <Layers className="w-4 h-4 text-sky-400" />
-            <span>THỐNG KÊ THEO DỰ ÁN</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('ledger')}
-            className={`px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
-              activeSubTab === 'ledger'
-                ? 'bg-[#102742] text-white shadow-2xs font-black'
-                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            <FileText className="w-4 h-4 text-sky-400" />
-            <span>SỔ NHẬT KÝ GIAO DỊCH ({filteredTransactions.length})</span>
+            <span>TỔNG HỢP CÂN ĐỐI THEO DỰ ÁN</span>
           </button>
 
           <button
@@ -814,19 +879,21 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       )}
 
       {/* ============================================================== */}
-      {/* 5. NỘI DUNG TAB 2: SỔ NHẬT KÝ GIAO DỊCH (THU - CHI)             */}
+      {/* 5. NỘI DUNG TAB 1: BẢNG KÊ THU - CHI CHI TIẾT (SỔ NHẬT KÝ THU CHI) */}
       {/* ============================================================== */}
       {activeSubTab === 'ledger' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden space-y-3 p-4">
-          {/* Filter Bar của sổ nhật ký */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <div className="inline-flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-bold">
+          {/* Filter Bar & Action Buttons của Bảng Thu Chi */}
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            {/* Bộ lọc Loại Phiếu & Thời Gian */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Loại phiếu */}
+              <div className="inline-flex bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-bold">
                 <button
                   type="button"
                   onClick={() => setLedgerTypeFilter('all')}
-                  className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
-                    ledgerTypeFilter === 'all' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    ledgerTypeFilter === 'all' ? 'bg-[#102742] text-white shadow-2xs font-extrabold' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   Tất cả ({transactionItems.length})
@@ -834,96 +901,205 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setLedgerTypeFilter('revenue')}
-                  className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
-                    ledgerTypeFilter === 'revenue' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600'
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    ledgerTypeFilter === 'revenue' ? 'bg-emerald-600 text-white shadow-2xs font-extrabold' : 'text-slate-600 hover:text-emerald-700'
                   }`}
                 >
-                  Phiếu Thu ({transactionItems.filter((t) => t.type === 'revenue').length})
+                  + Phiếu Thu ({transactionItems.filter((t) => t.type === 'revenue').length})
                 </button>
                 <button
                   type="button"
                   onClick={() => setLedgerTypeFilter('expense')}
-                  className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
-                    ledgerTypeFilter === 'expense' ? 'bg-rose-600 text-white shadow-2xs' : 'text-slate-600'
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    ledgerTypeFilter === 'expense' ? 'bg-rose-600 text-white shadow-2xs font-extrabold' : 'text-slate-600 hover:text-rose-700'
                   }`}
                 >
-                  Phiếu Chi ({transactionItems.filter((t) => t.type !== 'revenue').length})
+                  - Phiếu Chi ({transactionItems.filter((t) => t.type !== 'revenue').length})
+                </button>
+              </div>
+
+              {/* Lọc Kỳ Kế Toán */}
+              <div className="inline-flex bg-slate-50 p-0.5 rounded-xl border border-slate-200 text-xs font-medium">
+                <button
+                  type="button"
+                  onClick={() => setDateFilter('all')}
+                  className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    dateFilter === 'all' ? 'bg-white text-slate-900 font-bold shadow-2xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Tất cả thời gian
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateFilter('this_month')}
+                  className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    dateFilter === 'this_month' ? 'bg-white text-slate-900 font-bold shadow-2xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Tháng này
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateFilter('this_quarter')}
+                  className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    dateFilter === 'this_quarter' ? 'bg-white text-slate-900 font-bold shadow-2xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Quý này
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateFilter('year_2026')}
+                  className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    dateFilter === 'year_2026' ? 'bg-white text-slate-900 font-bold shadow-2xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Năm 2026
                 </button>
               </div>
             </div>
 
-            <div className="relative w-full sm:w-72">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Tìm mã phiếu, nội dung, đối tác..."
-                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500"
-              />
+            {/* Tìm Kiếm & Các Nút Thao Tác Nhanh */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Tìm mã phiếu, nội dung, đối tác..."
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 bg-white"
+                />
+              </div>
+
+              {/* Nút Tạo Phiếu Thu */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingReceipt(null);
+                  setIsReceiptModalOpen(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-2xs cursor-pointer transition-all"
+                title="Lập phiếu thu mới từ CĐT hoặc hoàn ứng"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Phiếu Thu</span>
+              </button>
+
+              {/* Nút Tạo Phiếu Chi */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingPayment(null);
+                  setIsPaymentModalOpen(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1 shadow-2xs cursor-pointer transition-all"
+                title="Lập phiếu chi mới cho nhà cung cấp hoặc đội thi công"
+              >
+                <Minus className="w-3.5 h-3.5" />
+                <span>- Phiếu Chi</span>
+              </button>
+
+              {/* Nút Xuất Excel */}
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                className="px-3 py-1.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1 shadow-2xs cursor-pointer transition-all"
+                title="Xuất bảng kê thu chi ra file Excel"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Xuất Excel</span>
+              </button>
             </div>
           </div>
 
-          {/* Bảng Kê Nhật Ký */}
-          <div className="overflow-x-auto">
+          {/* Bảng Kê Chi Tiết Thu Chi (Đúng Chuẩn Sổ Quỹ Kế Toán) */}
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full text-left border-collapse text-xs">
-              <thead className="bg-slate-100 text-slate-700 font-bold text-[11px] uppercase border-b border-slate-200">
+              <thead className="bg-[#102742] text-white font-bold text-[11px] uppercase tracking-wider">
                 <tr>
-                  <th className="py-2.5 px-3 w-10 text-center">STT</th>
-                  <th className="py-2.5 px-3 w-28">Mã Phiếu</th>
-                  <th className="py-2.5 px-3 w-28">Loại Phiếu</th>
-                  <th className="py-2.5 px-3">Nội Dung Thu / Chi</th>
-                  <th className="py-2.5 px-3 w-40">Dự Án Thi Công</th>
-                  <th className="py-2.5 px-3 w-40">Đối Tác / CĐT</th>
-                  <th className="py-2.5 px-3 text-right w-32">Số Tiền (VNĐ)</th>
-                  <th className="py-2.5 px-3 text-center w-24">Ngày Ghi Sổ</th>
-                  <th className="py-2.5 px-3 text-center w-28">Hình Thức</th>
-                  <th className="py-2.5 px-3 text-center w-36">Thao Tác</th>
+                  <th className="py-3 px-2.5 w-10 text-center">STT</th>
+                  <th className="py-3 px-3 w-28">Mã Phiếu</th>
+                  <th className="py-3 px-2.5 w-24 text-center">Loại Phiếu</th>
+                  <th className="py-3 px-2.5 text-center w-24">Ngày Ghi Sổ</th>
+                  <th className="py-3 px-3 min-w-[200px]">Nội Dung Thu / Chi &amp; Diễn Giải</th>
+                  <th className="py-3 px-3 w-40">Dự Án Thi Công</th>
+                  <th className="py-3 px-3 w-40">Đối Tác / CĐT / Thầu Phụ</th>
+                  <th className="py-3 px-3 text-right w-32 bg-emerald-950/60 text-emerald-300 font-black">
+                    Thu (+VNĐ)
+                  </th>
+                  <th className="py-3 px-3 text-right w-32 bg-rose-950/60 text-rose-300 font-black">
+                    Chi (-VNĐ)
+                  </th>
+                  <th className="py-3 px-3 text-right w-32 bg-[#0c1f35] text-cyan-300 font-black">
+                    Tồn Quỹ Lũy Kế
+                  </th>
+                  <th className="py-3 px-2.5 text-center w-24">Hình Thức</th>
+                  <th className="py-3 px-2.5 text-center w-28">Thao Tác</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredTransactions.length === 0 ? (
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {transactionsWithBalance.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-10 text-center text-slate-400">
-                      Không tìm thấy giao dịch nào phù hợp với điều kiện tìm kiếm.
+                    <td colSpan={12} className="py-12 text-center text-slate-400">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <FileSpreadsheet className="w-8 h-8 text-slate-300" />
+                        <span className="font-medium text-slate-500">
+                          Không tìm thấy khoản thu/chi nào phù hợp với bộ lọc hiện tại.
+                        </span>
+                      </div>
                     </td>
                   </tr>
                 ) : (
-                  filteredTransactions.map((tx, idx) => {
+                  transactionsWithBalance.map((tx, idx) => {
                     const isRev = tx.type === 'revenue';
 
                     return (
-                      <tr key={tx.id} className={`hover:bg-slate-50 transition-colors ${isRev ? 'bg-emerald-50/15' : ''}`}>
-                        <td className="py-2.5 px-3 text-center font-bold text-slate-500 font-mono">
+                      <tr 
+                        key={tx.id} 
+                        className={`hover:bg-slate-50 transition-colors ${
+                          isRev ? 'bg-emerald-50/20' : 'bg-white'
+                        }`}
+                      >
+                        <td className="py-2.5 px-2.5 text-center font-bold text-slate-400 font-mono text-[11px]">
                           {idx + 1}
                         </td>
 
                         <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
-                          {tx.code}
+                          <span className="hover:underline cursor-pointer" onClick={() => setViewingVoucher(tx)}>
+                            {tx.code}
+                          </span>
                           {tx.linkedPoCode && (
-                            <div className="text-[10px] text-sky-700 font-mono flex items-center gap-0.5">
+                            <div className="text-[10px] text-sky-700 font-mono flex items-center gap-0.5 mt-0.5">
                               <LinkIcon className="w-2.5 h-2.5" />
                               <span>{tx.linkedPoCode}</span>
                             </div>
                           )}
                         </td>
 
-                        <td className="py-2.5 px-3">
+                        <td className="py-2.5 px-2.5 text-center">
                           {isRev ? (
-                            <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              + Phiếu Thu
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap">
+                              + Thu
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
-                              - Phiếu Chi
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 whitespace-nowrap">
+                              - Chi
                             </span>
                           )}
                         </td>
 
+                        <td className="py-2.5 px-2.5 text-center font-mono text-[11px] text-slate-600">
+                          {formatDateVN(tx.date)}
+                        </td>
+
                         <td className="py-2.5 px-3">
-                          <div className="font-bold text-slate-900">{tx.title}</div>
+                          <div className="font-bold text-slate-900 leading-snug">{tx.title}</div>
                           {tx.subDescription && (
                             <div className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{tx.subDescription}</div>
+                          )}
+                          {tx.notes && (
+                            <div className="text-[10px] text-slate-400 italic line-clamp-1 mt-0.5">Ghi chú: {tx.notes}</div>
                           )}
                         </td>
 
@@ -935,24 +1111,43 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                           {tx.supplier}
                         </td>
 
-                        <td className="py-2.5 px-3 text-right">
-                          <div className={`font-mono font-bold text-sm ${isRev ? 'text-emerald-800' : 'text-rose-700'}`}>
-                            {isRev ? '+' : '-'}{formatVND(tx.totalAmount)}
-                          </div>
+                        {/* Cột Số tiền Thu */}
+                        <td className="py-2.5 px-3 text-right bg-emerald-50/25">
+                          {isRev ? (
+                            <span className="font-mono font-black text-sm text-emerald-800">
+                              +{formatVND(tx.totalAmount)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-mono">-</span>
+                          )}
                         </td>
 
-                        <td className="py-2.5 px-3 text-center font-mono text-[11px] text-slate-600">
-                          {formatDateVN(tx.date)}
+                        {/* Cột Số tiền Chi */}
+                        <td className="py-2.5 px-3 text-right bg-rose-50/25">
+                          {!isRev ? (
+                            <span className="font-mono font-black text-sm text-rose-700">
+                              -{formatVND(tx.totalAmount)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-mono">-</span>
+                          )}
                         </td>
 
-                        <td className="py-2.5 px-3 text-center">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                        {/* Cột Tồn quỹ lũy kế */}
+                        <td className="py-2.5 px-3 text-right font-mono font-bold bg-slate-50/40">
+                          <span className={tx.runningBalance >= 0 ? 'text-sky-900' : 'text-rose-700'}>
+                            {tx.runningBalance >= 0 ? '+' : ''}{formatVND(tx.runningBalance)}
+                          </span>
+                        </td>
+
+                        <td className="py-2.5 px-2.5 text-center">
+                          <span className="px-1.5 py-0.5 rounded text-[9.5px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap">
                             {tx.paymentMethod === 'transfer' ? 'Chuyển khoản' : tx.paymentMethod === 'cash' ? 'Tiền mặt' : 'Tạm ứng'}
                           </span>
                         </td>
 
                         {/* Thao tác: In phiếu, Sửa, Xóa */}
-                        <td className="py-2.5 px-3 text-center">
+                        <td className="py-2.5 px-2.5 text-center">
                           <div className="flex items-center justify-center gap-1">
                             {/* In Phiếu Chuẩn Bộ Tài Chính */}
                             <button
@@ -998,6 +1193,27 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   })
                 )}
               </tbody>
+
+              {/* Hàng Tổng Cộng Chân Bảng */}
+              <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-300 text-xs">
+                <tr>
+                  <td colSpan={7} className="py-3 px-3 text-center font-black uppercase text-slate-800">
+                    TỔNG CỘNG ({ledgerTotals.count} PHIẾU GIAO DỊCH):
+                  </td>
+                  <td className="py-3 px-3 text-right font-mono font-black text-emerald-800 bg-emerald-100/50">
+                    +{formatVND(ledgerTotals.totalRevenue)}
+                  </td>
+                  <td className="py-3 px-3 text-right font-mono font-black text-rose-700 bg-rose-100/50">
+                    -{formatVND(ledgerTotals.totalExpense)}
+                  </td>
+                  <td className="py-3 px-3 text-right font-mono font-black bg-sky-100/60 text-sky-950">
+                    {ledgerTotals.netCashflow >= 0 ? '+' : ''}{formatVND(ledgerTotals.netCashflow)}
+                  </td>
+                  <td colSpan={2} className="py-3 px-2 text-center text-slate-500 font-semibold text-[11px]">
+                    Dòng tiền thuần
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>

@@ -859,7 +859,7 @@ export default function App() {
     },
     {
       id: 'transactions' as ActiveTab,
-      label: 'GIAO DỊCH (THU - CHI)',
+      label: 'BẢNG QUẢN LÝ THU - CHI',
       icon: ArrowLeftRight,
     },
     {
