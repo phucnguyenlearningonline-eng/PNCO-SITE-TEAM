@@ -90,14 +90,26 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     });
   }, [expenses]);
 
-  // Danh sách giao dịch thu - chi thực tế đã phát sinh
+  // Danh sách giao dịch thu - chi thực tế đã phát sinh (CHỈ Phiếu Thu & Phiếu Chi thực tế)
   const transactionItems = useMemo(() => {
     return expenses.filter((e) => {
-      // Thu tiền từ CĐT
-      const isRevenue = e.type === 'revenue';
-      // Chi tiền thực tế: Đã chi hoặc có mã PC- (phiếu chi kế toán)
-      const isPaidExpense = (e.status === 'paid' || e.code.startsWith('PC-')) && (e.type === 'expense' || e.type === 'po' || e.type === 'advance');
-      return isRevenue || isPaidExpense;
+      // 1. Thu tiền CĐT (Phiếu Thu: PT-... hoặc type === 'revenue' hoặc id rcp-)
+      if (e.type === 'revenue' || e.code.startsWith('PT-') || (e.id && e.id.startsWith('rcp-'))) {
+        return true;
+      }
+      // 2. Chi tiền thực tế (Phiếu Chi: PC-... hoặc id pay-/pc-)
+      if (e.code.startsWith('PC-') || (e.id && (e.id.startsWith('pay-') || e.id.startsWith('pc-')))) {
+        return true;
+      }
+      // 3. Đơn hàng PO (type === 'po' hoặc code PO-) TUYỆT ĐỐI KHÔNG PHẢI là Phiếu Chi
+      if (e.type === 'po' || e.code.startsWith('PO-')) {
+        return false;
+      }
+      // 4. Các khoản chi phí kế toán trực tiếp (không phải PO) đã thanh toán
+      if (e.type === 'expense' || e.type === 'advance') {
+        return e.status === 'paid' || e.paymentMethod === 'cash' || e.paymentMethod === 'advance_fund';
+      }
+      return false;
     });
   }, [expenses]);
 
@@ -113,14 +125,24 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       const totalIncome = Math.max(totalRevenueFromItems, p.currentAdvance || 0);
 
       // 2. Chi phí đã chi thực tế
-      const prjPaidExpenses = expenses.filter(
-        (e) => isMatchProject(e, p) && e.type !== 'revenue' && (e.status === 'paid' || e.code.startsWith('PC-'))
-      );
+      const prjPaidExpenses = expenses.filter((e) => {
+        if (!isMatchProject(e, p) || e.type === 'revenue' || e.code.startsWith('PT-')) return false;
+        // Phiếu chi thực tế
+        if (e.code.startsWith('PC-') || (e.id && (e.id.startsWith('pay-') || e.id.startsWith('pc-')))) return true;
+        // Chi phí trực tiếp (không phải PO) đã thanh toán
+        if (e.type !== 'po' && !e.code.startsWith('PO-') && e.status === 'paid') return true;
+        // Đơn hàng PO đã thanh toán nhưng chưa có phiếu chi riêng biệt
+        if ((e.type === 'po' || e.code.startsWith('PO-')) && e.status === 'paid') {
+          const hasLinkedPayment = expenses.some((pc) => pc.linkedPoId === e.id && pc.code.startsWith('PC-'));
+          return !hasLinkedPayment;
+        }
+        return false;
+      });
       const totalPaidExpenses = prjPaidExpenses.reduce((sum, item) => sum + item.totalAmount, 0);
 
       // 3. Dự chi từ đơn hàng PO chưa thanh toán (tính theo số tiền còn nợ sau các đợt đã chi)
       const prjPendingOrders = expenses.filter((e) => {
-        const isOrder = (e.type === 'po' || e.type === 'expense') && isMatchProject(e, p);
+        const isOrder = (e.type === 'po' || e.code.startsWith('PO-') || e.category === 'material') && !e.code.startsWith('PC-') && isMatchProject(e, p);
         if (!isOrder) return false;
         const paid = e.paidAmount || expenses
           .filter((exp) => exp.linkedPoId === e.id && (exp.status === 'paid' || exp.code.startsWith('PC-')))

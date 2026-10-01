@@ -116,11 +116,18 @@ const STORAGE_KEYS = {
 export default function App() {
   // Load state from localStorage or mock data
   const [expenses, setExpenses] = useState<ExpenseItem[]>(() => {
+    const isCloud = isSupabaseConfigured();
     const saved = localStorage.getItem(STORAGE_KEYS.EXPENSES);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
+          // Khi đã cấu hình Supabase: TUYỆT ĐỐI KHÔNG GHÉP MOCK DATA
+          if (isCloud) {
+            const mockIds = new Set(INITIAL_EXPENSES.map((ie) => ie.id));
+            const realOnly = parsed.filter((item: any) => !mockIds.has(item.id));
+            return realOnly;
+          }
           const existingIds = new Set(parsed.map((e: any) => e.id));
           const missing = INITIAL_EXPENSES.filter((ie) => !existingIds.has(ie.id));
           return [...parsed, ...missing].map((item) => {
@@ -136,7 +143,7 @@ export default function App() {
         }
       } catch (e) { /* ignore */ }
     }
-    return INITIAL_EXPENSES;
+    return isCloud ? [] : INITIAL_EXPENSES;
   });
 
   const [users, setUsers] = useState<User[]>(() => {
@@ -201,18 +208,22 @@ export default function App() {
   });
 
   const [projects, setProjects] = useState<Project[]>(() => {
+    const isCloud = isSupabaseConfigured();
     const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          if (isCloud) {
+            return parsed;
+          }
           const existingIds = new Set(parsed.map((p: any) => p.code || p.id));
           const missing = INITIAL_PROJECTS.filter((ip) => !existingIds.has(ip.code) && !existingIds.has(ip.id));
           return [...missing, ...parsed];
         }
       } catch (e) { /* ignore */ }
     }
-    return INITIAL_PROJECTS;
+    return isCloud ? [] : INITIAL_PROJECTS;
   });
 
   const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
@@ -354,54 +365,49 @@ export default function App() {
         fetchMaterialsFromSupabase(),
       ]);
 
-      // Hợp nhất dữ liệu đã được tách biệt từ 2 bảng trên Supabase
-      const remoteAll = (remoteExpenses !== null || remoteTransactions !== null)
-        ? [...(remoteExpenses || []), ...(remoteTransactions || [])]
-        : null;
-
-      // If remote records exist, sync without changing local order
-      if (remoteAll !== null) {
-        setExpenses((prevLocal) => {
-          if (!remoteAll || remoteAll.length === 0) return prevLocal;
-          const remoteById = new Map<string, ExpenseItem>();
-          const remoteByCode = new Map<string, ExpenseItem>();
-          remoteAll.forEach((r) => {
-            if (r.id) remoteById.set(r.id, r);
-            if (r.code) remoteByCode.set(r.code.trim().toLowerCase(), r);
+      // Hợp nhất dữ liệu đã được tách biệt từ 2 bảng trên Supabase (TUYỆT ĐỐI CHỈ DÙNG DỮ LIỆU TỪ SUPABASE)
+      if (remoteExpenses !== null || remoteTransactions !== null) {
+        const allRemotesMap = new Map<string, ExpenseItem>();
+        if (remoteExpenses) {
+          remoteExpenses.forEach((item) => {
+            if (item && item.id) allRemotesMap.set(item.id, item);
           });
-
-          // Giữ nguyên thứ tự tuyệt đối của prevLocal khi cập nhật
-          const handledRemoteIds = new Set<string>();
-          const updatedLocal = prevLocal.map((local) => {
-            const remote = remoteById.get(local.id) || (local.code ? remoteByCode.get(local.code.trim().toLowerCase()) : undefined);
-            if (remote) {
-              handledRemoteIds.add(remote.id);
-              return {
-                ...remote,
-                contractFileUrl: remote.contractFileUrl || local.contractFileUrl,
-                hasContract: remote.hasContract ?? local.hasContract,
-                contractNumber: remote.contractNumber || local.contractNumber,
-                contractDate: remote.contractDate || local.contractDate,
-                contractAdvanceAmount: remote.contractAdvanceAmount ?? local.contractAdvanceAmount,
-                contractAdvancePercentage: remote.contractAdvancePercentage ?? local.contractAdvancePercentage,
-                contractPaymentStages:
-                  remote.contractPaymentStages && remote.contractPaymentStages.length > 0
-                    ? remote.contractPaymentStages
-                    : local.contractPaymentStages,
-                contractNotes: remote.contractNotes || local.contractNotes,
-              };
-            }
-            return local;
+        }
+        if (remoteTransactions) {
+          // Bảng transactions là ưu tiên cho các chứng từ Thu - Chi
+          remoteTransactions.forEach((item) => {
+            if (item && item.id) allRemotesMap.set(item.id, item);
           });
+        }
+        const remoteAll = Array.from(allRemotesMap.values());
 
-          // Chỉ thêm các bản ghi hoàn toàn mới từ server xuống cuối mảng
-          const brandNewRemotes = remoteAll.filter((r) => !handledRemoteIds.has(r.id));
-          return [...updatedLocal, ...brandNewRemotes];
-        });
+        // CHỈ LẤY ĐÚNG DỮ LIỆU CÓ TRÊN SUPABASE, KHÔNG GIỮ MOCK DATA CŨ
+        setExpenses(remoteAll);
+        try {
+          localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(remoteAll));
+        } catch (e) {
+          // ignore
+        }
       }
-      if (remoteProjects && remoteProjects.length > 0) setProjects(remoteProjects);
-      if (remoteSuppliers && remoteSuppliers.length > 0) setSuppliers(remoteSuppliers);
-      if (remoteMaterials && remoteMaterials.length > 0) setMaterials(remoteMaterials);
+
+      if (remoteProjects !== null) {
+        setProjects(remoteProjects);
+        try {
+          localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(remoteProjects));
+        } catch (e) { /* ignore */ }
+      }
+      if (remoteSuppliers !== null) {
+        setSuppliers(remoteSuppliers);
+        try {
+          localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(remoteSuppliers));
+        } catch (e) { /* ignore */ }
+      }
+      if (remoteMaterials !== null) {
+        setMaterials(remoteMaterials);
+        try {
+          localStorage.setItem(STORAGE_KEYS.MATERIALS, JSON.stringify(remoteMaterials));
+        } catch (e) { /* ignore */ }
+      }
       if (remoteUsers && remoteUsers.length > 0) {
         const normalized = remoteUsers.map((u) => {
           const isMinh = u.id === 'u-1' || (u.name && u.name.toLowerCase().includes('minh')) || (u.email && u.email.toLowerCase().includes('minh.ta')) || u.username === 'Pncons';
@@ -1101,8 +1107,9 @@ export default function App() {
               expenses={expenses}
               onSaveExpense={handleSaveExpense}
               onDeleteExpense={handleDelete}
-              onRefreshData={() => {
-                showToast('Đã nạp lại dữ liệu dòng tiền');
+              onRefreshData={async () => {
+                await loadDataFromSupabase();
+                showToast('Đã tải lại dữ liệu mới nhất từ Supabase');
               }}
             />
           ) : activeTab === 'suppliers' ? (
