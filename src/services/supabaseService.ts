@@ -190,7 +190,8 @@ export function subscribeToExpensesRealtime(
 
   try {
     const channel = supabase
-      .channel('public-expenses-realtime')
+      .channel('public-finance-realtime')
+      // Lắng nghe bảng expenses (Đơn hàng PO)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'expenses' },
@@ -212,6 +213,34 @@ export function subscribeToExpensesRealtime(
       .on(
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'expenses' },
+        (payload) => {
+          if (payload.old && payload.old.id) {
+            onDelete(payload.old.id);
+          }
+        }
+      )
+      // Lắng nghe bảng transactions (Phiếu Thu & Phiếu Chi tách biệt)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'transactions' },
+        (payload) => {
+          if (payload.new) {
+            onInsert(mapRowToExpense(payload.new));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'transactions' },
+        (payload) => {
+          if (payload.new) {
+            onUpdate(mapRowToExpense(payload.new));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'transactions' },
         (payload) => {
           if (payload.old && payload.old.id) {
             onDelete(payload.old.id);
@@ -638,8 +667,122 @@ export async function deleteTransactionFromSupabase(id: string): Promise<boolean
   }
 }
 
+// Helper xác định một bản ghi là Phiếu Thu / Phiếu Chi hay Đơn Hàng PO
+export function isTransactionRecord(item: { type?: string; code?: string; id?: string }): boolean {
+  if (!item) return false;
+  if (item.type === 'revenue') return true;
+  if (item.code && (item.code.startsWith('PT-') || item.code.startsWith('PC-'))) return true;
+  if (item.id && (item.id.startsWith('pay-') || item.id.startsWith('rcp-') || item.id.startsWith('pt-') || item.id.startsWith('pc-'))) return true;
+  return false;
+}
+
+// Lưu thông minh vào đúng bảng chuyên biệt: Phiếu thu chi -> transactions | Đơn hàng PO -> expenses
+export async function saveRecordToAppropriateTable(item: ExpenseItem): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+
+  if (isTransactionRecord(item)) {
+    // 1. Lưu vào bảng transactions
+    const ok = await upsertTransactionToSupabase(item);
+    // 2. Tách sạch: Xóa khỏi bảng expenses nếu trước đây bị lưu nhầm vào expenses
+    try {
+      await supabase.from('expenses').delete().eq('id', item.id);
+    } catch (e) {
+      // ignore
+    }
+    return ok;
+  } else {
+    // 1. Lưu vào bảng expenses (Đơn hàng mua sắm vật tư PO)
+    const ok = await upsertExpenseToSupabase(item);
+    // 2. Xóa khỏi bảng transactions nếu có
+    try {
+      await supabase.from('transactions').delete().eq('id', item.id);
+    } catch (e) {
+      // ignore
+    }
+    return ok;
+  }
+}
+
+// Xóa bản ghi ở đúng bảng chuyên biệt
+export async function deleteRecordFromAppropriateTable(id: string, code?: string, type?: string): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+
+  const isTx = isTransactionRecord({ id, code, type });
+  if (isTx) {
+    const ok = await deleteTransactionFromSupabase(id);
+    await deleteExpenseFromSupabase(id); // đảm bảo sạch cả 2 bảng
+    return ok;
+  } else {
+    const ok = await deleteExpenseFromSupabase(id);
+    await deleteTransactionFromSupabase(id);
+    return ok;
+  }
+}
+
+// Hàm tự động tách & dọn dẹp Phiếu Thu Chi ra khỏi bảng expenses trên Supabase
+export async function separateAndCleanTransactionsOnSupabase(): Promise<{
+  success: boolean;
+  message: string;
+  transferredCount: number;
+  remainingOrdersCount: number;
+}> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return { success: false, message: 'Chưa cấu hình Supabase.', transferredCount: 0, remainingOrdersCount: 0 };
+  }
+
+  try {
+    // 1. Đọc toàn bộ bản ghi hiện có trong bảng expenses
+    const { data: allExpenses, error: fetchErr } = await supabase.from('expenses').select('*');
+    if (fetchErr) {
+      return { success: false, message: `Lỗi đọc bảng expenses: ${fetchErr.message}`, transferredCount: 0, remainingOrdersCount: 0 };
+    }
+
+    if (!allExpenses || allExpenses.length === 0) {
+      return { success: true, message: 'Bảng expenses hiện tại chưa có dữ liệu.', transferredCount: 0, remainingOrdersCount: 0 };
+    }
+
+    // 2. Phân loại: Phiếu Thu/Chi vs Đơn Hàng PO
+    const transactionRows = allExpenses.filter((row: any) => isTransactionRecord(row));
+    const orderRows = allExpenses.filter((row: any) => !isTransactionRecord(row));
+
+    // 3. Đẩy toàn bộ Phiếu Thu / Chi vào bảng transactions
+    let transferred = 0;
+    for (const row of transactionRows) {
+      const item = mapRowToExpense(row);
+      const ok = await upsertTransactionToSupabase(item);
+      if (ok) transferred++;
+    }
+
+    // 4. Xóa toàn bộ Phiếu Thu / Chi ra khỏi bảng expenses để bảng expenses CHỈ CÒN ĐƠN HÀNG PO
+    if (transactionRows.length > 0) {
+      const idsToDelete = transactionRows.map((r: any) => r.id);
+      for (let i = 0; i < idsToDelete.length; i += 40) {
+        const chunk = idsToDelete.slice(i, i + 40);
+        await supabase.from('expenses').delete().in('id', chunk);
+      }
+    }
+
+    return {
+      success: true,
+      message: `Đã tách thành công ${transferred} phiếu thu & chi sang bảng 'transactions' và xóa sạch khỏi bảng 'expenses'. Bảng 'expenses' hiện chỉ còn ${orderRows.length} đơn hàng PO.`,
+      transferredCount: transferred,
+      remainingOrdersCount: orderRows.length,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `Lỗi tách dữ liệu: ${err?.message || err}`,
+      transferredCount: 0,
+      remainingOrdersCount: 0,
+    };
+  }
+}
+
 // ==============================================================
-// MIGRATE ALL LOCAL DATA TO SUPABASE (1-CLICK SYNC)
+// MIGRATE ALL LOCAL DATA TO SUPABASE (1-CLICK SYNC ĐÃ TÁCH BIỆT)
 // ==============================================================
 export async function syncAllLocalDataToSupabase(data: {
   projects: Project[];
@@ -674,23 +817,24 @@ export async function syncAllLocalDataToSupabase(data: {
       if (!ok) failedCount++;
     }
 
-    // 4. Expenses (PO và Chi phí site)
-    for (const e of data.expenses) {
-      const ok = await upsertExpenseToSupabase(e);
+    // 4. Đơn hàng PO -> CHỈ LƯU VÀO BẢNG EXPENSES
+    const orderList = data.expenses.filter((e) => !isTransactionRecord(e));
+    for (const order of orderList) {
+      const ok = await upsertExpenseToSupabase(order);
       if (!ok) failedCount++;
     }
 
-    // 5. Transactions (Đồng bộ vào Bảng Sổ Thu Chi chuyên dụng)
-    const transactionList = data.expenses.filter((e) => {
-      const isRev = e.type === 'revenue' || e.code.startsWith('PT-');
-      const isPaidExp = (e.status === 'paid' || e.code.startsWith('PC-')) && e.type !== 'revenue';
-      return isRev || isPaidExp;
-    });
-
+    // 5. Phiếu Thu & Phiếu Chi -> CHỈ LƯU VÀO BẢNG TRANSACTIONS (VÀ XÓA KHỎI EXPENSES NẾU CÓ)
+    const transactionList = data.expenses.filter((e) => isTransactionRecord(e));
     for (const tx of transactionList) {
       const ok = await upsertTransactionToSupabase(tx);
-      // Không tăng failedCount nếu bảng transactions chưa được tạo trên Supabase cũ
       if (!ok) console.warn('Could not sync to transactions table (may need schema update)');
+      // Xóa khỏi bảng expenses để không bị combine
+      try {
+        await supabase.from('expenses').delete().eq('id', tx.id);
+      } catch (e) {
+        // ignore
+      }
     }
 
     // 6. Materials (Vật tư thi công & sản phẩm)
@@ -704,17 +848,17 @@ export async function syncAllLocalDataToSupabase(data: {
     if (failedCount > 0) {
       return {
         success: false,
-        message: `Có ${failedCount} bản ghi không thể ghi vào Supabase. Vui lòng kiểm tra xem bạn đã tạo bảng 'materials' và 'transactions' và cấp quyền RLS chưa.`,
-        count: (data.expenses.length + (data.materials?.length || 0)) - failedCount,
+        message: `Có ${failedCount} bản ghi không thể ghi vào Supabase. Vui lòng kiểm tra quyền RLS các bảng.`,
+        count: (orderList.length + transactionList.length + (data.materials?.length || 0)) - failedCount,
       };
     }
 
     const matMsg = data.materials?.length ? `, ${data.materials.length} vật tư` : '';
-    const txMsg = transactionList.length ? `, ${transactionList.length} giao dịch thu chi` : '';
+    const txMsg = transactionList.length ? `, ${transactionList.length} phiếu thu chi (bảng transactions)` : '';
     return {
       success: true,
-      message: `Đồng bộ thành công ${data.expenses.length} khoản chi, ${data.projects.length} dự án, ${data.suppliers.length} đối tác${matMsg}${txMsg} lên Supabase!`,
-      count: data.expenses.length + (data.materials?.length || 0),
+      message: `Đã đồng bộ tách biệt thành công: ${orderList.length} đơn hàng PO (bảng expenses)${txMsg}, ${data.projects.length} dự án${matMsg} lên Supabase!`,
+      count: orderList.length + transactionList.length + (data.materials?.length || 0),
     };
   } catch (err: any) {
     return {

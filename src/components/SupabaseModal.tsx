@@ -20,7 +20,7 @@ import {
   testSupabaseConnection, 
   SupabaseConfig 
 } from '../lib/supabase';
-import { syncAllLocalDataToSupabase } from '../services/supabaseService';
+import { syncAllLocalDataToSupabase, separateAndCleanTransactionsOnSupabase } from '../services/supabaseService';
 import { ExpenseItem, Project, Supplier, User, MaterialItem } from '../types';
 
 interface SupabaseModalProps {
@@ -50,8 +50,11 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isSeparating, setIsSeparating] = useState(false);
+  const [separateResult, setSeparateResult] = useState<{ success: boolean; message: string } | null>(null);
   const [copiedEnv, setCopiedEnv] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
+  const [copiedSeparateSql, setCopiedSeparateSql] = useState(false);
 
   const FIX_SQL = `-- ================================================================
 -- 1. TẠO BẢNG SỔ NHẬT KÝ THU - CHI (TRANSACTIONS) & VẬT TƯ (MATERIALS)
@@ -244,6 +247,102 @@ END $$;`;
     });
     setSyncResult(res);
     setIsSyncing(false);
+  };
+
+  const handleSeparateAndClean = async () => {
+    setIsSeparating(true);
+    setSeparateResult(null);
+    const res = await separateAndCleanTransactionsOnSupabase();
+    setSeparateResult(res);
+    setIsSeparating(false);
+    if (res.success) {
+      onRefreshDataFromSupabase();
+    }
+  };
+
+  const SEPARATE_SQL = `-- ================================================================
+-- 1. TẠO BẢNG TRANSACTIONS (NẾU CHƯA CÓ)
+-- ================================================================
+CREATE TABLE IF NOT EXISTS public.transactions (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    type TEXT NOT NULL CHECK (type IN ('revenue', 'expense')),
+    category TEXT NOT NULL CHECK (category IN ('material', 'transport', 'overtime_meal', 'labor_sub', 'client_advance', 'contract_payment', 'other')),
+    title TEXT NOT NULL,
+    sub_description TEXT,
+    project_id TEXT,
+    project_name TEXT,
+    supplier TEXT,
+    receiver_or_payer TEXT,
+    created_by_id TEXT,
+    created_by_name TEXT,
+    created_by_role TEXT,
+    date DATE NOT NULL,
+    amount BIGINT DEFAULT 0,
+    vat_rate NUMERIC DEFAULT 0,
+    vat_amount BIGINT DEFAULT 0,
+    total_amount BIGINT NOT NULL DEFAULT 0,
+    priority TEXT DEFAULT 'normal',
+    status TEXT DEFAULT 'paid',
+    payment_method TEXT DEFAULT 'transfer',
+    bank_account TEXT,
+    receipt_image TEXT,
+    notes TEXT,
+    linked_po_id TEXT,
+    linked_po_code TEXT,
+    approved_by TEXT,
+    approved_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow All Transactions" ON public.transactions;
+CREATE POLICY "Allow All Transactions" ON public.transactions FOR ALL USING (true) WITH CHECK (true);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'transactions') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.transactions;
+  END IF;
+END $$;
+
+-- 2. SAO CHÉP TOÀN BỘ PHIẾU THU & PHIẾU CHI TỪ EXPENSES SANG TRANSACTIONS
+INSERT INTO public.transactions (
+    id, code, type, category, title, sub_description, project_id, project_name, 
+    supplier, receiver_or_payer, created_by_id, created_by_name, created_by_role, 
+    date, amount, vat_rate, vat_amount, total_amount, priority, status, payment_method, notes
+)
+SELECT 
+    id, code, 
+    CASE WHEN type = 'revenue' OR code LIKE 'PT-%' THEN 'revenue' ELSE 'expense' END,
+    category, title, sub_description, project_id, project_name, 
+    supplier, supplier, created_by_id, created_by_name, created_by_role, 
+    date, amount, vat_rate, vat_amount, total_amount, priority, status, payment_method, notes
+FROM public.expenses
+WHERE type = 'revenue' 
+   OR code LIKE 'PT-%' 
+   OR code LIKE 'PC-%' 
+   OR id LIKE 'pay-%' 
+   OR id LIKE 'rcp-%'
+ON CONFLICT (id) DO UPDATE SET
+    code = EXCLUDED.code,
+    type = EXCLUDED.type,
+    total_amount = EXCLUDED.total_amount,
+    title = EXCLUDED.title;
+
+-- 3. XÓA PHIẾU THU & PHIẾU CHI KHỎI BẢNG EXPENSES (ĐỂ EXPENSES CHỈ CÒN ĐƠN HÀNG PO/DH)
+DELETE FROM public.expenses
+WHERE type = 'revenue' 
+   OR code LIKE 'PT-%' 
+   OR code LIKE 'PC-%' 
+   OR id LIKE 'pay-%' 
+   OR id LIKE 'rcp-%';`;
+
+  const handleCopySeparateSql = () => {
+    navigator.clipboard.writeText(SEPARATE_SQL);
+    setCopiedSeparateSql(true);
+    setTimeout(() => setCopiedSeparateSql(false), 2500);
   };
 
   const handleCopyEnvVars = () => {
@@ -458,6 +557,56 @@ END $$;`;
               >
                 <strong>{syncResult.success ? '✓ Hoàn tất: ' : '✕ Thất bại: '}</strong>
                 {syncResult.message}
+              </div>
+            )}
+          </div>
+
+          {/* TÁCH RIÊNG BẢNG ĐƠN HÀNG (EXPENSES) & THU CHI (TRANSACTIONS) */}
+          <div className="bg-sky-50/70 border border-sky-300 rounded-xl p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="font-bold text-sky-950 text-sm flex items-center gap-1.5">
+                  <Database className="w-4 h-4 text-sky-700" />
+                  <span>Tách Riêng Bảng Đơn Hàng PO (expenses) &amp; Thu Chi (transactions)</span>
+                </h4>
+                <p className="text-slate-600 text-xs mt-0.5 max-w-xl">
+                  Tự động chuyển toàn bộ <strong>Phiếu Thu (PT-...)</strong> và <strong>Phiếu Chi (PC-...)</strong> sang bảng riêng <code className="bg-white px-1.5 py-0.5 rounded font-mono text-sky-800 font-bold border border-slate-200">transactions</code>, đồng thời xóa sạch khỏi bảng <code className="bg-white px-1.5 py-0.5 rounded font-mono text-sky-800 font-bold border border-slate-200">expenses</code> để bảng expenses <strong>chỉ chứa Đơn hàng mua sắm vật tư PO (DH ...)</strong>.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCopySeparateSql}
+                  className="px-3 py-2 rounded-lg bg-white border border-sky-300 hover:bg-sky-50 text-sky-900 font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-colors"
+                  title="Sao chép kịch bản SQL để chạy trong Supabase SQL Editor"
+                >
+                  {copiedSeparateSql ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-sky-600" />}
+                  <span>{copiedSeparateSql ? 'Đã sao chép SQL' : 'Sao chép SQL Tách Bảng'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSeparateAndClean}
+                  disabled={isSeparating || !url || !anonKey}
+                  className="px-4 py-2 rounded-lg bg-sky-700 hover:bg-sky-600 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSeparating ? 'animate-spin' : ''}`} />
+                  <span>{isSeparating ? 'Đang thực hiện tách...' : 'Tách & Dọn Dẹp Ngay'}</span>
+                </button>
+              </div>
+            </div>
+
+            {separateResult && (
+              <div
+                className={`p-3 rounded-lg border text-xs ${
+                  separateResult.success
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                    : 'bg-rose-50 border-rose-300 text-rose-900'
+                }`}
+              >
+                <strong>{separateResult.success ? '✓ Hoàn tất: ' : '✕ Thất bại: '}</strong>
+                {separateResult.message}
               </div>
             )}
           </div>

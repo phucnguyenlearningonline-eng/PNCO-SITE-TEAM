@@ -50,6 +50,9 @@ import {
   fetchExpensesFromSupabase, 
   upsertExpenseToSupabase, 
   deleteExpenseFromSupabase,
+  fetchTransactionsFromSupabase,
+  saveRecordToAppropriateTable,
+  deleteRecordFromAppropriateTable,
   fetchProjectsFromSupabase,
   upsertProjectToSupabase,
   deleteProjectFromSupabase,
@@ -338,25 +341,31 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Load data from Supabase if credentials are provided
+  // Load data from Supabase if credentials are provided (Hợp nhất Đơn hàng PO từ expenses và Phiếu Thu Chi từ transactions)
   const loadDataFromSupabase = async () => {
     if (!isSupabaseConfigured()) return;
     try {
-      const [remoteExpenses, remoteProjects, remoteSuppliers, remoteUsers, remoteMaterials] = await Promise.all([
+      const [remoteExpenses, remoteTransactions, remoteProjects, remoteSuppliers, remoteUsers, remoteMaterials] = await Promise.all([
         fetchExpensesFromSupabase(),
+        fetchTransactionsFromSupabase(),
         fetchProjectsFromSupabase(),
         fetchSuppliersFromSupabase(),
         fetchUsersFromSupabase(),
         fetchMaterialsFromSupabase(),
       ]);
 
-      // If remote expenses exist (even empty array after deletions), sync it without changing order
-      if (remoteExpenses !== null) {
+      // Hợp nhất dữ liệu đã được tách biệt từ 2 bảng trên Supabase
+      const remoteAll = (remoteExpenses !== null || remoteTransactions !== null)
+        ? [...(remoteExpenses || []), ...(remoteTransactions || [])]
+        : null;
+
+      // If remote records exist, sync without changing local order
+      if (remoteAll !== null) {
         setExpenses((prevLocal) => {
-          if (!remoteExpenses || remoteExpenses.length === 0) return prevLocal;
+          if (!remoteAll || remoteAll.length === 0) return prevLocal;
           const remoteById = new Map<string, ExpenseItem>();
           const remoteByCode = new Map<string, ExpenseItem>();
-          remoteExpenses.forEach((r) => {
+          remoteAll.forEach((r) => {
             if (r.id) remoteById.set(r.id, r);
             if (r.code) remoteByCode.set(r.code.trim().toLowerCase(), r);
           });
@@ -386,7 +395,7 @@ export default function App() {
           });
 
           // Chỉ thêm các bản ghi hoàn toàn mới từ server xuống cuối mảng
-          const brandNewRemotes = remoteExpenses.filter((r) => !handledRemoteIds.has(r.id));
+          const brandNewRemotes = remoteAll.filter((r) => !handledRemoteIds.has(r.id));
           return [...updatedLocal, ...brandNewRemotes];
         });
       }
@@ -570,7 +579,7 @@ export default function App() {
     showToast(editingExpense ? `Đã cập nhật đơn hàng/khoản chi: ${item.code}` : `Đã tạo đơn hàng / hợp đồng mới: ${item.code}`);
 
     if (isSupabaseConfigured()) {
-      const ok = await upsertExpenseToSupabase(item);
+      const ok = await saveRecordToAppropriateTable(item);
       if (!ok) {
         showToast(`Lỗi: Không lưu được lên Supabase (vui lòng kiểm tra quyền RLS)`);
       }
@@ -587,7 +596,7 @@ export default function App() {
     };
     setExpenses((prev) => prev.map((e) => (e.id === item.id ? updated : e)));
     if (isSupabaseConfigured()) {
-      await upsertExpenseToSupabase(updated);
+      await saveRecordToAppropriateTable(updated);
     }
     showToast(`Đã phê duyệt khoản chi: ${item.code}`);
   };
@@ -596,7 +605,7 @@ export default function App() {
     const updated: ExpenseItem = { ...item, status: 'rejected' };
     setExpenses((prev) => prev.map((e) => (e.id === item.id ? updated : e)));
     if (isSupabaseConfigured()) {
-      await upsertExpenseToSupabase(updated);
+      await saveRecordToAppropriateTable(updated);
     }
     showToast(`Đã từ chối khoản chi: ${item.code}`);
   };
@@ -605,7 +614,7 @@ export default function App() {
     const updated: ExpenseItem = { ...item, status: 'paid' };
     setExpenses((prev) => prev.map((e) => (e.id === item.id ? updated : e)));
     if (isSupabaseConfigured()) {
-      await upsertExpenseToSupabase(updated);
+      await saveRecordToAppropriateTable(updated);
     }
     showToast(`Đã ghi nhận thanh toán hoàn tất cho: ${item.code}`);
   };
@@ -614,7 +623,7 @@ export default function App() {
     if (confirm(`Bạn có chắc chắn muốn xóa ${item.code} (${item.title})?`)) {
       setExpenses((prev) => prev.filter((e) => e.id !== item.id));
       if (isSupabaseConfigured()) {
-        const ok = await deleteExpenseFromSupabase(item.id);
+        const ok = await deleteRecordFromAppropriateTable(item.id, item.code, item.type);
         if (!ok) {
           showToast(`Lỗi: Không xóa được trên Supabase (hãy kiểm tra quyền RLS)`);
           return;
