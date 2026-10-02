@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { Project, ExpenseItem, ExpenseCategory } from '../../types';
 import { formatVND, formatTy, formatDateVN } from '../../utils/formatters';
-import { generateNextVoucherCode, isPaymentVoucher, isReceiptVoucher } from '../../utils/voucherCode';
+import { generateNextVoucherCode, isPaymentVoucher, isReceiptVoucher, sortVouchersAndOrders } from '../../utils/voucherCode';
 
 interface CreatePaymentModalProps {
   isOpen: boolean;
@@ -55,8 +55,8 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
 
   // Lọc danh sách ĐƠN HÀNG THỰC TẾ (TUYỆT ĐỐI KHÔNG LẤY PHIẾU CHI PC- HOẶC PHIẾU THU PT-)
   // CHỈ lấy đơn hàng còn nợ mốc thanh toán (đơn đã thanh toán đủ thì KHÔNG show lên)
-  const payableOrders = useMemo(() => {
-    return expenses.filter((e) => {
+  const payableOrders = useMemo<ExpenseItem[]>(() => {
+    const filtered = expenses.filter((e) => {
       // 1. TUYỆT ĐỐI KHÔNG SHOW PHIẾU CHI VÀ PHIẾU THU TRONG MỤC ĐƠN HÀNG
       if (isPaymentVoucher(e) || isReceiptVoucher(e)) return false;
       const codeUpper = (e.code || '').trim().toUpperCase();
@@ -105,6 +105,9 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
 
       return true;
     });
+
+    // Sắp xếp đơn hàng cần chi theo thứ tự mới nhất lên đầu
+    return sortVouchersAndOrders(filtered, 'newest');
   }, [expenses, initialData, preselectedPo]);
 
   // 3 chế độ nguồn chi: 'po' (Từ đơn hàng) | 'labor_contract' (Hợp đồng nhân công) | 'other' (Tự nhập)

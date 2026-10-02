@@ -69,6 +69,7 @@ import { ClientsView } from './components/ClientsView';
 import { MaterialsView } from './components/MaterialsView';
 import { ContractsView } from './components/ContractsView';
 import { TransactionsView } from './components/TransactionsView';
+import { sortVouchersAndOrders } from './utils/voucherCode';
 import { 
   INITIAL_EXPENSES, 
   INITIAL_PROJECTS, 
@@ -306,7 +307,10 @@ export default function App() {
 
   // Auth / Login state
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    return localStorage.getItem(STORAGE_KEYS.IS_LOGGED_IN) === 'true';
+    const saved = localStorage.getItem(STORAGE_KEYS.IS_LOGGED_IN);
+    // Mặc định cho phép người dùng vào thẳng hệ thống, không bị khóa ở màn hình đăng nhập
+    if (saved === null) return true;
+    return saved === 'true';
   });
 
   const handleLoginSuccess = (user: User) => {
@@ -496,8 +500,8 @@ export default function App() {
   }, []);
 
   // Filtered expenses calculation
-  const filteredExpenses = useMemo(() => {
-    return expenses.filter((item) => {
+  const filteredExpenses = useMemo<ExpenseItem[]>(() => {
+    const list = expenses.filter((item) => {
       // Khi ở tab Đơn hàng (orders): CHỈ HIỂN THỊ ĐƠN HÀNG MUA VẬT TƯ (PO)
       // Nhân công, chi phí khác và phiếu chi/thu KHÔNG ĐƯỢC nằm trong đơn hàng!
       if (activeTab === 'orders') {
@@ -554,6 +558,9 @@ export default function App() {
 
       return true;
     });
+
+    // Sắp xếp thứ tự đơn hàng / chi phí theo thứ tự thời gian mới nhất lên đầu
+    return sortVouchersAndOrders(list, 'newest');
   }, [expenses, activeTab, filters]);
 
   // Pending count
@@ -565,12 +572,12 @@ export default function App() {
   const handleSaveExpense = async (item: ExpenseItem) => {
     setExpenses((prev) => {
       const exists = prev.some(
-        (e) => e.id === item.id || (item.code && e.code.trim().toLowerCase() === item.code.trim().toLowerCase())
+        (e) => e && (e.id === item.id || (item.code && e.code && e.code.trim().toLowerCase() === item.code.trim().toLowerCase()))
       );
       let updatedList: ExpenseItem[];
       if (exists) {
         updatedList = prev.map((e) =>
-          e.id === item.id || (item.code && e.code.trim().toLowerCase() === item.code.trim().toLowerCase())
+          e && (e.id === item.id || (item.code && e.code && e.code.trim().toLowerCase() === item.code.trim().toLowerCase()))
             ? item
             : e
         );
@@ -909,7 +916,7 @@ export default function App() {
 
   // Tính toán số lượng khách hàng thực tế (từ các công trình/giao dịch thực tế)
   const actualClientsCount = useMemo(() => {
-    return new Set(projects.map((p) => p.client.trim()).filter(Boolean)).size;
+    return new Set((projects || []).map((p) => p?.client?.trim()).filter(Boolean)).size;
   }, [projects]);
 
   // Tính toán số lượng nhà cung cấp thực tế trong bản chi tiết giao dịch

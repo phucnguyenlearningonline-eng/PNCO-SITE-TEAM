@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ShoppingCart, CreditCard, AlertCircle, Clock, CheckCircle2, ChevronRight, ArrowRight, DollarSign } from 'lucide-react';
 import { ExpenseItem, Project } from '../../types';
 import { formatVND, formatDateVN, formatTy } from '../../utils/formatters';
-import { isPaymentVoucher, isReceiptVoucher } from '../../utils/voucherCode';
+import { isPaymentVoucher, isReceiptVoucher, sortVouchersAndOrders } from '../../utils/voucherCode';
 
 interface PendingPayablesTableProps {
   expenses: ExpenseItem[];
@@ -28,23 +28,27 @@ export const PendingPayablesTable: React.FC<PendingPayablesTableProps> = ({
     return Math.max(0, po.totalAmount - paid);
   };
 
-  // Lọc các đơn hàng PO thực tế còn nợ (Tuyệt đối loại bỏ Phiếu Chi PC- và Đơn đã trả đủ)
-  const pendingOrders = expenses.filter((e) => {
-    if (isPaymentVoucher(e) || isReceiptVoucher(e)) return false;
-    const codeUpper = (e.code || '').trim().toUpperCase();
-    if (codeUpper.startsWith('PC-') || codeUpper.startsWith('PNCO-PC-') || codeUpper.includes('PC') || codeUpper.startsWith('PT-') || codeUpper.startsWith('PNCO-PT-')) return false;
-    if (e.id?.startsWith('pay-') || e.id?.startsWith('pc-') || e.id?.startsWith('rcp-') || e.id?.startsWith('pt-')) return false;
-    if (e.type === 'revenue') return false;
-    if (e.linkedPoId) return false;
+  // Lọc các đơn hàng PO thực tế còn nợ (Tuyệt đối loại bỏ Phiếu Chi PC- và Đơn đã trả đủ, sắp xếp mới nhất lên đầu)
+  const pendingOrders = useMemo(() => {
+    const filtered = expenses.filter((e) => {
+      if (isPaymentVoucher(e) || isReceiptVoucher(e)) return false;
+      const codeUpper = (e.code || '').trim().toUpperCase();
+      if (codeUpper.startsWith('PC-') || codeUpper.startsWith('PNCO-PC-') || codeUpper.includes('PC') || codeUpper.startsWith('PT-') || codeUpper.startsWith('PNCO-PT-')) return false;
+      if (e.id?.startsWith('pay-') || e.id?.startsWith('pc-') || e.id?.startsWith('rcp-') || e.id?.startsWith('pt-')) return false;
+      if (e.type === 'revenue') return false;
+      if (e.linkedPoId) return false;
 
-    const isOrder = e.type === 'po' || codeUpper.startsWith('PO') || codeUpper.startsWith('DH');
-    if (!isOrder) return false;
+      const isOrder = e.type === 'po' || codeUpper.startsWith('PO') || codeUpper.startsWith('DH');
+      if (!isOrder) return false;
 
-    const rem = getPoRemaining(e);
-    if (rem <= 1000 || e.status === 'paid') return false;
-    if (selectedProjectId !== 'all' && e.projectId !== selectedProjectId) return false;
-    return true;
-  });
+      const rem = getPoRemaining(e);
+      if (rem <= 1000 || e.status === 'paid') return false;
+      if (selectedProjectId !== 'all' && e.projectId !== selectedProjectId) return false;
+      return true;
+    });
+
+    return sortVouchersAndOrders(filtered, 'newest');
+  }, [expenses, selectedProjectId]);
 
   const totalPendingAmount = pendingOrders.reduce((sum, item) => sum + getPoRemaining(item), 0);
 

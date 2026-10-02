@@ -104,7 +104,7 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {expenses.map((item, index) => {
+            {expenses.filter(Boolean).map((item, index) => {
               const isEven = index % 2 === 1;
               return (
                 <tr 

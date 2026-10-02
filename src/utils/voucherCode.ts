@@ -72,3 +72,57 @@ export function isReceiptVoucher(item?: ExpenseItem | null): boolean {
   return false;
 }
 
+/**
+ * Sắp xếp mọi thứ đơn hàng PO, phiếu thu PT và phiếu chi PC theo thứ tự chuẩn mực:
+ * - 'newest' (Mặc định): Mới nhất lên đầu (ngày mới nhất, số thứ tự lớn nhất).
+ * - 'oldest': Cũ nhất lên đầu (theo thứ tự phát sinh từ đầu kỳ đến cuối kỳ).
+ * - 'amount_desc': Số tiền lớn nhất lên đầu.
+ * - 'amount_asc': Số tiền nhỏ nhất lên đầu.
+ */
+export function sortVouchersAndOrders<T extends ExpenseItem | { date?: string; code?: string; totalAmount?: number; id?: string }>(
+  items: T[],
+  order: 'newest' | 'oldest' | 'amount_desc' | 'amount_asc' = 'newest'
+): T[] {
+  if (!Array.isArray(items)) return [];
+  const cleanItems = items.filter(Boolean);
+
+  return [...cleanItems].sort((a, b) => {
+    if (!a && !b) return 0;
+    if (!a) return 1;
+    if (!b) return -1;
+
+    if (order === 'amount_desc') {
+      return (Number(b.totalAmount) || 0) - (Number(a.totalAmount) || 0);
+    }
+    if (order === 'amount_asc') {
+      return (Number(a.totalAmount) || 0) - (Number(b.totalAmount) || 0);
+    }
+
+    const timeA = a.date ? new Date(a.date).getTime() : 0;
+    const timeB = b.date ? new Date(b.date).getTime() : 0;
+    const safeTimeA = isNaN(timeA) ? 0 : timeA;
+    const safeTimeB = isNaN(timeB) ? 0 : timeB;
+
+    if (order === 'oldest') {
+      if (safeTimeA !== safeTimeB) return safeTimeA - safeTimeB;
+      const numA = (a.code?.match(/(\d+)/g) || []).pop();
+      const numB = (b.code?.match(/(\d+)/g) || []).pop();
+      if (numA && numB) {
+        const diff = parseInt(numA, 10) - parseInt(numB, 10);
+        if (diff !== 0) return diff;
+      }
+      return (a.code || a.id || '').localeCompare(b.code || b.id || '');
+    }
+
+    // Default: 'newest'
+    if (safeTimeB !== safeTimeA) return safeTimeB - safeTimeA;
+    const numA = (a.code?.match(/(\d+)/g) || []).pop();
+    const numB = (b.code?.match(/(\d+)/g) || []).pop();
+    if (numA && numB) {
+      const diff = parseInt(numB, 10) - parseInt(numA, 10);
+      if (diff !== 0) return diff;
+    }
+    return (b.code || b.id || '').localeCompare(a.code || a.id || '');
+  });
+}
+

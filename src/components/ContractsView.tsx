@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { ExpenseItem, Project, User, ContractPaymentStage } from '../types';
 import { formatVND, formatDateVN } from '../utils/formatters';
+import { sortVouchersAndOrders } from '../utils/voucherCode';
 import { CreateContractModal } from './contracts/CreateContractModal';
 
 interface ContractsViewProps {
@@ -185,8 +186,8 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
   };
 
   // Lọc hợp đồng theo điều kiện tìm kiếm
-  const filteredContracts = useMemo(() => {
-    return contractExpenses.filter((item) => {
+  const filteredContracts = useMemo<ExpenseItem[]>(() => {
+    const filtered = contractExpenses.filter((item) => {
       const q = searchTerm.toLowerCase().trim();
       const matchSearch =
         !q ||
@@ -212,6 +213,9 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
 
       return matchSearch && matchProject && matchStatus && matchType;
     });
+
+    // Sắp xếp thứ tự hợp đồng mới nhất lên đầu
+    return sortVouchersAndOrders(filtered, 'newest');
   }, [contractExpenses, searchTerm, selectedProjectId, paymentStatusFilter, contractTypeFilter]);
 
   // Tổng hợp KPI toàn bộ hợp đồng

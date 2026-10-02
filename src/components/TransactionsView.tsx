@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { Project, ExpenseItem, ExpenseCategory } from '../types';
 import { formatVND, formatDateVN, formatTy } from '../utils/formatters';
-import { isPaymentVoucher, isReceiptVoucher } from '../utils/voucherCode';
+import { isPaymentVoucher, isReceiptVoucher, sortVouchersAndOrders } from '../utils/voucherCode';
 import { CreateReceiptModal } from './transactions/CreateReceiptModal';
 import { CreatePaymentModal } from './transactions/CreatePaymentModal';
 import { PendingPayablesTable } from './transactions/PendingPayablesTable';
@@ -53,11 +53,12 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   // Tabs: 'ledger' (Bảng kê thu chi chi tiết) | 'summary' (Thống kê theo dự án) | 'pending_po' (Dự chi từ đơn hàng) | 'charts' (Biểu đồ)
   const [activeSubTab, setActiveSubTab] = useState<'ledger' | 'summary' | 'pending_po' | 'charts'>('ledger');
 
-  // Filter dự án & Thời gian
+  // Filter dự án & Thời gian & Sắp xếp thứ tự
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [ledgerTypeFilter, setLedgerTypeFilter] = useState<'all' | 'revenue' | 'expense'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | 'this_month' | 'this_quarter' | 'year_2026'>('all');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'amount_desc' | 'amount_asc'>('newest');
 
   // Modals
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -290,14 +291,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     });
   }, [transactionItems, selectedProjectId, projects, ledgerTypeFilter, dateFilter, searchTerm]);
 
-  // Tính toán tồn quỹ lũy kế theo thời gian (Running Balance)
+  // Tính toán tồn quỹ lũy kế theo thời gian (Running Balance) và sắp xếp thứ tự hiển thị
   const transactionsWithBalance = useMemo(() => {
-    // Sắp xếp tăng dần theo ngày để tính dòng tiền lũy kế chuẩn xác
-    const sortedAsc = [...filteredTransactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    // 1. Luôn sắp xếp theo trục thời gian chuẩn tăng dần ('oldest') để tính lũy kế dòng tiền chuẩn xác
+    const sortedTimeline = sortVouchersAndOrders(filteredTransactions, 'oldest');
     let running = 0;
     const balanceMap = new Map<string, number>();
 
-    sortedAsc.forEach((tx) => {
+    sortedTimeline.forEach((tx) => {
       if (tx.type === 'revenue') {
         running += tx.totalAmount;
       } else {
@@ -306,11 +307,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       balanceMap.set(tx.id, running);
     });
 
-    return filteredTransactions.map((tx) => ({
+    // 2. Sắp xếp thứ tự hiển thị theo lựa chọn của người dùng (Mặc định: Mới nhất lên đầu)
+    const sortedDisplay = sortVouchersAndOrders(filteredTransactions, sortOrder);
+
+    return sortedDisplay.map((tx) => ({
       ...tx,
       runningBalance: balanceMap.get(tx.id) || 0,
     }));
-  }, [filteredTransactions]);
+  }, [filteredTransactions, sortOrder]);
 
   // Tổng cộng Bảng Thu Chi
   const ledgerTotals = useMemo(() => {
@@ -982,9 +986,9 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               </div>
             </div>
 
-            {/* Tìm Kiếm & Các Nút Thao Tác Nhanh */}
+            {/* Tìm Kiếm, Sắp Xếp & Các Nút Thao Tác Nhanh */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative w-full sm:w-64">
+              <div className="relative w-full sm:w-60">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
@@ -993,6 +997,21 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   placeholder="Tìm mã phiếu, nội dung, đối tác..."
                   className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 bg-white"
                 />
+              </div>
+
+              {/* Bộ chọn thứ tự sắp xếp */}
+              <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs">
+                <span className="text-slate-500 font-bold shrink-0">Thứ tự:</span>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as any)}
+                  className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer text-xs"
+                >
+                  <option value="newest">Mới nhất lên đầu (Mặc định)</option>
+                  <option value="oldest">Cũ nhất trước (Sổ quỹ tăng dần)</option>
+                  <option value="amount_desc">Số tiền lớn nhất</option>
+                  <option value="amount_asc">Số tiền nhỏ nhất</option>
+                </select>
               </div>
 
               {/* Nút Tạo Phiếu Thu */}
@@ -1074,7 +1093,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  transactionsWithBalance.map((tx, idx) => {
+                  transactionsWithBalance.filter(Boolean).map((tx, idx) => {
                     const isRev = tx.type === 'revenue';
 
                     return (

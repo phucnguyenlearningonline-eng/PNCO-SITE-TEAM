@@ -10,42 +10,46 @@ interface KpiCardsProps {
 }
 
 export const KpiCards: React.FC<KpiCardsProps> = ({
-  expenses,
-  allExpenses,
-  projects,
+  expenses = [],
+  allExpenses = [],
+  projects = [],
 }) => {
+  const safeExpenses = Array.isArray(expenses) ? expenses.filter(Boolean) : [];
+  const safeAllExpenses = Array.isArray(allExpenses) ? allExpenses.filter(Boolean) : [];
+  const safeProjects = Array.isArray(projects) ? projects.filter(Boolean) : [];
+
   // Pending count
-  const pendingCount = expenses.filter((e) => e.status === 'pending').length;
-  const filteredCount = expenses.length;
-  const totalCount = allExpenses.length;
+  const pendingCount = safeExpenses.filter((e) => e?.status === 'pending').length;
+  const filteredCount = safeExpenses.length;
+  const totalCount = safeAllExpenses.length;
 
   // Total filtered expenses
-  const totalFilteredExpense = expenses.reduce((sum, item) => sum + item.totalAmount, 0);
+  const totalFilteredExpense = safeExpenses.reduce((sum, item) => sum + (Number(item?.totalAmount) || 0), 0);
 
   // Breakdown of categories in filtered items
-  const materialCost = expenses
-    .filter((e) => e.category === 'material')
-    .reduce((sum, item) => sum + item.totalAmount, 0);
-  const transportCost = expenses
-    .filter((e) => e.category === 'transport')
-    .reduce((sum, item) => sum + item.totalAmount, 0);
-  const mealCost = expenses
-    .filter((e) => e.category === 'overtime_meal')
-    .reduce((sum, item) => sum + item.totalAmount, 0);
+  const materialCost = safeExpenses
+    .filter((e) => e?.category === 'material')
+    .reduce((sum, item) => sum + (Number(item?.totalAmount) || 0), 0);
+  const transportCost = safeExpenses
+    .filter((e) => e?.category === 'transport')
+    .reduce((sum, item) => sum + (Number(item?.totalAmount) || 0), 0);
+  const mealCost = safeExpenses
+    .filter((e) => e?.category === 'overtime_meal')
+    .reduce((sum, item) => sum + (Number(item?.totalAmount) || 0), 0);
 
   // Total revenue from projects
-  const totalProjectRevenue = projects.reduce((sum, p) => sum + p.totalRevenue, 0);
-  const totalBudget = projects.reduce((sum, p) => sum + p.totalBudget, 0);
+  const totalProjectRevenue = safeProjects.reduce((sum, p) => sum + (Number(p?.totalRevenue) || 0), 0);
+  const totalBudget = safeProjects.reduce((sum, p) => sum + (Number(p?.totalBudget) || 0), 0);
 
   // Gross profit = Total Revenue - Total Expense
-  const totalAllExpensesCost = allExpenses.reduce((sum, e) => sum + e.totalAmount, 0);
+  const totalAllExpensesCost = safeAllExpenses.reduce((sum, e) => sum + (Number(e?.totalAmount) || 0), 0);
   const grossProfit = Math.max(0, totalProjectRevenue - totalAllExpensesCost);
   const profitMargin = totalProjectRevenue > 0 
     ? ((grossProfit / totalProjectRevenue) * 100).toFixed(1) 
     : '0';
 
-  const avgRevenuePerPrj = projects.length > 0 
-    ? Math.round(totalProjectRevenue / projects.length) 
+  const avgRevenuePerPrj = safeProjects.length > 0 
+    ? Math.round(totalProjectRevenue / safeProjects.length) 
     : 0;
 
   return (

@@ -293,14 +293,63 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </button>
           </form>
 
+          {/* Đăng nhập nhanh 1-chạm (Không lo bị kẹt) */}
+          <div className="pt-2">
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 text-center">
+              Hoặc đăng nhập nhanh 1-chạm:
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const minh = users.find((u) => u.username === 'Pncons' || u.id === 'u-1') || users[0];
+                  if (minh) onLoginSuccess(minh);
+                }}
+                className="p-2.5 rounded-xl border border-sky-200 bg-sky-50/60 hover:bg-sky-100/80 text-left transition-all cursor-pointer group"
+              >
+                <div className="font-bold text-sky-900 text-xs flex items-center gap-1">
+                  <span>Trần Anh Minh</span>
+                  <span className="text-[9px] bg-sky-700 text-white px-1 rounded">Admin</span>
+                </div>
+                <div className="text-[10.5px] text-slate-500 font-mono mt-0.5">User: Pncons</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const director = users.find((u) => u.role === 'director') || users[0];
+                  if (director) onLoginSuccess(director);
+                }}
+                className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/80 text-left transition-all cursor-pointer group"
+              >
+                <div className="font-bold text-emerald-900 text-xs flex items-center gap-1">
+                  <span>Ban Giám Đốc</span>
+                  <span className="text-[9px] bg-emerald-700 text-white px-1 rounded">Director</span>
+                </div>
+                <div className="text-[10.5px] text-slate-500 font-mono mt-0.5">User: PhucNguyen</div>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const defaultUser = users[0];
+                if (defaultUser) onLoginSuccess(defaultUser);
+              }}
+              className="w-full mt-2 py-1.5 text-center text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+            >
+              Vào xem ứng dụng ngay →
+            </button>
+          </div>
+
           {/* Quy định bảo mật nội bộ */}
-          <div className="pt-3 border-t border-slate-100">
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start gap-2.5 text-slate-600 text-xs">
+          <div className="pt-2 border-t border-slate-100">
+            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start gap-2 text-slate-600 text-xs">
               <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <div className="space-y-1 text-[11px] leading-relaxed">
+              <div className="space-y-0.5 text-[11px] leading-relaxed">
                 <div className="font-semibold text-slate-800">Quy định truy cập nội bộ:</div>
-                <p className="text-slate-500">
-                  Tài khoản được phân quyền và cấp bảo mật bởi Quản trị viên hệ thống. Vui lòng liên hệ quản lý trực tiếp nếu bạn quên thông tin hoặc tài khoản chưa được kích hoạt.
+                <p className="text-slate-500 text-[10.5px]">
+                  Tài khoản được phân quyền bởi Quản trị viên Trần Anh Minh. Bạn có thể sử dụng các nút đăng nhập 1-chạm ở trên để vào hệ thống ngay lập tức.
                 </p>
               </div>
             </div>
