@@ -25,9 +25,23 @@ export class ErrorBoundary extends Component<Props, State> {
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error caught by ErrorBoundary:', error, errorInfo);
     this.setState({ errorInfo });
+
+    // Tự động dọn dẹp các khóa nặng khi gặp lỗi tràn quota để người dùng phục hồi tức thì
+    if (error?.message && (error.message.includes('quota') || error.message.includes('QuotaExceededError'))) {
+      try {
+        localStorage.removeItem('phuc_nguyen_me_materials_v1');
+        localStorage.removeItem('phuc_nguyen_me_expenses_v1');
+      } catch (e) {
+        // ignore
+      }
+    }
   }
 
   private handleReload = () => {
+    // Dọn dẹp khóa gây tràn bộ nhớ trước khi tải lại
+    try {
+      localStorage.removeItem('phuc_nguyen_me_materials_v1');
+    } catch (e) {}
     window.location.reload();
   };
 

@@ -70,6 +70,7 @@ import { MaterialsView } from './components/MaterialsView';
 import { ContractsView } from './components/ContractsView';
 import { TransactionsView } from './components/TransactionsView';
 import { sortVouchersAndOrders } from './utils/voucherCode';
+import { safeSetItem, sanitizeMaterialsForStorage, sanitizeExpensesForStorage } from './utils/safeStorage';
 import { 
   INITIAL_EXPENSES, 
   INITIAL_PROJECTS, 
@@ -276,33 +277,33 @@ export default function App() {
     return users.find((u) => u.id === currentUserId) || users[0] || INITIAL_USERS[0];
   }, [users, currentUserId]);
 
-  // Persist state changes
+  // Persist state changes (Bảo vệ an toàn tuyệt đối không bao giờ tràn hạn mức Quota)
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
+    safeSetItem(STORAGE_KEYS.EXPENSES, sanitizeExpensesForStorage(expenses));
   }, [expenses]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
+    safeSetItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
   }, [projects]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+    safeSetItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
   }, [customers]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers));
+    safeSetItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers));
   }, [suppliers]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.MATERIALS, JSON.stringify(materials));
+    safeSetItem(STORAGE_KEYS.MATERIALS, sanitizeMaterialsForStorage(materials));
   }, [materials]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, currentUserId);
+    safeSetItem(STORAGE_KEYS.CURRENT_USER_ID, currentUserId);
   }, [currentUserId]);
 
   // Auth / Login state
@@ -316,13 +317,13 @@ export default function App() {
   const handleLoginSuccess = (user: User) => {
     setCurrentUserId(user.id);
     setIsLoggedIn(true);
-    localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
+    safeSetItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
     showToast(`Đăng nhập thành công! Xin chào ${user.name}`);
   };
 
   const handleLogout = () => {
     setIsLoggedIn(false);
-    localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'false');
+    safeSetItem(STORAGE_KEYS.IS_LOGGED_IN, 'false');
     showToast('Đã đăng xuất khỏi hệ thống.');
   };
 
@@ -387,30 +388,20 @@ export default function App() {
 
         // CHỈ LẤY ĐÚNG DỮ LIỆU CÓ TRÊN SUPABASE, KHÔNG GIỮ MOCK DATA CŨ
         setExpenses(remoteAll);
-        try {
-          localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(remoteAll));
-        } catch (e) {
-          // ignore
-        }
+        safeSetItem(STORAGE_KEYS.EXPENSES, sanitizeExpensesForStorage(remoteAll));
       }
 
       if (remoteProjects !== null) {
         setProjects(remoteProjects);
-        try {
-          localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(remoteProjects));
-        } catch (e) { /* ignore */ }
+        safeSetItem(STORAGE_KEYS.PROJECTS, JSON.stringify(remoteProjects));
       }
       if (remoteSuppliers !== null) {
         setSuppliers(remoteSuppliers);
-        try {
-          localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(remoteSuppliers));
-        } catch (e) { /* ignore */ }
+        safeSetItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(remoteSuppliers));
       }
       if (remoteMaterials !== null) {
         setMaterials(remoteMaterials);
-        try {
-          localStorage.setItem(STORAGE_KEYS.MATERIALS, JSON.stringify(remoteMaterials));
-        } catch (e) { /* ignore */ }
+        safeSetItem(STORAGE_KEYS.MATERIALS, sanitizeMaterialsForStorage(remoteMaterials));
       }
       if (remoteUsers && remoteUsers.length > 0) {
         const normalized = remoteUsers.map((u) => {
@@ -584,11 +575,7 @@ export default function App() {
       } else {
         updatedList = [item, ...prev];
       }
-      try {
-        localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(updatedList));
-      } catch (err) {
-        // ignore
-      }
+      safeSetItem(STORAGE_KEYS.EXPENSES, sanitizeExpensesForStorage(updatedList));
       return updatedList;
     });
 
