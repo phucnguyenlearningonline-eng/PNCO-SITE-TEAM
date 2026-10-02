@@ -70,7 +70,7 @@ import { MaterialsView } from './components/MaterialsView';
 import { ContractsView } from './components/ContractsView';
 import { TransactionsView } from './components/TransactionsView';
 import { sortVouchersAndOrders } from './utils/voucherCode';
-import { safeSetItem, sanitizeMaterialsForStorage, sanitizeExpensesForStorage } from './utils/safeStorage';
+import { safeSetItem } from './utils/safeStorage';
 import { 
   INITIAL_EXPENSES, 
   INITIAL_PROJECTS, 
@@ -277,31 +277,7 @@ export default function App() {
     return users.find((u) => u.id === currentUserId) || users[0] || INITIAL_USERS[0];
   }, [users, currentUserId]);
 
-  // Persist state changes (Bảo vệ an toàn tuyệt đối không bao giờ tràn hạn mức Quota)
-  useEffect(() => {
-    safeSetItem(STORAGE_KEYS.EXPENSES, sanitizeExpensesForStorage(expenses));
-  }, [expenses]);
-
-  useEffect(() => {
-    safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-  }, [users]);
-
-  useEffect(() => {
-    safeSetItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
-  }, [projects]);
-
-  useEffect(() => {
-    safeSetItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
-  }, [customers]);
-
-  useEffect(() => {
-    safeSetItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers));
-  }, [suppliers]);
-
-  useEffect(() => {
-    safeSetItem(STORAGE_KEYS.MATERIALS, sanitizeMaterialsForStorage(materials));
-  }, [materials]);
-
+  // Lưu ID người dùng đang thao tác
   useEffect(() => {
     safeSetItem(STORAGE_KEYS.CURRENT_USER_ID, currentUserId);
   }, [currentUserId]);
@@ -388,20 +364,16 @@ export default function App() {
 
         // CHỈ LẤY ĐÚNG DỮ LIỆU CÓ TRÊN SUPABASE, KHÔNG GIỮ MOCK DATA CŨ
         setExpenses(remoteAll);
-        safeSetItem(STORAGE_KEYS.EXPENSES, sanitizeExpensesForStorage(remoteAll));
       }
 
       if (remoteProjects !== null) {
         setProjects(remoteProjects);
-        safeSetItem(STORAGE_KEYS.PROJECTS, JSON.stringify(remoteProjects));
       }
       if (remoteSuppliers !== null) {
         setSuppliers(remoteSuppliers);
-        safeSetItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(remoteSuppliers));
       }
       if (remoteMaterials !== null) {
         setMaterials(remoteMaterials);
-        safeSetItem(STORAGE_KEYS.MATERIALS, sanitizeMaterialsForStorage(remoteMaterials));
       }
       if (remoteUsers && remoteUsers.length > 0) {
         const normalized = remoteUsers.map((u) => {
@@ -575,7 +547,6 @@ export default function App() {
       } else {
         updatedList = [item, ...prev];
       }
-      safeSetItem(STORAGE_KEYS.EXPENSES, sanitizeExpensesForStorage(updatedList));
       return updatedList;
     });
 

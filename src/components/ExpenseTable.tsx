@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
+import { SortableHeader } from './common/SortableHeader';
+import { SortDirection, naturalCompareCode, parseDateTimestamp } from '../utils/sortUtils';
 import { 
   Check, 
   X, 
@@ -11,7 +13,11 @@ import {
   Truck,
   Utensils,
   Package,
-  Layers
+  Layers,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw
 } from 'lucide-react';
 import { ExpenseItem, User } from '../types';
 import { 
@@ -50,6 +56,75 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
 }) => {
   const canApprove = currentUser.role === 'director' || currentUser.role === 'accountant';
 
+  // Quản lý trạng thái sắp xếp cột
+  const [sortKey, setSortKey] = useState<string>('code');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDirection(key === 'date' || key === 'amount' || key === 'totalAmount' ? 'desc' : 'asc');
+    }
+  };
+
+  const handleResetSort = () => {
+    setSortKey('code');
+    setSortDirection('desc');
+  };
+
+  // Sắp xếp danh sách đơn hàng theo cột được chọn
+  const sortedExpenses = useMemo(() => {
+    const list = [...expenses.filter(Boolean)];
+    return list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'code':
+        case 'stt':
+          cmp = naturalCompareCode(a.code, b.code);
+          break;
+        case 'date': {
+          const tA = parseDateTimestamp(a.date);
+          const tB = parseDateTimestamp(b.date);
+          cmp = tA - tB;
+          if (cmp === 0) cmp = naturalCompareCode(a.code, b.code);
+          break;
+        }
+        case 'title':
+          cmp = (a.title || '').localeCompare(b.title || '', 'vi');
+          break;
+        case 'projectName':
+          cmp = (a.projectName || '').localeCompare(b.projectName || '', 'vi');
+          break;
+        case 'supplier':
+          cmp = (a.supplier || '').localeCompare(b.supplier || '', 'vi');
+          break;
+        case 'createdByName':
+          cmp = (a.createdByName || '').localeCompare(b.createdByName || '', 'vi');
+          break;
+        case 'amount':
+          cmp = (Number(a.amount) || 0) - (Number(b.amount) || 0);
+          break;
+        case 'vatAmount':
+          cmp = (Number(a.vatAmount) || 0) - (Number(b.vatAmount) || 0);
+          break;
+        case 'totalAmount':
+          cmp = (Number(a.totalAmount) || 0) - (Number(b.totalAmount) || 0);
+          break;
+        case 'priority':
+          cmp = (a.priority || '').localeCompare(b.priority || '');
+          break;
+        case 'status':
+          cmp = (a.status || '').localeCompare(b.status || '');
+          break;
+        default:
+          cmp = naturalCompareCode(a.code, b.code);
+      }
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [expenses, sortKey, sortDirection]);
+
   const getCategoryIcon = (category: string) => {
     switch (category) {
       case 'material':
@@ -84,27 +159,176 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
 
   return (
     <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden mb-6">
+      {/* Thanh hiển thị trạng thái sắp xếp */}
+      <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-slate-700 flex items-center gap-1.5">
+            <ArrowUpDown className="w-3.5 h-3.5 text-sky-600" />
+            <span>Thứ tự hiển thị:</span>
+          </span>
+          <span className="font-extrabold text-sky-900 bg-sky-100/80 px-2 py-0.5 rounded border border-sky-200">
+            {sortKey === 'code' ? 'MÃ ĐƠN HÀNG (PO)' : sortKey === 'date' ? 'NGÀY ĐẶT' : sortKey === 'totalAmount' ? 'TỔNG THANH TOÁN' : sortKey === 'amount' ? 'TIỀN HÀNG' : sortKey === 'supplier' ? 'NHÀ CUNG CẤP' : sortKey === 'projectName' ? 'DỰ ÁN' : sortKey} 
+            {' '}({sortDirection === 'desc' ? 'Từ trên xuống / Giảm dần ▼' : 'Từ dưới lên / Tăng dần ▲'})
+          </span>
+          <span className="text-[11px] text-slate-400 hidden sm:inline">
+            (Bấm vào tiêu đề cột để đảo chiều ▲ / ▼)
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Nút Đảo Chiều Sắp Xếp: Từ Trên Xuống / Từ Dưới Lên (Mũi tên lên xuống rõ nét) */}
+          <button
+            type="button"
+            onClick={() => setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-all cursor-pointer shadow-2xs ${
+              sortDirection === 'desc'
+                ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+            }`}
+            title="Bấm để đảo chiều: Từ trên xuống (Giảm dần ⬇️) hoặc Từ dưới lên (Tăng dần ⬆️)"
+          >
+            {sortDirection === 'desc' ? (
+              <>
+                <ArrowDown className="w-3.5 h-3.5 text-rose-600 stroke-[2.8]" />
+                <span>Thứ tự: Từ trên xuống (Mới nhất) ▼</span>
+              </>
+            ) : (
+              <>
+                <ArrowUp className="w-3.5 h-3.5 text-emerald-600 stroke-[2.8]" />
+                <span>Thứ tự: Từ dưới lên (Cũ nhất) ▲</span>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleResetSort}
+            className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-100 flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+            title="Đặt lại thứ tự theo mã đơn hàng"
+          >
+            <RotateCcw className="w-3 h-3 text-slate-500" />
+            <span>Thứ tự chuẩn</span>
+          </button>
+        </div>
+      </div>
+
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
             <tr className="bg-[#102742] text-white font-bold tracking-wider uppercase text-[11px] select-none">
-              <th className="py-3 px-3 text-center border-r border-[#1d3d63] w-12">STT</th>
-              <th className="py-3 px-3.5 border-r border-[#1d3d63] min-w-[110px]">MÃ ĐƠN HÀNG (PO)</th>
-              <th className="py-3 px-4 border-r border-[#1d3d63] min-w-[260px]">TÊN VẬT TƯ / HÀNG HÓA M&amp;E</th>
-              <th className="py-3 px-3.5 border-r border-[#1d3d63] min-w-[170px]">DỰ ÁN THI CÔNG</th>
-              <th className="py-3 px-3.5 border-r border-[#1d3d63] min-w-[170px]">NHÀ CUNG CẤP / ĐƠN VỊ</th>
-              <th className="py-3 px-3.5 border-r border-[#1d3d63] min-w-[140px]">NGƯỜI LẬP</th>
-              <th className="py-3 px-3 text-center border-r border-[#1d3d63] min-w-[95px]">NGÀY ĐẶT</th>
-              <th className="py-3 px-3.5 text-right border-r border-[#1d3d63] min-w-[115px]">TIỀN HÀNG</th>
-              <th className="py-3 px-3.5 text-right border-r border-[#1d3d63] min-w-[100px]">THUẾ VAT</th>
-              <th className="py-3 px-3.5 text-right border-r border-[#1d3d63] min-w-[130px]">TỔNG THANH TOÁN</th>
-              <th className="py-3 px-3 text-center border-r border-[#1d3d63] min-w-[90px]">ƯU TIÊN</th>
-              <th className="py-3 px-3 text-center border-r border-[#1d3d63] min-w-[115px]">TRẠNG THÁI</th>
+              <SortableHeader
+                label="STT"
+                sortKey="stt"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+                align="center"
+                className="w-12 border-r border-[#1d3d63]"
+              />
+              <SortableHeader
+                label="MÃ ĐƠN HÀNG (PO)"
+                sortKey="code"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+                align="left"
+                className="min-w-[130px] border-r border-[#1d3d63]"
+              />
+              <SortableHeader
+                label="TÊN VẬT TƯ / HÀNG HÓA M&E"
+                sortKey="title"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+                align="left"
+                className="min-w-[260px] border-r border-[#1d3d63]"
+              />
+              <SortableHeader
+                label="DỰ ÁN THI CÔNG"
+                sortKey="projectName"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+                align="left"
+                className="min-w-[170px] border-r border-[#1d3d63]"
+              />
+              <SortableHeader
+                label="NHÀ CUNG CẤP / ĐƠN VỊ"
+                sortKey="supplier"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+                align="left"
+                className="min-w-[170px] border-r border-[#1d3d63]"
+              />
+              <SortableHeader
+                label="NGƯỜI LẬP"
+                sortKey="createdByName"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+                align="left"
+                className="min-w-[140px] border-r border-[#1d3d63]"
+              />
+              <SortableHeader
+                label="NGÀY ĐẶT"
+                sortKey="date"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+                align="center"
+                className="min-w-[105px] border-r border-[#1d3d63]"
+              />
+              <SortableHeader
+                label="TIỀN HÀNG"
+                sortKey="amount"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+                align="right"
+                className="min-w-[115px] border-r border-[#1d3d63]"
+              />
+              <SortableHeader
+                label="THUẾ VAT"
+                sortKey="vatAmount"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+                align="right"
+                className="min-w-[100px] border-r border-[#1d3d63]"
+              />
+              <SortableHeader
+                label="TỔNG THANH TOÁN"
+                sortKey="totalAmount"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+                align="right"
+                className="min-w-[130px] border-r border-[#1d3d63]"
+              />
+              <SortableHeader
+                label="ƯU TIÊN"
+                sortKey="priority"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+                align="center"
+                className="min-w-[90px] border-r border-[#1d3d63]"
+              />
+              <SortableHeader
+                label="TRẠNG THÁI"
+                sortKey="status"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+                align="center"
+                className="min-w-[115px] border-r border-[#1d3d63]"
+              />
               <th className="py-3 px-3 text-center min-w-[110px]">THAO TÁC</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {expenses.filter(Boolean).map((item, index) => {
+            {sortedExpenses.map((item, index) => {
               const isEven = index % 2 === 1;
               return (
                 <tr 

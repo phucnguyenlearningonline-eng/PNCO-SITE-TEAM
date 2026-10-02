@@ -25,11 +25,17 @@ import {
   Trash2,
   Edit3,
   Printer,
-  Eye
+  Eye,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw
 } from 'lucide-react';
 import { Project, ExpenseItem, ExpenseCategory } from '../types';
 import { formatVND, formatDateVN, formatTy } from '../utils/formatters';
 import { isPaymentVoucher, isReceiptVoucher, sortVouchersAndOrders } from '../utils/voucherCode';
+import { SortableHeader } from './common/SortableHeader';
+import { SortDirection, naturalCompareCode, parseDateTimestamp } from '../utils/sortUtils';
 import { CreateReceiptModal } from './transactions/CreateReceiptModal';
 import { CreatePaymentModal } from './transactions/CreatePaymentModal';
 import { PendingPayablesTable } from './transactions/PendingPayablesTable';
@@ -58,7 +64,22 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [ledgerTypeFilter, setLedgerTypeFilter] = useState<'all' | 'revenue' | 'expense'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | 'this_month' | 'this_quarter' | 'year_2026'>('all');
-  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'amount_desc' | 'amount_asc'>('newest');
+  const [sortKey, setSortKey] = useState<string>('date');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDirection(key === 'date' || key === 'revenue' || key === 'expense' || key === 'runningBalance' ? 'desc' : 'asc');
+    }
+  };
+
+  const handleResetSort = () => {
+    setSortKey('date');
+    setSortDirection('desc');
+  };
 
   // Modals
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -307,14 +328,67 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       balanceMap.set(tx.id, running);
     });
 
-    // 2. Sắp xếp thứ tự hiển thị theo lựa chọn của người dùng (Mặc định: Mới nhất lên đầu)
-    const sortedDisplay = sortVouchersAndOrders(filteredTransactions, sortOrder);
-
-    return sortedDisplay.map((tx) => ({
+    // 2. Gán tồn quỹ lũy kế
+    const list = filteredTransactions.map((tx) => ({
       ...tx,
       runningBalance: balanceMap.get(tx.id) || 0,
     }));
-  }, [filteredTransactions, sortOrder]);
+
+    // 3. Sắp xếp thứ tự hiển thị theo lựa chọn của người dùng (sortKey & sortDirection)
+    return list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'code':
+          cmp = naturalCompareCode(a.code, b.code);
+          break;
+        case 'type':
+          cmp = (a.type || '').localeCompare(b.type || '');
+          break;
+        case 'date':
+        case 'stt': {
+          const tA = parseDateTimestamp(a.date);
+          const tB = parseDateTimestamp(b.date);
+          cmp = tA - tB;
+          if (cmp === 0) cmp = naturalCompareCode(a.code, b.code);
+          break;
+        }
+        case 'title':
+          cmp = (a.title || '').localeCompare(b.title || '', 'vi');
+          break;
+        case 'projectName':
+          cmp = (a.projectName || '').localeCompare(b.projectName || '', 'vi');
+          break;
+        case 'supplier':
+          cmp = (a.supplier || '').localeCompare(b.supplier || '', 'vi');
+          break;
+        case 'revenue': {
+          const amtA = a.type === 'revenue' ? a.totalAmount : 0;
+          const amtB = b.type === 'revenue' ? b.totalAmount : 0;
+          cmp = amtA - amtB;
+          break;
+        }
+        case 'expense': {
+          const amtA = a.type !== 'revenue' ? a.totalAmount : 0;
+          const amtB = b.type !== 'revenue' ? b.totalAmount : 0;
+          cmp = amtA - amtB;
+          break;
+        }
+        case 'runningBalance':
+          cmp = (a.runningBalance || 0) - (b.runningBalance || 0);
+          break;
+        case 'paymentMethod':
+          cmp = (a.paymentMethod || '').localeCompare(b.paymentMethod || '');
+          break;
+        default: {
+          const tA = parseDateTimestamp(a.date);
+          const tB = parseDateTimestamp(b.date);
+          cmp = tA - tB;
+          if (cmp === 0) cmp = naturalCompareCode(a.code, b.code);
+        }
+      }
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [filteredTransactions, sortKey, sortDirection]);
 
   // Tổng cộng Bảng Thu Chi
   const ledgerTotals = useMemo(() => {
@@ -999,20 +1073,40 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 />
               </div>
 
-              {/* Bộ chọn thứ tự sắp xếp */}
-              <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs">
-                <span className="text-slate-500 font-bold shrink-0">Thứ tự:</span>
-                <select
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value as any)}
-                  className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer text-xs"
-                >
-                  <option value="newest">Mới nhất lên đầu (Mặc định)</option>
-                  <option value="oldest">Cũ nhất trước (Sổ quỹ tăng dần)</option>
-                  <option value="amount_desc">Số tiền lớn nhất</option>
-                  <option value="amount_asc">Số tiền nhỏ nhất</option>
-                </select>
-              </div>
+              {/* Nút Đảo Chiều Thứ Tự: Từ trên xuống / Từ dưới lên */}
+              <button
+                type="button"
+                onClick={() => setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all cursor-pointer shadow-2xs ${
+                  sortDirection === 'desc'
+                    ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
+                    : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                }`}
+                title="Bấm để đảo chiều: Từ trên xuống (Mới nhất ⬇️) hoặc Từ dưới lên (Cũ nhất ⬆️)"
+              >
+                {sortDirection === 'desc' ? (
+                  <>
+                    <ArrowDown className="w-3.5 h-3.5 text-rose-600 stroke-[2.8]" />
+                    <span>Thứ tự: Từ trên xuống (Mới nhất) ▼</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowUp className="w-3.5 h-3.5 text-emerald-600 stroke-[2.8]" />
+                    <span>Thứ tự: Từ dưới lên (Cũ nhất) ▲</span>
+                  </>
+                )}
+              </button>
+
+              {/* Nút Đặt Lại Thứ Tự Chuẩn */}
+              <button
+                type="button"
+                onClick={handleResetSort}
+                className="px-2.5 py-1.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1 shadow-2xs cursor-pointer transition-all"
+                title="Đặt lại thứ tự theo ngày mới nhất lên đầu"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                <span>Mặc định</span>
+              </button>
 
               {/* Nút Tạo Phiếu Thu */}
               <button
@@ -1060,23 +1154,97 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <table className="w-full text-left border-collapse text-xs">
               <thead className="bg-[#102742] text-white font-bold text-[11px] uppercase tracking-wider">
                 <tr>
-                  <th className="py-3 px-2.5 w-10 text-center">STT</th>
-                  <th className="py-3 px-3 w-28">Mã Phiếu</th>
-                  <th className="py-3 px-2.5 w-24 text-center">Loại Phiếu</th>
-                  <th className="py-3 px-2.5 text-center w-24">Ngày Ghi Sổ</th>
-                  <th className="py-3 px-3 min-w-[200px]">Nội Dung Thu / Chi &amp; Diễn Giải</th>
-                  <th className="py-3 px-3 w-40">Dự Án Thi Công</th>
-                  <th className="py-3 px-3 w-40">Đối Tác / CĐT / Thầu Phụ</th>
-                  <th className="py-3 px-3 text-right w-32 bg-emerald-950/60 text-emerald-300 font-black">
-                    Thu (+VNĐ)
-                  </th>
-                  <th className="py-3 px-3 text-right w-32 bg-rose-950/60 text-rose-300 font-black">
-                    Chi (-VNĐ)
-                  </th>
-                  <th className="py-3 px-3 text-right w-32 bg-[#0c1f35] text-cyan-300 font-black">
-                    Tồn Quỹ Lũy Kế
-                  </th>
-                  <th className="py-3 px-2.5 text-center w-24">Hình Thức</th>
+                  <SortableHeader
+                    label="STT"
+                    sortKey="stt"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="center"
+                    className="w-10 border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Mã Phiếu"
+                    sortKey="code"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                    className="w-28 border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Loại Phiếu"
+                    sortKey="type"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="center"
+                    className="w-24 border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Ngày Ghi Sổ"
+                    sortKey="date"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="center"
+                    className="w-28 border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Nội Dung Thu / Chi & Diễn Giải"
+                    sortKey="title"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                    className="min-w-[200px] border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Dự Án Thi Công"
+                    sortKey="projectName"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                    className="w-40 border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Đối Tác / CĐT / Thầu Phụ"
+                    sortKey="supplier"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                    className="w-40 border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Thu (+VNĐ)"
+                    sortKey="revenue"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                    className="w-32 bg-emerald-950/60 text-emerald-300 font-black border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Chi (-VNĐ)"
+                    sortKey="expense"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                    className="w-32 bg-rose-950/60 text-rose-300 font-black border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Tồn Quỹ Lũy Kế"
+                    sortKey="runningBalance"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                    className="w-32 bg-[#0c1f35] text-cyan-300 font-black border-r border-[#1d3d63]"
+                  />
+                  <th className="py-3 px-2.5 text-center w-24 border-r border-[#1d3d63]">Hình Thức</th>
                   <th className="py-3 px-2.5 text-center w-28">Thao Tác</th>
                 </tr>
               </thead>

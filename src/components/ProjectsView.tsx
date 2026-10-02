@@ -26,6 +26,9 @@ import {
   Users,
   Wallet,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw,
   Sparkles,
   Info,
   Link2,
@@ -33,6 +36,8 @@ import {
 } from 'lucide-react';
 import { ExpenseItem, Project, Customer, ProjectAddendum } from '../types';
 import { formatVND, formatDateVN, formatTy } from '../utils/formatters';
+import { SortableHeader } from './common/SortableHeader';
+import { SortDirection, naturalCompareCode, parseDateTimestamp } from '../utils/sortUtils';
 import { ProjectAddendumsModal } from './projects/ProjectAddendumsModal';
 import { ProjectFinancialModal } from './projects/ProjectFinancialModal';
 
@@ -72,7 +77,22 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   const [selectedPackage, setSelectedPackage] = useState<string>('all');
   const [selectedAddendumFilter, setSelectedAddendumFilter] = useState<'all' | 'has_addendum' | 'no_addendum'>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<'revenue_desc' | 'revenue_asc' | 'progress_desc' | 'latest'>('revenue_desc');
+  const [sortKey, setSortKey] = useState<string>('revenue');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDirection(key === 'revenue' || key === 'collected' || key === 'spent' || key === 'progress' ? 'desc' : 'asc');
+    }
+  };
+
+  const handleResetSort = () => {
+    setSortKey('revenue');
+    setSortDirection('desc');
+  };
 
   // Modal quản lý Phụ Lục Hợp Đồng
   const [activeAddendumProject, setActiveAddendumProject] = useState<Project | null>(null);
@@ -301,13 +321,41 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     }).sort((a, b) => {
       const finA = getProjectFinances(a);
       const finB = getProjectFinances(b);
+      let cmp = 0;
 
-      if (sortBy === 'revenue_desc') return finB.totalAfterPLHD - finA.totalAfterPLHD;
-      if (sortBy === 'revenue_asc') return finA.totalAfterPLHD - finB.totalAfterPLHD;
-      if (sortBy === 'progress_desc') return (b.progressPercentage ?? 0) - (a.progressPercentage ?? 0);
-      return 0;
+      switch (sortKey) {
+        case 'code':
+          cmp = naturalCompareCode(a.code, b.code);
+          break;
+        case 'name':
+          cmp = (a.name || '').localeCompare(b.name || '', 'vi');
+          break;
+        case 'client':
+          cmp = (a.client || '').localeCompare(b.client || '', 'vi');
+          break;
+        case 'stt':
+        case 'revenue':
+          cmp = finA.totalAfterPLHD - finB.totalAfterPLHD;
+          break;
+        case 'collected':
+          cmp = finA.collected - finB.collected;
+          break;
+        case 'spent':
+          cmp = finA.totalSpent - finB.totalSpent;
+          break;
+        case 'progress':
+          cmp = (a.progressPercentage ?? 0) - (b.progressPercentage ?? 0);
+          break;
+        case 'status':
+          cmp = (a.status || '').localeCompare(b.status || '');
+          break;
+        default:
+          cmp = finA.totalAfterPLHD - finB.totalAfterPLHD;
+      }
+
+      return sortDirection === 'asc' ? cmp : -cmp;
     });
-  }, [projects, selectedYear, selectedMonth, selectedClient, selectedStatus, selectedPackage, selectedAddendumFilter, searchTerm, sortBy]);
+  }, [projects, selectedYear, selectedMonth, selectedClient, selectedStatus, selectedPackage, selectedAddendumFilter, searchTerm, sortKey, sortDirection]);
 
   // Thống kê tổng quan KPI Cards
   const stats = useMemo(() => {
@@ -943,19 +991,132 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       {/* ============================================================== */}
       {viewMode === 'table' ? (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+          {/* Thanh hiển thị trạng thái sắp xếp dự án */}
+          <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                <ArrowUpDown className="w-3.5 h-3.5 text-sky-600" />
+                <span>Thứ tự dự án:</span>
+              </span>
+              <span className="font-extrabold text-sky-900 bg-sky-100/80 px-2 py-0.5 rounded border border-sky-200">
+                {sortKey === 'code' ? 'MÃ DỰ ÁN' : sortKey === 'name' ? 'TÊN CÔNG TRÌNH' : sortKey === 'client' ? 'CHỦ ĐẦU TƯ' : sortKey === 'revenue' ? 'TỔNG QUYẾT TOÁN' : sortKey === 'collected' ? 'ĐÃ THU CĐT' : sortKey === 'spent' ? 'CHI PHÍ' : sortKey === 'progress' ? 'TIẾN ĐỘ' : sortKey}
+                {' '}({sortDirection === 'desc' ? 'Từ trên xuống / Giảm dần ▼' : 'Từ dưới lên / Tăng dần ▲'})
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-all cursor-pointer shadow-2xs ${
+                  sortDirection === 'desc'
+                    ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
+                    : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                }`}
+                title="Bấm để đảo chiều: Từ trên xuống (Giảm dần ⬇️) hoặc Từ dưới lên (Tăng dần ⬆️)"
+              >
+                {sortDirection === 'desc' ? (
+                  <>
+                    <ArrowDown className="w-3.5 h-3.5 text-rose-600 stroke-[2.8]" />
+                    <span>Thứ tự: Từ trên xuống ▼</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowUp className="w-3.5 h-3.5 text-emerald-600 stroke-[2.8]" />
+                    <span>Thứ tự: Từ dưới lên ▲</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResetSort}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-100 flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+                title="Đặt lại thứ tự theo tổng quyết toán lớn nhất lên đầu"
+              >
+                <RotateCcw className="w-3 h-3 text-slate-500" />
+                <span>Mặc định</span>
+              </button>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead className="bg-[#102742] text-white font-bold text-[11px] uppercase tracking-wider">
                 <tr>
-                  <th className="py-3 px-2.5 w-12 text-center">STT</th>
-                  <th className="py-3 px-3 w-56">Công Trình &amp; Gói Thầu M&amp;E</th>
-                  <th className="py-3 px-3 w-60">Chủ Đầu Tư &amp; Địa Điểm</th>
-                  <th className="py-3 px-3 w-40">HĐ Sau Thuế &amp; Phụ Lục (PLHĐ)</th>
-                  <th className="py-3 px-3 text-right w-36">Tổng Quyết Toán Sau PLHĐ</th>
-                  <th className="py-3 px-3 text-right w-32">Đã Thu CĐT</th>
-                  <th className="py-3 px-3 text-right w-36">Chi Phí &amp; Nhân Công</th>
-                  <th className="py-3 px-3 text-center w-36">Tiến Độ Thi Công</th>
-                  <th className="py-3 px-3 text-center w-28">Trạng Thái</th>
+                  <SortableHeader
+                    label="STT"
+                    sortKey="stt"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="center"
+                    className="w-12 border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Công Trình & Gói Thầu M&E"
+                    sortKey="name"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                    className="w-56 border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Chủ Đầu Tư & Địa Điểm"
+                    sortKey="client"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                    className="w-60 border-r border-[#1d3d63]"
+                  />
+                  <th className="py-3 px-3 w-40 border-r border-[#1d3d63]">HĐ Sau Thuế &amp; Phụ Lục (PLHĐ)</th>
+                  <SortableHeader
+                    label="Tổng Quyết Toán Sau PLHĐ"
+                    sortKey="revenue"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                    className="w-36 border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Đã Thu CĐT"
+                    sortKey="collected"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                    className="w-32 border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Chi Phí & Nhân Công"
+                    sortKey="spent"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                    className="w-36 border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Tiến Độ Thi Công"
+                    sortKey="progress"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="center"
+                    className="w-36 border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Trạng Thái"
+                    sortKey="status"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="center"
+                    className="w-28 border-r border-[#1d3d63]"
+                  />
                   <th className="py-3 px-3 text-center w-24">Thao Tác</th>
                 </tr>
               </thead>
