@@ -203,7 +203,11 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const names = new Set(parsed.map((c: any) => (c.name || '').trim().toLowerCase()));
+          const missing = INITIAL_CUSTOMERS.filter((ic) => !names.has(ic.name.trim().toLowerCase()));
+          return [...parsed, ...missing];
+        }
       } catch (e) { /* ignore */ }
     }
     return INITIAL_CUSTOMERS;
@@ -281,6 +285,11 @@ export default function App() {
   useEffect(() => {
     safeSetItem(STORAGE_KEYS.CURRENT_USER_ID, currentUserId);
   }, [currentUserId]);
+
+  // Lưu danh bạ khách hàng / chủ đầu tư vào localStorage
+  useEffect(() => {
+    safeSetItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+  }, [customers]);
 
   // Auth / Login state
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
@@ -721,6 +730,20 @@ export default function App() {
     showToast(`Đã thêm khách hàng/CĐT: ${newCustomer.name}`);
   };
 
+  const handleEditCustomer = (updatedCustomer: Customer, oldName?: string) => {
+    setCustomers((prev) => prev.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)));
+    if (oldName && oldName !== updatedCustomer.name) {
+      handleUpdateClient(oldName, updatedCustomer.name);
+    }
+    showToast(`Đã cập nhật thông tin khách hàng: ${updatedCustomer.name}`);
+  };
+
+  const handleDeleteCustomer = (customerId: string) => {
+    const target = customers.find((c) => c.id === customerId);
+    setCustomers((prev) => prev.filter((c) => c.id !== customerId));
+    showToast(`Đã xóa khách hàng: ${target?.name || customerId}`);
+  };
+
   // Add User handler
   const handleAddUser = (newUser: User) => {
     setUsers((prev) => [...prev, newUser]);
@@ -872,10 +895,15 @@ export default function App() {
     },
   ];
 
-  // Tính toán số lượng khách hàng thực tế (từ các công trình/giao dịch thực tế)
+  // Tính toán số lượng khách hàng thực tế (từ danh bạ khách hàng + các công trình/giao dịch thực tế)
   const actualClientsCount = useMemo(() => {
-    return new Set((projects || []).map((p) => p?.client?.trim()).filter(Boolean)).size;
-  }, [projects]);
+    const set = new Set(customers.map((c) => (c.name || '').trim().toLowerCase()).filter(Boolean));
+    (projects || []).forEach((p) => {
+      const c = (p.client || '').trim().toLowerCase();
+      if (c) set.add(c);
+    });
+    return set.size > 0 ? set.size : customers.length;
+  }, [customers, projects]);
 
   // Tính toán số lượng nhà cung cấp thực tế trong bản chi tiết giao dịch
   const actualSuppliersCount = useMemo(() => {
@@ -1095,11 +1123,13 @@ export default function App() {
             />
           ) : activeTab === 'clients' ? (
             <ClientsView
+              customers={customers}
               projects={projects}
               expenses={expenses}
+              onAddCustomer={handleAddCustomer}
+              onEditCustomer={handleEditCustomer}
+              onDeleteCustomer={handleDeleteCustomer}
               onUpdateClient={handleUpdateClient}
-              onEditProject={handleEditProject}
-              onDeleteProject={handleDeleteProject}
             />
           ) : activeTab === 'users' ? (
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5">
