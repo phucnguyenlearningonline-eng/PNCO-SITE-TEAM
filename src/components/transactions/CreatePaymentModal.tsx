@@ -520,7 +520,7 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
                       const rem = Math.max(0, po.totalAmount - paid);
                       return (
                         <option key={po.id} value={po.id}>
-                          [{po.code}] {po.title} - {po.supplier} (Còn nợ: {formatVND(rem)} / Tổng đơn: {formatTy(po.totalAmount)})
+                          [{po.code}] {po.title} - {po.supplier} (Còn nợ: {formatVND(rem)} / Tổng đơn: {formatVND(po.totalAmount)})
                         </option>
                       );
                     })}
@@ -602,8 +602,8 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
                         }`}
                       >
                         <div className="text-[11px] font-bold">Tất toán 100%</div>
-                        <div className="text-[9.5px] opacity-80 font-mono">
-                          {formatTy(poRemainingValue)}
+                        <div className="text-[9.5px] opacity-90 font-mono font-medium">
+                          {formatVND(poRemainingValue)}
                         </div>
                       </button>
 
@@ -618,8 +618,8 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
                         }`}
                       >
                         <div className="text-[11px] font-bold">Đợt 1 (30%)</div>
-                        <div className="text-[9.5px] opacity-80 font-mono">
-                          {formatTy(Math.round(poOriginalValue * 0.3))}
+                        <div className="text-[9.5px] opacity-90 font-mono font-medium">
+                          {formatVND(Math.round(poOriginalValue * 0.3))}
                         </div>
                       </button>
 
@@ -634,8 +634,8 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
                         }`}
                       >
                         <div className="text-[11px] font-bold">Đợt 2 (50%)</div>
-                        <div className="text-[9.5px] opacity-80 font-mono">
-                          {formatTy(Math.round(poOriginalValue * 0.5))}
+                        <div className="text-[9.5px] opacity-90 font-mono font-medium">
+                          {formatVND(Math.round(poOriginalValue * 0.5))}
                         </div>
                       </button>
 
@@ -650,8 +650,8 @@ export const CreatePaymentModal: React.FC<CreatePaymentModalProps> = ({
                         }`}
                       >
                         <div className="text-[11px] font-bold">Đợt 3 (20%)</div>
-                        <div className="text-[9.5px] opacity-80 font-mono">
-                          {formatTy(Math.round(poOriginalValue * 0.2))}
+                        <div className="text-[9.5px] opacity-90 font-mono font-medium">
+                          {formatVND(Math.round(poOriginalValue * 0.2))}
                         </div>
                       </button>
                     </div>

@@ -750,12 +750,12 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             <span className="p-1 rounded bg-emerald-50 text-emerald-600"><DollarSign className="w-4 h-4" /></span>
           </div>
           <div className="flex items-baseline gap-1 mt-1">
-            <span className="text-2xl font-black font-mono text-slate-900">{formatTy(stats.totalContractValue)}</span>
+            <span className="text-xl sm:text-2xl font-black font-mono text-slate-900">{formatVND(stats.totalContractValue)}</span>
           </div>
-          <div className="text-[11px] text-slate-500 mt-2 flex items-center gap-1.5">
-            <span>HĐ gốc: <strong className="font-mono text-slate-700">{formatTy(stats.totalOriginalValue)}</strong></span>
+          <div className="text-[11px] text-slate-500 mt-2 flex items-center gap-1.5 flex-wrap">
+            <span>HĐ gốc: <strong className="font-mono text-slate-700">{formatVND(stats.totalOriginalValue)}</strong></span>
             <span>•</span>
-            <span className="text-sky-700 font-bold">PLHĐ: +{formatTy(stats.totalContractValue - stats.totalOriginalValue)}</span>
+            <span className="text-sky-700 font-bold">PLHĐ: +{formatVND(stats.totalContractValue - stats.totalOriginalValue)}</span>
           </div>
         </div>
 
@@ -766,11 +766,11 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             <span className="p-1 rounded bg-blue-50 text-blue-600"><TrendingUp className="w-4 h-4" /></span>
           </div>
           <div className="flex items-baseline gap-1 mt-1">
-            <span className="text-2xl font-black font-mono text-emerald-800">{formatTy(stats.totalCollected)}</span>
+            <span className="text-xl sm:text-2xl font-black font-mono text-emerald-800">{formatVND(stats.totalCollected)}</span>
           </div>
           <div className="text-[11px] text-slate-500 mt-2 flex items-center justify-between">
             <span>Thu hồi: <strong className="text-sky-700">{stats.collectionRate.toFixed(1)}%</strong></span>
-            <span>Còn thu: <strong className="text-amber-700 font-mono">{formatTy(stats.totalRemaining)}</strong></span>
+            <span>Còn thu: <strong className="text-amber-700 font-mono">{formatVND(stats.totalRemaining)}</strong></span>
           </div>
         </div>
 
@@ -783,7 +783,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-2xl font-black font-mono text-slate-900">{stats.avgProgress}%</span>
             <span className="text-xs font-bold text-purple-700 font-mono">
-              Chi NC: {formatTy(stats.totalLaborCost)}
+              Chi NC: {formatVND(stats.totalLaborCost)}
             </span>
           </div>
           <div className="w-full bg-slate-200 rounded-full h-2 mt-2 overflow-hidden">
@@ -1208,7 +1208,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-mono font-black text-slate-900 text-xs">
-                                {formatTy(fin.contractValueWithVat)}
+                                {formatVND(fin.contractValueWithVat)}
                               </span>
                               <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
                                 fin.vatRate > 0 ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-100 text-slate-600 border-slate-200'
@@ -1218,7 +1218,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                             </div>
                             {fin.vatRate > 0 && (
                               <div className="text-[10px] text-slate-500 font-mono">
-                                Chưa VAT: {formatTy(fin.originalValue)} (+{formatTy(fin.vatAmount)} VAT)
+                                Chưa VAT: {formatVND(fin.originalValue)} (+{formatVND(fin.vatAmount)} VAT)
                               </div>
                             )}
                           </div>
@@ -1231,7 +1231,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                                 title="Xem và quản lý các phụ lục hợp đồng"
                               >
                                 <FileText className="w-3 h-3 text-sky-600" />
-                                <span>{fin.addendumsCount} PLHĐ (+{formatTy(fin.addendumTotal)})</span>
+                                <span>{fin.addendumsCount} PLHĐ (+{formatVND(fin.addendumTotal)})</span>
                               </button>
                             ) : (
                               <button
@@ -1248,18 +1248,15 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
                         {/* 5. TỔNG QUYẾT TOÁN SAU PLHĐ */}
                         <td className="py-3 px-3 text-right">
-                          <div className="font-mono font-black text-slate-900 text-sm">
-                            {formatTy(fin.totalAfterPLHD)}
-                          </div>
-                          <div className="font-mono text-[10px] text-slate-400 mt-0.5">
+                          <div className="font-mono font-black text-slate-900 text-sm whitespace-nowrap">
                             {formatVND(fin.totalAfterPLHD)}
                           </div>
                         </td>
 
                         {/* 6. ĐÃ THU CĐT */}
                         <td className="py-3 px-3 text-right">
-                          <div className="font-mono font-bold text-emerald-800 text-xs">
-                            {formatTy(fin.collected)}
+                          <div className="font-mono font-bold text-emerald-800 text-xs whitespace-nowrap">
+                            {formatVND(fin.collected)}
                           </div>
                           <div className="text-[10.5px] font-semibold text-emerald-700">
                             Đạt {fin.collectedPercentage.toFixed(0)}% HĐ
@@ -1276,10 +1273,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                           >
                             <div className="flex items-center justify-end gap-1 text-[11px] font-bold text-purple-800 bg-purple-50 group-hover:bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200">
                               <Users className="w-3 h-3 text-purple-600" />
-                              <span>NC: {formatTy(fin.labor)}</span>
+                              <span>NC: {formatVND(fin.labor)}</span>
                             </div>
-                            <div className="text-[10.5px] text-slate-500 mt-0.5 font-mono">
-                              Tổng chi: <strong className="text-rose-700">{formatTy(fin.totalSpent)}</strong>
+                            <div className="text-[10.5px] text-slate-500 mt-0.5 font-mono whitespace-nowrap">
+                              Tổng chi: <strong className="text-rose-700">{formatVND(fin.totalSpent)}</strong>
                             </div>
                           </button>
                         </td>

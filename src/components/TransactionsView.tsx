@@ -1451,7 +1451,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               <BarChart3 className="w-4 h-4 text-sky-600" />
               <span>SO SÁNH THU NHẬP - CHI PHÍ - DÒNG TIỀN THEO DỰ ÁN</span>
             </h3>
-            <span className="text-xs text-slate-500">Đơn vị tính: Triệu VNĐ</span>
+            <span className="text-xs text-slate-500 font-medium">Đơn vị tính: VNĐ (chính xác từng đồng)</span>
           </div>
 
           <div className="space-y-4 pt-2">

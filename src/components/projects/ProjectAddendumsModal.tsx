@@ -183,7 +183,7 @@ export const ProjectAddendumsModal: React.FC<ProjectAddendumsModalProps> = ({
             <div className={`font-mono font-bold text-sm mt-0.5 ${totalAddendumAmount >= 0 ? 'text-sky-700' : 'text-rose-600'}`}>
               {totalAddendumAmount >= 0 ? '+' : ''}{formatVND(totalAddendumAmount)}
             </div>
-            <div className="text-[10.5px] text-slate-400">{formatTy(totalAddendumAmount)}</div>
+            <div className="text-[10.5px] text-slate-500 font-medium">Đã bao gồm VAT</div>
           </div>
 
           <div className="bg-emerald-50/70 p-2.5 rounded-lg border border-emerald-200">
@@ -191,7 +191,7 @@ export const ProjectAddendumsModal: React.FC<ProjectAddendumsModalProps> = ({
             <div className="font-mono font-black text-emerald-800 text-base mt-0.5">
               {formatVND(finalTotalRevenue)}
             </div>
-            <div className="text-[10.5px] font-bold text-emerald-700">{formatTy(finalTotalRevenue)}</div>
+            <div className="text-[10.5px] font-bold text-emerald-700">Giá trị thực hiện chính xác</div>
           </div>
         </div>
 

@@ -5,22 +5,12 @@ export function formatVND(amount?: number | null): string {
   return new Intl.NumberFormat('vi-VN').format(Math.round(amount)) + ' đ';
 }
 
+/**
+ * Hiển thị số tiền chính xác đầy đủ từng chữ số (ví dụ: 1.250.000.000 đ),
+ * TUYỆT ĐỐI KHÔNG viết tắt thành "tỷ" hoặc "tr" để người dùng dễ kiểm tra và đối chiếu tài chính.
+ */
 export function formatTy(amount?: number | null): string {
-  if (amount === undefined || amount === null || isNaN(amount) || amount === 0) return '0 đ';
-  const abs = Math.abs(amount);
-  const sign = amount < 0 ? '-' : '';
-  if (abs >= 1_000_000_000) {
-    const val = abs / 1_000_000_000;
-    return `${sign}${val >= 10 ? val.toFixed(1) : val.toFixed(2)} tỷ`;
-  }
-  if (abs >= 1_000_000) {
-    const val = abs / 1_000_000;
-    return `${sign}${val >= 10 ? val.toFixed(0) : val.toFixed(1)} tr`;
-  }
-  if (abs >= 1_000) {
-    return `${sign}${(abs / 1_000).toFixed(0)}k đ`;
-  }
-  return `${sign}${abs} đ`;
+  return formatVND(amount);
 }
 
 export function formatNumber(amount: number): string {

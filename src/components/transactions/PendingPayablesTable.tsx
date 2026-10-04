@@ -365,11 +365,11 @@ export const PendingPayablesTable: React.FC<PendingPayablesTableProps> = ({
                               </div>
                               {paid > 0 ? (
                                 <div className="text-[10px] text-emerald-700 font-semibold font-mono mt-0.5">
-                                  Đã chi: {formatTy(paid)} • Tổng: {formatTy(po.totalAmount)}
+                                  Đã chi: {formatVND(paid)} • Tổng: {formatVND(po.totalAmount)}
                                 </div>
                               ) : (
-                                <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                  Tổng đơn: {formatTy(po.totalAmount)}
+                                <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                  Tổng đơn: {formatVND(po.totalAmount)}
                                 </div>
                               )}
                             </div>

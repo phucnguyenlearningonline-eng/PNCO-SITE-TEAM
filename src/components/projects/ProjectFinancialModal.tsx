@@ -123,7 +123,7 @@ export const ProjectFinancialModal: React.FC<ProjectFinancialModalProps> = ({
             </div>
             <div className="text-[10.5px] text-slate-500 mt-1 flex justify-between">
               <span>Đã thu CĐT:</span>
-              <strong className="text-sky-700">{formatTy(collectedAmount)} ({collectedPct.toFixed(0)}%)</strong>
+              <strong className="text-sky-700">{formatVND(collectedAmount)} ({collectedPct.toFixed(0)}%)</strong>
             </div>
           </div>
 
@@ -138,7 +138,7 @@ export const ProjectFinancialModal: React.FC<ProjectFinancialModalProps> = ({
             </div>
             <div className="text-[10.5px] text-purple-700 mt-1 flex justify-between">
               <span>{laborExpenses.length} đợt chi trả</span>
-              <span>Dự toán: {formatTy(project.laborBudget || 0)}</span>
+              <span>Dự toán: {formatVND(project.laborBudget || 0)}</span>
             </div>
           </div>
 
@@ -153,7 +153,7 @@ export const ProjectFinancialModal: React.FC<ProjectFinancialModalProps> = ({
             </div>
             <div className="text-[10.5px] text-blue-700 mt-1 flex justify-between">
               <span>{materialExpenses.length} đơn hàng</span>
-              <span>Dự toán: {formatTy(project.materialBudget || 0)}</span>
+              <span>Dự toán: {formatVND(project.materialBudget || 0)}</span>
             </div>
           </div>
 
@@ -167,7 +167,7 @@ export const ProjectFinancialModal: React.FC<ProjectFinancialModalProps> = ({
               {formatVND(grossProfit)}
             </div>
             <div className="text-[10.5px] text-emerald-700 mt-1 flex justify-between">
-              <span>Tổng chi: {formatTy(totalSpent)}</span>
+              <span>Tổng chi: {formatVND(totalSpent)}</span>
               <strong>{profitMargin.toFixed(1)}%</strong>
             </div>
           </div>
