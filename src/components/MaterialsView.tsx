@@ -26,9 +26,15 @@ import {
   Tag,
   ChevronDown,
   Check,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw
 } from 'lucide-react';
 import { MaterialItem, ExpenseItem, Supplier } from '../types';
 import { formatVND } from '../utils/formatters';
+import { SortableHeader } from './common/SortableHeader';
+import { SortDirection, naturalCompareCode } from '../utils/sortUtils';
 import { SnapToolModal } from './SnapToolModal';
 import { InlineImageCropper } from './InlineImageCropper';
 import { STANDARD_WAREHOUSES, PCCC_SUB_CATEGORIES, MNE_SUB_CATEGORIES } from '../data/materialsData';
@@ -59,6 +65,22 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'in_stock'>('all');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [sortKey, setSortKey] = useState<string>('code');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDirection(key === 'code' || key === 'price' || key === 'quantity' ? 'desc' : 'asc');
+    }
+  };
+
+  const handleResetSort = () => {
+    setSortKey('code');
+    setSortDirection('desc');
+  };
 
   // State cho Snap Tool Modal
   const [snapTargetMaterial, setSnapTargetMaterial] = useState<MaterialItem | null>(null);
@@ -336,7 +358,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
 
   // Filtered materials
   const filteredMaterials = useMemo(() => {
-    return materials.filter((m) => {
+    const filtered = materials.filter((m) => {
       const matchCategory = selectedCategory === 'all' || m.category === selectedCategory;
       const matchSubCategory =
         selectedSubCategory === 'all' ||
@@ -376,7 +398,33 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
 
       return matchCategory && matchSubCategory && matchWarehouse && matchSupplier && matchStock && matchSearch;
     });
-  }, [materials, selectedCategory, selectedSubCategory, selectedWarehouse, selectedSupplier, stockFilter, search]);
+
+    const list = [...filtered];
+    return list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'code':
+        case 'stt':
+          cmp = naturalCompareCode(a.code, b.code);
+          break;
+        case 'name':
+          cmp = (a.name || '').localeCompare(b.name || '', 'vi');
+          break;
+        case 'supplier':
+          cmp = (a.supplier || '').localeCompare(b.supplier || '', 'vi');
+          break;
+        case 'price':
+          cmp = (Number(a.unitPrice) || 0) - (Number(b.unitPrice) || 0);
+          break;
+        case 'quantity':
+          cmp = (Number(a.stockQuantity) || 0) - (Number(b.stockQuantity) || 0);
+          break;
+        default:
+          cmp = naturalCompareCode(a.code, b.code);
+      }
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [materials, selectedCategory, selectedSubCategory, selectedWarehouse, selectedSupplier, stockFilter, search, sortKey, sortDirection]);
 
   const getCategoryBadge = (category?: MaterialItem['category']) => {
     switch (category) {
@@ -787,21 +835,116 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
       {/* VIEW CHÍNH: DẠNG DANH SÁCH (LIST VIEW) */}
       {viewMode === 'list' ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+          {/* Thanh hiển thị trạng thái sắp xếp vật tư */}
+          <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                <ArrowUpDown className="w-3.5 h-3.5 text-sky-600" />
+                <span>Thứ tự vật tư:</span>
+              </span>
+              <span className="font-extrabold text-sky-900 bg-sky-100/80 px-2 py-0.5 rounded border border-sky-200">
+                {sortKey === 'code' ? 'MÃ VẬT TƯ (VT)' : sortKey === 'name' ? 'TÊN VẬT TƯ' : sortKey === 'supplier' ? 'NHÀ CUNG CẤP' : sortKey === 'price' ? 'ĐƠN GIÁ' : sortKey === 'quantity' ? 'SỐ LƯỢNG TỒN' : sortKey}
+                {' '}({sortDirection === 'desc' ? 'Từ trên xuống / Giảm dần ▼' : 'Từ dưới lên / Tăng dần ▲'})
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-all cursor-pointer shadow-2xs ${
+                  sortDirection === 'desc'
+                    ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
+                    : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                }`}
+                title="Bấm để đảo chiều: Từ trên xuống (Mới nhất ⬇️) hoặc Từ dưới lên (VT0001 ⬆️)"
+              >
+                {sortDirection === 'desc' ? (
+                  <>
+                    <ArrowDown className="w-3.5 h-3.5 text-rose-600 stroke-[2.8]" />
+                    <span>Thứ tự: Từ trên xuống ▼</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowUp className="w-3.5 h-3.5 text-emerald-600 stroke-[2.8]" />
+                    <span>Thứ tự: Từ dưới lên ▲</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResetSort}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-100 flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+                title="Đặt lại thứ tự theo mã vật tư mới nhất"
+              >
+                <RotateCcw className="w-3 h-3 text-slate-500" />
+                <span>Mặc định</span>
+              </button>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[1100px]">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">
-                  <th className="py-3 px-3 w-12 text-center">STT</th>
-                  <th className="py-3 px-3 w-24">Mã VT</th>
-                  <th className="py-3 px-3 w-20 text-center">Ảnh (Snap)</th>
-                  <th className="py-3 px-4 min-w-[220px]">Tên Vật Tư &amp; Quy Cách</th>
-                  <th className="py-3 px-3 w-28 text-center">Link Catalogue</th>
-                  <th className="py-3 px-3 min-w-[150px]">Nhà Cung Cấp</th>
-                  <th className="py-3 px-2 w-16 text-center">Đơn Vị</th>
-                  <th className="py-3 px-3 w-28 text-right">Giá Tiền</th>
-                  <th className="py-3 px-3 w-28 text-right">
-                    Số Lượng Tồn
-                  </th>
+              <thead className="bg-[#102742] text-white font-bold text-[11px] uppercase tracking-wider">
+                <tr>
+                  <SortableHeader
+                    label="STT"
+                    sortKey="stt"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="center"
+                    className="w-12 border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Mã VT"
+                    sortKey="code"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                    className="w-24 border-r border-[#1d3d63]"
+                  />
+                  <th className="py-3 px-3 w-20 text-center border-r border-[#1d3d63]">Ảnh (Snap)</th>
+                  <SortableHeader
+                    label="Tên Vật Tư & Quy Cách"
+                    sortKey="name"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                    className="min-w-[220px] border-r border-[#1d3d63]"
+                  />
+                  <th className="py-3 px-3 w-28 text-center border-r border-[#1d3d63]">Link Catalogue</th>
+                  <SortableHeader
+                    label="Nhà Cung Cấp"
+                    sortKey="supplier"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                    className="min-w-[150px] border-r border-[#1d3d63]"
+                  />
+                  <th className="py-3 px-2 w-16 text-center border-r border-[#1d3d63]">Đơn Vị</th>
+                  <SortableHeader
+                    label="Giá Tiền"
+                    sortKey="price"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                    className="w-28 border-r border-[#1d3d63]"
+                  />
+                  <SortableHeader
+                    label="Số Lượng Tồn"
+                    sortKey="quantity"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                    className="w-28 border-r border-[#1d3d63]"
+                  />
                   <th className="py-3 px-3 w-24 text-center">Thao Tác</th>
                 </tr>
               </thead>

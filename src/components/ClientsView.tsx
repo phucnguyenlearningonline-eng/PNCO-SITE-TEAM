@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Building2, Edit3, Trash2, PlusCircle, CheckCircle, MapPin, DollarSign, X } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Building2, Edit3, Trash2, PlusCircle, CheckCircle, MapPin, DollarSign, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Project, ExpenseItem } from '../types';
 import { formatVND } from '../utils/formatters';
 
@@ -21,6 +21,16 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [clientName, setClientName] = useState('');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Sắp xếp danh sách khách hàng theo thứ tự
+  const sortedProjects = useMemo(() => {
+    const list = [...projects];
+    return list.sort((a, b) => {
+      const cmp = (a.client || '').localeCompare(b.client || '', 'vi');
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [projects, sortDirection]);
 
   const openEditModal = (p: Project) => {
     setSelectedProject(p);
@@ -66,11 +76,35 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
             Quản lý tên khách hàng, thông tin chủ đầu tư các công trình thi công cơ điện và đồng bộ Supabase.
           </p>
         </div>
+
+        {/* Nút Đảo Chiều Thứ Tự */}
+        <button
+          type="button"
+          onClick={() => setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-all cursor-pointer shadow-2xs ${
+            sortDirection === 'desc'
+              ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
+              : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+          }`}
+          title="Bấm để đảo chiều: Từ trên xuống (Z-A ⬇️) hoặc Từ dưới lên (A-Z ⬆️)"
+        >
+          {sortDirection === 'desc' ? (
+            <>
+              <ArrowDown className="w-3.5 h-3.5 text-rose-600 stroke-[2.8]" />
+              <span>Thứ tự: Từ trên xuống (Z → A) ▼</span>
+            </>
+          ) : (
+            <>
+              <ArrowUp className="w-3.5 h-3.5 text-emerald-600 stroke-[2.8]" />
+              <span>Thứ tự: Từ dưới lên (A → Z) ▲</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Grid of Clients */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {projects.map((p) => {
+        {sortedProjects.map((p, idx) => {
           const projectExpenses = expenses.filter((e) => e.projectId === p.id);
           const totalSpent = projectExpenses.reduce((sum, e) => sum + e.totalAmount, 0);
 
@@ -81,9 +115,14 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
             >
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
-                    Chủ Đầu Tư / Khách Hàng
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-xs bg-slate-900 text-white px-2 py-0.5 rounded">
+                      STT #{idx + 1}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                      Chủ Đầu Tư
+                    </span>
+                  </div>
 
                   <div className="flex items-center gap-1">
                     <button

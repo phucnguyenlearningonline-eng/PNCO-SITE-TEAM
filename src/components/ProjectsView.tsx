@@ -952,13 +952,16 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
             {/* Sắp Xếp */}
             <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value)}
               className="py-1.5 px-2.5 text-xs border border-slate-300 rounded-lg bg-white font-medium focus:ring-2 focus:ring-sky-500"
             >
-              <option value="revenue_desc">Giá trị HĐ (Cao → Thấp)</option>
-              <option value="revenue_asc">Giá trị HĐ (Thấp → Cao)</option>
-              <option value="progress_desc">Tiến độ thi công (Cao → Thấp)</option>
+              <option value="revenue">Tổng quyết toán</option>
+              <option value="collected">Đã thu CĐT</option>
+              <option value="spent">Chi phí dự án</option>
+              <option value="progress">Tiến độ thi công</option>
+              <option value="code">Mã dự án</option>
+              <option value="name">Tên công trình</option>
             </select>
 
             {/* Nút xóa lọc nhanh */}

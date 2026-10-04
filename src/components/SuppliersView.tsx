@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Users, 
   Truck, 
@@ -10,7 +10,10 @@ import {
   Building2, 
   Edit3, 
   Trash2, 
-  X 
+  X,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { Supplier, ExpenseItem } from '../types';
 import { formatVND } from '../utils/formatters';
@@ -45,11 +48,21 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
     expenses.some((e) => e.supplier.trim().toLowerCase() === s.name.trim().toLowerCase())
   );
 
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
   const filteredSuppliers = filterType === 'in_expenses'
     ? suppliersWithExpenses
     : filterType === 'all'
     ? suppliers
     : suppliers.filter((s) => s.type === filterType);
+
+  const sortedSuppliers = useMemo(() => {
+    const list = [...filteredSuppliers];
+    return list.sort((a, b) => {
+      const cmp = (a.name || '').localeCompare(b.name || '', 'vi');
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [filteredSuppliers, sortDirection]);
 
   const openAddModal = () => {
     setName('');
@@ -188,11 +201,35 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
           <Utensils className="w-3.5 h-3.5" />
           Cơm ca / Suất ăn site
         </button>
+
+        {/* Nút Đảo Chiều Thứ Tự */}
+        <button
+          type="button"
+          onClick={() => setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+          className={`ml-auto px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-all cursor-pointer shadow-2xs ${
+            sortDirection === 'desc'
+              ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
+              : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+          }`}
+          title="Bấm để đảo chiều: Từ trên xuống (Z-A ⬇️) hoặc Từ dưới lên (A-Z ⬆️)"
+        >
+          {sortDirection === 'desc' ? (
+            <>
+              <ArrowDown className="w-3.5 h-3.5 text-rose-600 stroke-[2.8]" />
+              <span>Thứ tự: Từ trên xuống (Z → A) ▼</span>
+            </>
+          ) : (
+            <>
+              <ArrowUp className="w-3.5 h-3.5 text-emerald-600 stroke-[2.8]" />
+              <span>Thứ tự: Từ dưới lên (A → Z) ▲</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Grid Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {filteredSuppliers.map((supplier) => {
+        {sortedSuppliers.map((supplier, idx) => {
           const supplierExpenses = expenses.filter((e) => e.supplier === supplier.name);
           const totalSpent = supplierExpenses.reduce((sum, e) => sum + e.totalAmount, 0);
 
@@ -203,21 +240,26 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
             >
               <div>
                 <div className="flex items-center justify-between">
-                  <span
-                    className={`text-[10.5px] font-bold px-2 py-0.5 rounded-full ${
-                      supplier.type === 'material'
-                        ? 'bg-blue-100 text-blue-800'
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-xs bg-slate-900 text-white px-2 py-0.5 rounded">
+                      STT #{idx + 1}
+                    </span>
+                    <span
+                      className={`text-[10.5px] font-bold px-2 py-0.5 rounded-full ${
+                        supplier.type === 'material'
+                          ? 'bg-blue-100 text-blue-800'
+                          : supplier.type === 'transport'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
+                      {supplier.type === 'material'
+                        ? 'Vật tư thiết bị'
                         : supplier.type === 'transport'
-                        ? 'bg-amber-100 text-amber-800'
-                        : 'bg-emerald-100 text-emerald-800'
-                    }`}
-                  >
-                    {supplier.type === 'material'
-                      ? 'Vật tư thiết bị'
-                      : supplier.type === 'transport'
-                      ? 'Xe cẩu & Vận chuyển'
-                      : 'Cơm tăng ca'}
-                  </span>
+                        ? 'Xe cẩu & Vận chuyển'
+                        : 'Cơm tăng ca'}
+                    </span>
+                  </div>
                   
                   <div className="flex items-center gap-1">
                     {onEditSupplier && (
