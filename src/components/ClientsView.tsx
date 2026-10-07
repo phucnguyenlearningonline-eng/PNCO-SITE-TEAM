@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Building2, 
   Edit3, 
@@ -16,10 +16,22 @@ import {
   FileText,
   Building,
   CheckCircle2,
-  DollarSign
+  DollarSign,
+  Database,
+  Copy,
+  Check,
+  RefreshCw,
+  ExternalLink,
+  AlertCircle
 } from 'lucide-react';
 import { Project, ExpenseItem, Customer } from '../types';
 import { formatVND } from '../utils/formatters';
+import { 
+  CLIENT_TABLE_SQL, 
+  CLIENT_AND_BANK_SQL, 
+  checkClientTableOnSupabase 
+} from '../services/supabaseService';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 interface ClientsViewProps {
   customers: Customer[];
@@ -29,6 +41,8 @@ interface ClientsViewProps {
   onEditCustomer?: (customer: Customer, oldName?: string) => void;
   onDeleteCustomer?: (customerId: string) => void;
   onUpdateClient?: (oldClientName: string, newClientName: string) => void;
+  onOpenSupabaseModal?: () => void;
+  onRefreshData?: () => void;
 }
 
 export const ClientsView: React.FC<ClientsViewProps> = ({
@@ -39,6 +53,8 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
   onEditCustomer,
   onDeleteCustomer,
   onUpdateClient,
+  onOpenSupabaseModal,
+  onRefreshData,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'with_projects'>('all');
@@ -58,6 +74,31 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
+
+  // Modal SQL Supabase
+  const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
+  const [sqlTab, setSqlTab] = useState<'client' | 'both'>('client');
+  const [copiedSql, setCopiedSql] = useState(false);
+  const [isCheckingTable, setIsCheckingTable] = useState(false);
+  const [clientTableStatus, setClientTableStatus] = useState<{ checked: boolean; exists: boolean }>({ checked: false, exists: false });
+  const [clientToDelete, setClientToDelete] = useState<{ client: Customer; linkedProjectCount: number } | null>(null);
+
+  const checkTable = async () => {
+    if (!isSupabaseConfigured()) return;
+    setIsCheckingTable(true);
+    try {
+      const res = await checkClientTableOnSupabase();
+      setClientTableStatus({ checked: true, exists: Boolean(res.clientTableExists || res.clientsTableExists) });
+    } catch (e) {
+      setClientTableStatus({ checked: true, exists: false });
+    } finally {
+      setIsCheckingTable(false);
+    }
+  };
+
+  useEffect(() => {
+    checkTable();
+  }, []);
 
   // 1. Hợp nhất danh sách Khách Hàng độc nhất:
   // Lấy danh sách từ customers prop, đồng thời bổ sung bất kỳ client nào có trong projects mà chưa có trong customers
@@ -254,19 +295,13 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
   // Xóa Khách Hàng
   const handleDelete = (client: Customer, linkedProjectCount: number) => {
     if (!onDeleteCustomer) return;
-    
-    if (linkedProjectCount > 0) {
-      const confirmDelete = confirm(
-        `Khách hàng "${client.name}" hiện đang có ${linkedProjectCount} công trình thi công liên kết.\n\n` +
-        `Bạn có chắc chắn muốn xóa hồ sơ khách hàng này khỏi danh bạ? (Lưu ý: Các công trình thi công và chứng từ thu chi thực tế sẽ KHÔNG bị mất).`
-      );
-      if (confirmDelete) {
-        onDeleteCustomer(client.id);
-      }
-    } else {
-      if (confirm(`Bạn có chắc chắn muốn xóa hồ sơ khách hàng "${client.name}"?`)) {
-        onDeleteCustomer(client.id);
-      }
+    setClientToDelete({ client, linkedProjectCount });
+  };
+
+  const handleConfirmDeleteClient = () => {
+    if (clientToDelete && onDeleteCustomer) {
+      onDeleteCustomer(clientToDelete.client.id);
+      setClientToDelete(null);
     }
   };
 
@@ -294,6 +329,17 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
             >
               <PlusCircle className="w-4 h-4 stroke-[2.5]" />
               <span>+ Thêm Khách Hàng Mới</span>
+            </button>
+
+            {/* Nút Xem Mã SQL Tạo Bảng Supabase */}
+            <button
+              type="button"
+              onClick={() => setIsSqlModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              title="Xem và sao chép mã SQL tạo bảng client & bank_accounts trên Supabase"
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-600" />
+              <span>⚡ SQL Tạo Bảng client</span>
             </button>
 
             {/* Nút Đảo Chiều Thứ Tự */}
@@ -709,6 +755,160 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL MÃ SQL TẠO BẢNG CLIENT & BANK_ACCOUNTS TRÊN SUPABASE */}
+      {isSqlModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-sky-700 to-indigo-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-white">
+                  <Database className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-black text-sm sm:text-base">
+                    Mã SQL Khởi Tạo Bảng 'client' &amp; 'bank_accounts' Trên Supabase
+                  </h4>
+                  <p className="text-[11px] text-sky-100">
+                    Lưu trữ khách hàng và tài khoản ngân hàng trực tiếp vào cơ sở dữ liệu Supabase
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSqlModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+              {/* Tab chọn */}
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setSqlTab('client')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    sqlTab === 'client' ? 'bg-sky-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Chỉ Bảng client (Khách hàng)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSqlTab('both')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    sqlTab === 'both' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Cả 2 Bảng (client + bank_accounts)
+                </button>
+              </div>
+
+              {/* 3 Bước thực hiện */}
+              <div className="bg-sky-50/80 p-3 rounded-xl border border-sky-200 text-xs text-sky-950 space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-sky-900">
+                  <CheckCircle2 className="w-4 h-4 text-sky-600" />
+                  <span>3 Bước thực hiện nhanh trên Supabase của bạn:</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-1 pl-1 text-[11.5px] text-slate-700">
+                  <li>Bấm nút <strong>"Sao Chép Mã SQL"</strong> màu xanh bên dưới.</li>
+                  <li>Mở Supabase Dashboard, nhấn vào biểu tượng <strong>SQL Editor</strong> (icon <code>&gt;_</code> ở menu bên trái).</li>
+                  <li>Bấm <strong>"New Query"</strong>, Dán (Ctrl + V) và nhấn <strong>Run</strong> (hoặc nhấn Ctrl + Enter). Xong 100%!</li>
+                </ol>
+              </div>
+
+              {/* Hộp mã code */}
+              <div className="relative">
+                <div className="flex items-center justify-between pb-1 text-xs text-slate-500 font-semibold">
+                  <span>Kịch bản SQL PostgreSQL:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const textToCopy = sqlTab === 'both' ? CLIENT_AND_BANK_SQL : CLIENT_TABLE_SQL;
+                      navigator.clipboard.writeText(textToCopy);
+                      setCopiedSql(true);
+                      setTimeout(() => setCopiedSql(false), 2500);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                  >
+                    {copiedSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedSql ? 'Đã sao chép vào Clipboard!' : 'Sao Chép Mã SQL'}</span>
+                  </button>
+                </div>
+                <pre className="p-3 bg-slate-950 text-emerald-400 font-mono text-[11px] rounded-xl overflow-x-auto max-h-60 border border-slate-800 leading-relaxed">
+                  {sqlTab === 'both' ? CLIENT_AND_BANK_SQL : CLIENT_TABLE_SQL}
+                </pre>
+              </div>
+
+              {/* Nút hành động */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={checkTable}
+                  disabled={isCheckingTable}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isCheckingTable ? 'animate-spin' : ''}`} />
+                  <span>Kiểm tra lại kết nối Supabase</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsSqlModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal xác nhận xóa khách hàng */}
+      {clientToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-sm w-full p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">Xác Nhận Xóa Khách Hàng</h4>
+                <p className="text-xs text-slate-500">Xóa hồ sơ khỏi danh bạ và Supabase</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 space-y-1.5">
+              <div>Mã khách hàng: <strong className="font-mono text-emerald-800">{clientToDelete.client.code}</strong></div>
+              <div>Tên công ty / CĐT: <strong className="text-slate-900">{clientToDelete.client.name}</strong></div>
+              {clientToDelete.linkedProjectCount > 0 && (
+                <div className="text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200 text-[11px]">
+                  Khách hàng này đang có <strong>{clientToDelete.linkedProjectCount} công trình thi công</strong>. Lưu ý: các công trình và chứng từ thực tế sẽ không bị mất.
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setClientToDelete(null)}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteClient}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 transition-colors shadow-xs"
+              >
+                Xóa khách hàng
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -20,8 +20,8 @@ import {
   testSupabaseConnection, 
   SupabaseConfig 
 } from '../lib/supabase';
-import { syncAllLocalDataToSupabase, separateAndCleanTransactionsOnSupabase } from '../services/supabaseService';
-import { ExpenseItem, Project, Supplier, User, MaterialItem } from '../types';
+import { syncAllLocalDataToSupabase, separateAndCleanTransactionsOnSupabase, CLIENT_TABLE_SQL, BANK_ACCOUNTS_TABLE_SQL, CLIENT_AND_BANK_SQL } from '../services/supabaseService';
+import { ExpenseItem, Project, Supplier, User, MaterialItem, Customer, BankAccount } from '../types';
 
 interface SupabaseModalProps {
   isOpen: boolean;
@@ -31,6 +31,8 @@ interface SupabaseModalProps {
   suppliers: Supplier[];
   users: User[];
   materials?: MaterialItem[];
+  customers?: Customer[];
+  bankAccounts?: BankAccount[];
   onRefreshDataFromSupabase: () => void;
 }
 
@@ -42,6 +44,8 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
   suppliers,
   users,
   materials = [],
+  customers = [],
+  bankAccounts = [],
   onRefreshDataFromSupabase,
 }) => {
   const [url, setUrl] = useState('');
@@ -55,9 +59,12 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
   const [copiedEnv, setCopiedEnv] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
   const [copiedSeparateSql, setCopiedSeparateSql] = useState(false);
+  const [copiedClientSql, setCopiedClientSql] = useState(false);
+  const [copiedBankSql, setCopiedBankSql] = useState(false);
+  const [copiedBothSql, setCopiedBothSql] = useState(false);
 
   const FIX_SQL = `-- ================================================================
--- 1. TẠO BẢNG SỔ NHẬT KÝ THU - CHI (TRANSACTIONS) & VẬT TƯ (MATERIALS)
+-- 1. TẠO BẢNG TRANSACTIONS, MATERIALS VÀ CLIENTS (KHÁCH HÀNG)
 -- ================================================================
 CREATE TABLE IF NOT EXISTS public.transactions (
     id TEXT PRIMARY KEY,
@@ -122,6 +129,80 @@ CREATE TABLE IF NOT EXISTS public.materials (
 CREATE INDEX IF NOT EXISTS idx_materials_code ON public.materials(code);
 CREATE INDEX IF NOT EXISTS idx_materials_category ON public.materials(category);
 
+-- BẢNG KHÁCH HÀNG & CHỦ ĐẦU TƯ (CLIENT & CLIENTS)
+CREATE TABLE IF NOT EXISTS public.client (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    short_name TEXT,
+    tax_code TEXT,
+    phone TEXT,
+    email TEXT,
+    address TEXT,
+    contact_person TEXT,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_code ON public.client(code);
+CREATE INDEX IF NOT EXISTS idx_client_name ON public.client(name);
+
+CREATE TABLE IF NOT EXISTS public.clients (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    short_name TEXT,
+    tax_code TEXT,
+    phone TEXT,
+    email TEXT,
+    address TEXT,
+    contact_person TEXT,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+CREATE INDEX IF NOT EXISTS idx_clients_code ON public.clients(code);
+CREATE INDEX IF NOT EXISTS idx_clients_name ON public.clients(name);
+
+-- BẢNG DANH SÁCH TÀI KHOẢN NGÂN HÀNG (BANK_ACCOUNTS & BANK_ACCOUNT)
+CREATE TABLE IF NOT EXISTS public.bank_accounts (
+    id TEXT PRIMARY KEY,
+    bank_name TEXT NOT NULL,
+    account_number TEXT NOT NULL UNIQUE,
+    account_holder TEXT NOT NULL,
+    branch TEXT,
+    account_type TEXT DEFAULT 'company' CHECK (account_type IN ('company', 'project', 'personal', 'cash')),
+    initial_balance BIGINT DEFAULT 0,
+    current_balance BIGINT DEFAULT 0,
+    is_default BOOLEAN DEFAULT false,
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.bank_account (
+    id TEXT PRIMARY KEY,
+    bank_name TEXT NOT NULL,
+    account_number TEXT NOT NULL UNIQUE,
+    account_holder TEXT NOT NULL,
+    branch TEXT,
+    account_type TEXT DEFAULT 'company' CHECK (account_type IN ('company', 'project', 'personal', 'cash')),
+    initial_balance BIGINT DEFAULT 0,
+    current_balance BIGINT DEFAULT 0,
+    is_default BOOLEAN DEFAULT false,
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+CREATE INDEX IF NOT EXISTS idx_bank_accounts_number ON public.bank_accounts(account_number);
+CREATE INDEX IF NOT EXISTS idx_bank_accounts_bank_name ON public.bank_accounts(bank_name);
+CREATE INDEX IF NOT EXISTS idx_bank_account_number ON public.bank_account(account_number);
+
 -- ================================================================
 -- 2. CẤP TOÀN QUYỀN ĐỌC, GHI, SỬA, XÓA CHO TẤT CẢ CÁC BẢNG (RLS POLICIES)
 -- ================================================================
@@ -131,6 +212,10 @@ ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.materials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.client ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bank_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bank_account ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Public Read Expenses" ON public.expenses;
 DROP POLICY IF EXISTS "Public Insert/Update Expenses" ON public.expenses;
@@ -162,6 +247,22 @@ DROP POLICY IF EXISTS "Public Insert/Update Transactions" ON public.transactions
 DROP POLICY IF EXISTS "Allow All Transactions" ON public.transactions;
 CREATE POLICY "Allow All Transactions" ON public.transactions FOR ALL USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Public Read Clients" ON public.clients;
+DROP POLICY IF EXISTS "Public Insert/Update Clients" ON public.clients;
+DROP POLICY IF EXISTS "Allow All Clients" ON public.clients;
+CREATE POLICY "Allow All Clients" ON public.clients FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public Read Client" ON public.client;
+DROP POLICY IF EXISTS "Public Insert/Update Client" ON public.client;
+DROP POLICY IF EXISTS "Allow All Client" ON public.client;
+CREATE POLICY "Allow All Client" ON public.client FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow All Bank Accounts" ON public.bank_accounts;
+CREATE POLICY "Allow All Bank Accounts" ON public.bank_accounts FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow All Bank Account" ON public.bank_account;
+CREATE POLICY "Allow All Bank Account" ON public.bank_account FOR ALL USING (true) WITH CHECK (true);
+
 -- ================================================================
 -- 3. KÍCH HOẠT ĐỒNG BỘ REALTIME ĐA THIẾT BỊ
 -- ================================================================
@@ -185,12 +286,42 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'transactions') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.transactions;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'client') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.client;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'clients') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.clients;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'bank_accounts') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_accounts;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'bank_account') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_account;
+  END IF;
 END $$;`;
 
   const handleCopySql = () => {
     navigator.clipboard.writeText(FIX_SQL);
     setCopiedSql(true);
     setTimeout(() => setCopiedSql(false), 2500);
+  };
+
+  const handleCopyClientSql = () => {
+    navigator.clipboard.writeText(CLIENT_TABLE_SQL);
+    setCopiedClientSql(true);
+    setTimeout(() => setCopiedClientSql(false), 2500);
+  };
+
+  const handleCopyBankSql = () => {
+    navigator.clipboard.writeText(BANK_ACCOUNTS_TABLE_SQL);
+    setCopiedBankSql(true);
+    setTimeout(() => setCopiedBankSql(false), 2500);
+  };
+
+  const handleCopyBothSql = () => {
+    navigator.clipboard.writeText(CLIENT_AND_BANK_SQL);
+    setCopiedBothSql(true);
+    setTimeout(() => setCopiedBothSql(false), 2500);
   };
 
   useEffect(() => {
@@ -244,6 +375,8 @@ END $$;`;
       suppliers,
       users,
       materials,
+      customers,
+      bankAccounts,
     });
     setSyncResult(res);
     setIsSyncing(false);
@@ -609,6 +742,85 @@ WHERE type = 'revenue'
                 {separateResult.message}
               </div>
             )}
+          </div>
+
+          {/* TẠO 2 BẢNG: 'client' (KHÁCH HÀNG) & 'bank_accounts' (TÀI KHOẢN NGÂN HÀNG) TRÊN SUPABASE */}
+          <div className="bg-emerald-50/70 border border-emerald-300 rounded-xl p-4 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+              <div>
+                <h4 className="font-bold text-emerald-950 text-sm flex items-center gap-1.5">
+                  <Database className="w-4 h-4 text-emerald-700" />
+                  <span>Tạo Bảng Khách Hàng (client) &amp; Tài Khoản Ngân Hàng (bank_accounts) Trên Supabase</span>
+                </h4>
+                <p className="text-slate-600 text-xs mt-1 max-w-xl leading-relaxed">
+                  Hệ thống hỗ trợ lưu riêng biệt từng bảng trên Supabase: Bảng <strong className="text-emerald-800 font-mono">client</strong> dành cho Khách Hàng / Chủ Đầu Tư và Bảng <strong className="text-indigo-800 font-mono">bank_accounts</strong> dành cho Tài Khoản Ngân Hàng. Sao chép mã SQL và dán vào <strong>SQL Editor</strong> trên Supabase Dashboard.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCopyBothSql}
+                  className="px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                  title="Sao chép kịch bản SQL tạo cả 2 bảng client và bank_accounts"
+                >
+                  {copiedBothSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedBothSql ? 'Đã sao chép Cả 2 Bảng!' : 'Sao Chép Cả 2 Bảng (client + bank_accounts)'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Hai nút sao chép riêng biệt */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="p-3 bg-white rounded-xl border border-emerald-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-emerald-900 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    1. Bảng Khách Hàng (<code className="font-mono text-emerald-800">client</code>)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopyClientSql}
+                    className="px-2.5 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    {copiedClientSql ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedClientSql ? 'Đã sao chép' : 'Sao chép SQL'}</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Tạo bảng <code className="font-mono text-slate-700">client</code> và <code className="font-mono text-slate-700">clients</code>, thiết lập mã KH, RLS toàn quyền và đồng bộ realtime.
+                </p>
+              </div>
+
+              <div className="p-3 bg-white rounded-xl border border-indigo-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-indigo-900 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                    2. Bảng Tài Khoản Ngân Hàng (<code className="font-mono text-indigo-800">bank_accounts</code>)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopyBankSql}
+                    className="px-2.5 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-300 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    {copiedBankSql ? <Check className="w-3 h-3 text-indigo-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedBankSql ? 'Đã sao chép' : 'Sao chép SQL'}</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Tạo bảng <code className="font-mono text-slate-700">bank_accounts</code> và <code className="font-mono text-slate-700">bank_account</code>, thiết lập số tài khoản, số dư ban đầu &amp; realtime.
+                </p>
+              </div>
+            </div>
+            
+            <div className="bg-white/90 p-2.5 rounded-lg border border-emerald-200 text-[11px] text-slate-600 space-y-1">
+              <div className="font-bold text-emerald-900">3 Bước thực hiện nhanh trên Supabase của bạn:</div>
+              <ol className="list-decimal list-inside space-y-0.5 pl-1">
+                <li>Bấm nút <strong>"Sao Chép Cả 2 Bảng"</strong> (hoặc sao chép riêng từng bảng ở trên).</li>
+                <li>Mở tab Supabase Dashboard của bạn, nhấn vào icon <strong>SQL Editor</strong> (biểu tượng <code>&gt;_</code> ở cột menu màu đen bên trái).</li>
+                <li>Dán mã SQL (Ctrl + V) và nhấn <strong>Run</strong> (hoặc Ctrl + Enter). Hai bảng <code className="font-mono text-emerald-800 font-bold">client</code> và <code className="font-mono text-indigo-800 font-bold">bank_accounts</code> sẽ xuất hiện ngay lập tức trong Table Editor!</li>
+              </ol>
+            </div>
           </div>
 
           {/* Vercel Deployment Checklist */}

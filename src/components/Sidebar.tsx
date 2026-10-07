@@ -14,11 +14,12 @@ import {
   Shield,
   Layers,
   Sparkles,
-  FileSignature
+  FileSignature,
+  Landmark
 } from 'lucide-react';
 import { User } from '../types';
 
-export type ActiveTab = 'orders' | 'materials' | 'projects' | 'contracts' | 'transactions' | 'clients' | 'suppliers' | 'reports' | 'users';
+export type ActiveTab = 'orders' | 'materials' | 'projects' | 'contracts' | 'transactions' | 'clients' | 'suppliers' | 'bank_accounts' | 'reports' | 'users';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -32,6 +33,7 @@ interface SidebarProps {
   clientsCount: number;
   materialsCount: number;
   contractsCount?: number;
+  bankAccountsCount?: number;
   currentUser: User;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
@@ -49,6 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   clientsCount,
   materialsCount,
   contractsCount = 0,
+  bankAccountsCount = 0,
   currentUser,
   isCollapsed,
   onToggleCollapse,
@@ -98,6 +101,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       sublabel: 'Chủ đầu tư các dự án thi công',
       icon: Building2,
       count: clientsCount,
+    },
+    {
+      id: 'bank_accounts' as ActiveTab,
+      label: 'Tài Khoản Ngân Hàng',
+      sublabel: 'Tài khoản công ty, dự án & quỹ site...',
+      icon: Landmark,
+      count: bankAccountsCount,
     },
     {
       id: 'suppliers' as ActiveTab,

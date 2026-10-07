@@ -48,6 +48,22 @@ export interface Customer {
   notes?: string;
 }
 
+export interface BankAccount {
+  id: string;
+  bankName: string; // Tên ngân hàng: Vietcombank, Techcombank, MB, ACB, BIDV...
+  accountNumber: string; // Số tài khoản: 0071001234567
+  accountHolder: string; // Tên chủ tài khoản: CÔNG TY TNHH PHÚC NGUYÊN M&E
+  branch?: string; // Chi nhánh ngân hàng
+  accountType: 'company' | 'project' | 'personal' | 'cash'; // Loại: Công ty, Dự án, Cá nhân/Thủ quỹ
+  initialBalance?: number; // Số dư ban đầu
+  currentBalance?: number; // Số dư hiện tại
+  isDefault?: boolean; // Tài khoản chính mặc định
+  status?: 'active' | 'inactive'; // Hoạt động / Tạm khóa
+  notes?: string; // Ghi chú
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface ProjectAddendum {
   id: string;
   code: string; // PLHĐ-01/PNC-DA01

@@ -63,9 +63,18 @@ import {
   fetchMaterialsFromSupabase,
   upsertMaterialToSupabase,
   deleteMaterialFromSupabase,
-  subscribeToExpensesRealtime
+  fetchClientsFromSupabase,
+  upsertClientToSupabase,
+  deleteClientFromSupabase,
+  fetchBankAccountsFromSupabase,
+  upsertBankAccountToSupabase,
+  deleteBankAccountFromSupabase,
+  subscribeToExpensesRealtime,
+  subscribeToClientsRealtime,
+  subscribeToBankAccountsRealtime
 } from './services/supabaseService';
 import { ClientsView } from './components/ClientsView';
+import { BankAccountsView } from './components/BankAccountsView';
 import { MaterialsView } from './components/MaterialsView';
 import { ContractsView } from './components/ContractsView';
 import { TransactionsView } from './components/TransactionsView';
@@ -76,8 +85,10 @@ import {
   INITIAL_PROJECTS, 
   INITIAL_SUPPLIERS, 
   INITIAL_USERS,
-  INITIAL_CUSTOMERS 
+  INITIAL_CUSTOMERS,
+  INITIAL_BANK_ACCOUNTS
 } from './data/mockData';
+import { BankAccount } from './types';
 import { INITIAL_MATERIALS } from './data/materialsData';
 import { 
   ExpenseItem, 
@@ -101,7 +112,8 @@ import {
   ShieldCheck,
   CheckCircle2,
   Bell,
-  FileSignature
+  FileSignature,
+  Landmark
 } from 'lucide-react';
 
 const STORAGE_KEYS = {
@@ -111,6 +123,7 @@ const STORAGE_KEYS = {
   SUPPLIERS: 'phuc_nguyen_me_suppliers_v1',
   MATERIALS: 'phuc_nguyen_me_materials_v1',
   CUSTOMERS: 'phuc_nguyen_me_customers_v1',
+  BANK_ACCOUNTS: 'phuc_nguyen_me_bank_accounts_v1',
   CURRENT_USER_ID: 'phuc_nguyen_me_current_user_v1',
   IS_LOGGED_IN: 'phuc_nguyen_me_is_logged_in_v1',
 };
@@ -213,6 +226,21 @@ export default function App() {
     return INITIAL_CUSTOMERS;
   });
 
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.BANK_ACCOUNTS);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const numbers = new Set(parsed.map((b: any) => (b.accountNumber || '').trim()));
+          const missing = INITIAL_BANK_ACCOUNTS.filter((ib) => !numbers.has(ib.accountNumber.trim()));
+          return [...parsed, ...missing];
+        }
+      } catch (e) { /* ignore */ }
+    }
+    return INITIAL_BANK_ACCOUNTS;
+  });
+
   const [projects, setProjects] = useState<Project[]>(() => {
     const isCloud = isSupabaseConfigured();
     const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
@@ -291,6 +319,11 @@ export default function App() {
     safeSetItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
   }, [customers]);
 
+  // Lưu danh sách tài khoản ngân hàng vào localStorage
+  useEffect(() => {
+    safeSetItem(STORAGE_KEYS.BANK_ACCOUNTS, JSON.stringify(bankAccounts));
+  }, [bankAccounts]);
+
   // Auth / Login state
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.IS_LOGGED_IN);
@@ -346,13 +379,24 @@ export default function App() {
   const loadDataFromSupabase = async () => {
     if (!isSupabaseConfigured()) return;
     try {
-      const [remoteExpenses, remoteTransactions, remoteProjects, remoteSuppliers, remoteUsers, remoteMaterials] = await Promise.all([
+      const [
+        remoteExpenses,
+        remoteTransactions,
+        remoteProjects,
+        remoteSuppliers,
+        remoteUsers,
+        remoteMaterials,
+        remoteClients,
+        remoteBankAccounts
+      ] = await Promise.all([
         fetchExpensesFromSupabase(),
         fetchTransactionsFromSupabase(),
         fetchProjectsFromSupabase(),
         fetchSuppliersFromSupabase(),
         fetchUsersFromSupabase(),
         fetchMaterialsFromSupabase(),
+        fetchClientsFromSupabase(),
+        fetchBankAccountsFromSupabase(),
       ]);
 
       // Hợp nhất dữ liệu đã được tách biệt từ 2 bảng trên Supabase (TUYỆT ĐỐI CHỈ DÙNG DỮ LIỆU TỪ SUPABASE)
@@ -383,6 +427,12 @@ export default function App() {
       }
       if (remoteMaterials !== null) {
         setMaterials(remoteMaterials);
+      }
+      if (remoteClients !== null && remoteClients.length > 0) {
+        setCustomers(remoteClients);
+      }
+      if (remoteBankAccounts !== null && remoteBankAccounts.length > 0) {
+        setBankAccounts(remoteBankAccounts);
       }
       if (remoteUsers && remoteUsers.length > 0) {
         const normalized = remoteUsers.map((u) => {
@@ -466,8 +516,44 @@ export default function App() {
       }
     );
 
+    const unsubscribeClients = subscribeToClientsRealtime(
+      (newClient) => {
+        setCustomers((prev) => {
+          if (prev.some((c) => c.id === newClient.id)) return prev;
+          return [newClient, ...prev];
+        });
+        showToast(`Đồng bộ tức thời: Nhận khách hàng mới "${newClient.name}"`);
+      },
+      (updatedClient) => {
+        setCustomers((prev) => prev.map((c) => (c.id === updatedClient.id ? updatedClient : c)));
+      },
+      (deletedId) => {
+        setCustomers((prev) => prev.filter((c) => c.id !== deletedId));
+        showToast('Đồng bộ tức thời: 1 khách hàng vừa được xóa trên thiết bị khác');
+      }
+    );
+
+    const unsubscribeBankAccounts = subscribeToBankAccountsRealtime(
+      (newAcc) => {
+        setBankAccounts((prev) => {
+          if (prev.some((b) => b.id === newAcc.id || b.accountNumber === newAcc.accountNumber)) return prev;
+          return [newAcc, ...prev];
+        });
+        showToast(`Đồng bộ tức thời: Nhận tài khoản ngân hàng mới "${newAcc.bankName} - ${newAcc.accountNumber}"`);
+      },
+      (updatedAcc) => {
+        setBankAccounts((prev) => prev.map((b) => (b.id === updatedAcc.id ? updatedAcc : b)));
+      },
+      (deletedId) => {
+        setBankAccounts((prev) => prev.filter((b) => b.id !== deletedId));
+        showToast('Đồng bộ tức thời: 1 tài khoản ngân hàng vừa được xóa trên thiết bị khác');
+      }
+    );
+
     return () => {
       unsubscribe();
+      unsubscribeClients();
+      unsubscribeBankAccounts();
     };
   }, []);
 
@@ -725,23 +811,82 @@ export default function App() {
     showToast(`Đã cập nhật khách hàng/chủ đầu tư: ${newClientName}`);
   };
 
-  const handleAddCustomer = (newCustomer: Customer) => {
+  const handleAddCustomer = async (newCustomer: Customer) => {
     setCustomers((prev) => [newCustomer, ...prev]);
-    showToast(`Đã thêm khách hàng/CĐT: ${newCustomer.name}`);
+    if (isSupabaseConfigured()) {
+      const res = await upsertClientToSupabase(newCustomer);
+      if (res.success) {
+        showToast(`Đã lưu khách hàng [${newCustomer.code}] vào Supabase (bảng client)!`);
+      } else if (res.tableMissing) {
+        showToast(`Đã lưu nội bộ. Supabase chưa có bảng 'client' (Hãy chạy mã SQL tạo bảng)`);
+      } else {
+        showToast(`Lưu Supabase: ${res.error || 'Vui lòng kiểm tra quyền'}`);
+      }
+    } else {
+      showToast(`Đã thêm khách hàng/CĐT: ${newCustomer.name}`);
+    }
   };
 
-  const handleEditCustomer = (updatedCustomer: Customer, oldName?: string) => {
+  const handleEditCustomer = async (updatedCustomer: Customer, oldName?: string) => {
     setCustomers((prev) => prev.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)));
     if (oldName && oldName !== updatedCustomer.name) {
       handleUpdateClient(oldName, updatedCustomer.name);
     }
-    showToast(`Đã cập nhật thông tin khách hàng: ${updatedCustomer.name}`);
+    if (isSupabaseConfigured()) {
+      const res = await upsertClientToSupabase(updatedCustomer);
+      if (res.success) {
+        showToast(`Đã cập nhật khách hàng lên Supabase (bảng client): ${updatedCustomer.name}`);
+      }
+    } else {
+      showToast(`Đã cập nhật thông tin khách hàng: ${updatedCustomer.name}`);
+    }
   };
 
-  const handleDeleteCustomer = (customerId: string) => {
+  const handleDeleteCustomer = async (customerId: string) => {
     const target = customers.find((c) => c.id === customerId);
     setCustomers((prev) => prev.filter((c) => c.id !== customerId));
+    if (isSupabaseConfigured()) {
+      await deleteClientFromSupabase(customerId);
+    }
     showToast(`Đã xóa khách hàng: ${target?.name || customerId}`);
+  };
+
+  // Bank Account Handlers (Lưu trực tiếp vào bảng bank_accounts / bank_account trên Supabase)
+  const handleAddBankAccount = async (newAccount: BankAccount) => {
+    setBankAccounts((prev) => [newAccount, ...prev]);
+    if (isSupabaseConfigured()) {
+      const res = await upsertBankAccountToSupabase(newAccount);
+      if (res.success) {
+        showToast(`Đã lưu tài khoản ngân hàng [${newAccount.bankName} - ${newAccount.accountNumber}] vào Supabase!`);
+      } else if (res.tableMissing) {
+        showToast(`Đã lưu nội bộ. Supabase chưa có bảng 'bank_accounts' (Hãy chạy mã SQL tạo bảng)`);
+      } else {
+        showToast(`Lưu Supabase: ${res.error || 'Vui lòng kiểm tra quyền'}`);
+      }
+    } else {
+      showToast(`Đã thêm tài khoản ngân hàng: ${newAccount.bankName} - ${newAccount.accountNumber}`);
+    }
+  };
+
+  const handleEditBankAccount = async (updatedAccount: BankAccount) => {
+    setBankAccounts((prev) => prev.map((b) => (b.id === updatedAccount.id ? updatedAccount : b)));
+    if (isSupabaseConfigured()) {
+      const res = await upsertBankAccountToSupabase(updatedAccount);
+      if (res.success) {
+        showToast(`Đã cập nhật tài khoản [${updatedAccount.bankName} - ${updatedAccount.accountNumber}] lên Supabase!`);
+      }
+    } else {
+      showToast(`Đã cập nhật tài khoản: ${updatedAccount.bankName} - ${updatedAccount.accountNumber}`);
+    }
+  };
+
+  const handleDeleteBankAccount = async (accountId: string) => {
+    const target = bankAccounts.find((b) => b.id === accountId);
+    setBankAccounts((prev) => prev.filter((b) => b.id !== accountId));
+    if (isSupabaseConfigured()) {
+      await deleteBankAccountFromSupabase(accountId);
+    }
+    showToast(`Đã xóa tài khoản ngân hàng: ${target?.bankName || accountId}`);
   };
 
   // Add User handler
@@ -877,6 +1022,13 @@ export default function App() {
       id: 'clients' as ActiveTab,
       label: 'TÊN KHÁCH HÀNG',
       icon: Building2,
+      badge: `${customers.length}`,
+    },
+    {
+      id: 'bank_accounts' as ActiveTab,
+      label: 'TÀI KHOẢN NGÂN HÀNG',
+      icon: Landmark,
+      badge: `${bankAccounts.length}`,
     },
     {
       id: 'suppliers' as ActiveTab,
@@ -960,6 +1112,7 @@ export default function App() {
           clientsCount={actualClientsCount}
           materialsCount={materials.length}
           contractsCount={contractsCount}
+          bankAccountsCount={bankAccounts.length}
           currentUser={currentUser}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -1130,6 +1283,23 @@ export default function App() {
               onEditCustomer={handleEditCustomer}
               onDeleteCustomer={handleDeleteCustomer}
               onUpdateClient={handleUpdateClient}
+              onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
+              onRefreshData={async () => {
+                await loadDataFromSupabase();
+                showToast('Đã làm mới danh sách khách hàng từ Supabase!');
+              }}
+            />
+          ) : activeTab === 'bank_accounts' ? (
+            <BankAccountsView
+              bankAccounts={bankAccounts}
+              onAddBankAccount={handleAddBankAccount}
+              onEditBankAccount={handleEditBankAccount}
+              onDeleteBankAccount={handleDeleteBankAccount}
+              onRefreshData={async () => {
+                await loadDataFromSupabase();
+                showToast('Đã làm mới danh sách tài khoản ngân hàng từ Supabase!');
+              }}
+              onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
             />
           ) : activeTab === 'users' ? (
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5">
@@ -1379,6 +1549,8 @@ export default function App() {
         suppliers={suppliers}
         users={users}
         materials={materials}
+        customers={customers}
+        bankAccounts={bankAccounts}
         onRefreshDataFromSupabase={loadDataFromSupabase}
       />
     </div>

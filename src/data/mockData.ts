@@ -1,4 +1,46 @@
-import { ExpenseItem, Project, Supplier, User, Customer, ProjectAddendum } from '../types';
+import { ExpenseItem, Project, Supplier, User, Customer, ProjectAddendum, BankAccount } from '../types';
+
+export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
+  {
+    id: 'bank-01',
+    bankName: 'Vietcombank',
+    accountNumber: '0071001234567',
+    accountHolder: 'CÔNG TY TNHH KỸ THUẬT CƠ ĐIỆN PHÚC NGUYÊN',
+    branch: 'Chi nhánh Tân Bình, TP. Hồ Chí Minh',
+    accountType: 'company',
+    initialBalance: 1500000000,
+    currentBalance: 1500000000,
+    isDefault: true,
+    status: 'active',
+    notes: 'Tài khoản chính thanh toán hợp đồng dự án và nhận tiền tạm ứng CĐT',
+  },
+  {
+    id: 'bank-02',
+    bankName: 'Techcombank',
+    accountNumber: '19036789123018',
+    accountHolder: 'CÔNG TY TNHH KỸ THUẬT CƠ ĐIỆN PHÚC NGUYÊN',
+    branch: 'Chi nhánh Bình Dương',
+    accountType: 'company',
+    initialBalance: 850000000,
+    currentBalance: 850000000,
+    isDefault: false,
+    status: 'active',
+    notes: 'Tài khoản thanh toán nhà thầu phụ, đơn mua vật tư PO và chi phí site',
+  },
+  {
+    id: 'bank-03',
+    bankName: 'MB Bank (Quân Đội)',
+    accountNumber: '686899998888',
+    accountHolder: 'Trần Anh Minh',
+    branch: 'Chi nhánh Sài Gòn',
+    accountType: 'personal',
+    initialBalance: 120000000,
+    currentBalance: 120000000,
+    isDefault: false,
+    status: 'active',
+    notes: 'Tài khoản quỹ tạm ứng hiện trường (Chỉ huy trưởng Trần Anh Minh)',
+  },
+];
 
 export const INITIAL_CUSTOMERS: Customer[] = [
   {

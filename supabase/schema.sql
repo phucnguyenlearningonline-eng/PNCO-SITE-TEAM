@@ -131,6 +131,70 @@ CREATE TABLE IF NOT EXISTS public.transactions (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
+-- 7. BẢNG KHÁCH HÀNG & CHỦ ĐẦU TƯ (CLIENT & CLIENTS)
+CREATE TABLE IF NOT EXISTS public.client (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    short_name TEXT,
+    tax_code TEXT,
+    phone TEXT,
+    email TEXT,
+    address TEXT,
+    contact_person TEXT,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.clients (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    short_name TEXT,
+    tax_code TEXT,
+    phone TEXT,
+    email TEXT,
+    address TEXT,
+    contact_person TEXT,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+-- 8. BẢNG DANH SÁCH TÀI KHOẢN NGÂN HÀNG (BANK_ACCOUNTS & BANK_ACCOUNT)
+CREATE TABLE IF NOT EXISTS public.bank_accounts (
+    id TEXT PRIMARY KEY,
+    bank_name TEXT NOT NULL,
+    account_number TEXT NOT NULL UNIQUE,
+    account_holder TEXT NOT NULL,
+    branch TEXT,
+    account_type TEXT DEFAULT 'company' CHECK (account_type IN ('company', 'project', 'personal', 'cash')),
+    initial_balance BIGINT DEFAULT 0,
+    current_balance BIGINT DEFAULT 0,
+    is_default BOOLEAN DEFAULT false,
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.bank_account (
+    id TEXT PRIMARY KEY,
+    bank_name TEXT NOT NULL,
+    account_number TEXT NOT NULL UNIQUE,
+    account_holder TEXT NOT NULL,
+    branch TEXT,
+    account_type TEXT DEFAULT 'company' CHECK (account_type IN ('company', 'project', 'personal', 'cash')),
+    initial_balance BIGINT DEFAULT 0,
+    current_balance BIGINT DEFAULT 0,
+    is_default BOOLEAN DEFAULT false,
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
 -- TẠO CHỈ MỤC TĂNG TỐC ĐỘ TRUY VẤN
 CREATE INDEX IF NOT EXISTS idx_expenses_date ON public.expenses(date);
 CREATE INDEX IF NOT EXISTS idx_expenses_category ON public.expenses(category);
@@ -142,6 +206,13 @@ CREATE INDEX IF NOT EXISTS idx_transactions_code ON public.transactions(code);
 CREATE INDEX IF NOT EXISTS idx_transactions_type ON public.transactions(type);
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON public.transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON public.transactions(project_id);
+CREATE INDEX IF NOT EXISTS idx_client_code ON public.client(code);
+CREATE INDEX IF NOT EXISTS idx_client_name ON public.client(name);
+CREATE INDEX IF NOT EXISTS idx_clients_code ON public.clients(code);
+CREATE INDEX IF NOT EXISTS idx_clients_name ON public.clients(name);
+CREATE INDEX IF NOT EXISTS idx_bank_accounts_number ON public.bank_accounts(account_number);
+CREATE INDEX IF NOT EXISTS idx_bank_accounts_bank_name ON public.bank_accounts(bank_name);
+CREATE INDEX IF NOT EXISTS idx_bank_account_number ON public.bank_account(account_number);
 
 -- ================================================================
 -- CẤU HÌNH BẢO MẬT & QUYỀN TRUY CẬP (TOÀN QUYỀN ĐỌC, GHI, SỬA, XÓA)
@@ -152,6 +223,10 @@ ALTER TABLE public.site_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.materials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.client ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bank_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bank_account ENABLE ROW LEVEL SECURITY;
 
 -- Xóa các policy cũ để tránh trùng lặp
 DROP POLICY IF EXISTS "Public Read Projects" ON public.projects;
@@ -183,6 +258,77 @@ DROP POLICY IF EXISTS "Public Read Transactions" ON public.transactions;
 DROP POLICY IF EXISTS "Public Insert/Update Transactions" ON public.transactions;
 DROP POLICY IF EXISTS "Allow All Transactions" ON public.transactions;
 CREATE POLICY "Allow All Transactions" ON public.transactions FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public Read Clients" ON public.clients;
+DROP POLICY IF EXISTS "Public Insert/Update Clients" ON public.clients;
+DROP POLICY IF EXISTS "Allow All Clients" ON public.clients;
+CREATE POLICY "Allow All Clients" ON public.clients FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public Read Client" ON public.client;
+DROP POLICY IF EXISTS "Public Insert/Update Client" ON public.client;
+DROP POLICY IF EXISTS "Allow All Client" ON public.client;
+CREATE POLICY "Allow All Client" ON public.client FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public Read Bank Accounts" ON public.bank_accounts;
+DROP POLICY IF EXISTS "Public Insert/Update Bank Accounts" ON public.bank_accounts;
+DROP POLICY IF EXISTS "Allow All Bank Accounts" ON public.bank_accounts FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public Read Bank Account" ON public.bank_account;
+DROP POLICY IF EXISTS "Public Insert/Update Bank Account" ON public.bank_account;
+DROP POLICY IF EXISTS "Allow All Bank Account" ON public.bank_account FOR ALL USING (true) WITH CHECK (true);
+
+-- Đồng bộ 2 chiều giữa client và clients
+CREATE OR REPLACE FUNCTION sync_client_to_clients()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.clients (id, code, name, short_name, tax_code, phone, email, address, contact_person, notes, created_at, updated_at)
+  VALUES (NEW.id, NEW.code, NEW.name, NEW.short_name, NEW.tax_code, NEW.phone, NEW.email, NEW.address, NEW.contact_person, NEW.notes, NEW.created_at, NEW.updated_at)
+  ON CONFLICT (id) DO UPDATE SET
+    code = EXCLUDED.code,
+    name = EXCLUDED.name,
+    short_name = EXCLUDED.short_name,
+    tax_code = EXCLUDED.tax_code,
+    phone = EXCLUDED.phone,
+    email = EXCLUDED.email,
+    address = EXCLUDED.address,
+    contact_person = EXCLUDED.contact_person,
+    notes = EXCLUDED.notes,
+    updated_at = EXCLUDED.updated_at;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_sync_client_to_clients ON public.client;
+CREATE TRIGGER trg_sync_client_to_clients
+AFTER INSERT OR UPDATE ON public.client
+FOR EACH ROW EXECUTE FUNCTION sync_client_to_clients();
+
+-- Đồng bộ 2 chiều giữa bank_account và bank_accounts
+CREATE OR REPLACE FUNCTION sync_bank_account_to_accounts()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.bank_accounts (id, bank_name, account_number, account_holder, branch, account_type, initial_balance, current_balance, is_default, status, notes, created_at, updated_at)
+  VALUES (NEW.id, NEW.bank_name, NEW.account_number, NEW.account_holder, NEW.branch, NEW.account_type, NEW.initial_balance, NEW.current_balance, NEW.is_default, NEW.status, NEW.notes, NEW.created_at, NEW.updated_at)
+  ON CONFLICT (id) DO UPDATE SET
+    bank_name = EXCLUDED.bank_name,
+    account_number = EXCLUDED.account_number,
+    account_holder = EXCLUDED.account_holder,
+    branch = EXCLUDED.branch,
+    account_type = EXCLUDED.account_type,
+    initial_balance = EXCLUDED.initial_balance,
+    current_balance = EXCLUDED.current_balance,
+    is_default = EXCLUDED.is_default,
+    status = EXCLUDED.status,
+    notes = EXCLUDED.notes,
+    updated_at = EXCLUDED.updated_at;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_sync_bank_account_to_accounts ON public.bank_account;
+CREATE TRIGGER trg_sync_bank_account_to_accounts
+AFTER INSERT OR UPDATE ON public.bank_account
+FOR EACH ROW EXECUTE FUNCTION sync_bank_account_to_accounts();
 
 -- ================================================================
 -- KÍCH HOẠT ĐỒNG BỘ REALTIME TỨC THỜI CHO CÁC MÁY TÍNH & ĐIỆN THOẠI
@@ -229,6 +375,34 @@ BEGIN
     WHERE pubname = 'supabase_realtime' AND tablename = 'transactions'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.transactions;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'client'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.client;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'clients'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.clients;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'bank_accounts'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_accounts;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'bank_account'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_account;
   END IF;
 END $$;
 
@@ -289,5 +463,37 @@ VALUES
     ('pt-03', 'PT-2026-003', 'revenue', 'client_advance', 'Thu tiền tạm ứng Hợp đồng Xin phép Xây dựng Coherent Vsip 3', 'Tạm ứng 25% giá trị hợp đồng', 'prj-pnc-da02', 'Thực Hiện Hồ Sơ Xin Phép Xây Dựng - Coherent Vsip 3', 'Công Ty TNHH Tialoc Việt Nam', 'Công Ty TNHH Tialoc Việt Nam', 'u-1', 'Trần Anh Minh', 'Chỉ Huy Trưởng', '2026-05-15', 200000000, 0, 0, 200000000, 'normal', 'paid', 'transfer', 'Đã nhận tạm ứng qua tài khoản Techcombank'),
     ('pc-01', 'PC-2026-001', 'expense', 'other', 'Nộp lệ phí thẩm duyệt PCCC & Thẩm định thiết kế xây dựng cơ sở', 'Lệ phí nộp cơ quan nhà nước và BQL KCN', 'prj-pnc-da02', 'Thực Hiện Hồ Sơ Xin Phép Xây Dựng - Coherent Vsip 3', 'Cục Cảnh Sát PCCC & CNCH - Kho bạc Nhà nước', 'Kho bạc Nhà nước', 'u-1', 'Trần Anh Minh', 'Chỉ Huy Trưởng', '2026-05-20', 100000000, 0, 0, 100000000, 'high', 'paid', 'transfer', 'Biên lai lệ phí nhà nước'),
     ('pc-02', 'PC-2026-002', 'expense', 'other', 'Chi phí đo đạc trích lục bản đồ địa chính & Khảo sát địa chất hiện trạng', 'Đo vẽ hiện trạng mốc ranh lô đất dự án Coherent', 'prj-pnc-da02', 'Thực Hiện Hồ Sơ Xin Phép Xây Dựng - Coherent Vsip 3', 'Công Ty Đo Đạc Địa Chính Miền Đông', 'Công Ty Đo Đạc Địa Chính Miền Đông', 'u-1', 'Trần Anh Minh', 'Chỉ Huy Trưởng', '2026-06-05', 80000000, 0, 0, 80000000, 'normal', 'paid', 'transfer', 'Đã hoàn tất bàn giao hồ sơ đo đạc')
+ON CONFLICT (id) DO NOTHING;
+
+-- 6. Insert Clients (Khách Hàng & Chủ Đầu Tư vào cả bảng client và clients)
+INSERT INTO public.client (id, code, name, short_name, tax_code, phone, email, address, contact_person, notes)
+VALUES
+    ('kh-002', 'KH-002', 'Công Ty TNHH Tialoc Việt Nam', 'Tialoc Việt Nam', '0310892299', '028.3822.8899', 'contact@tialoc.com.vn', 'Số 68 Nguyễn Huệ, Bến Nghé, Quận 1, TP. Hồ Chí Minh', 'Mr. David Wong (Giám đốc Dự án Coherent)', 'Khách hàng FDI chủ đầu tư chuỗi nhà xưởng công nghệ cao VSIP 3'),
+    ('kh-001', 'KH-001', 'Tập đoàn Bất động sản Thịnh Vượng', 'Thịnh Vượng Corp', '0308765432', '028.3999.8888', 'contact@thinhvuong.vn', 'Quận 2, TP. Thủ Đức, TP.HCM', 'Anh Trần Hùng (Ban Quản Lý Dự Án M&E)', 'Chủ đầu tư tổ hợp trung tâm thương mại & căn hộ Landmark'),
+    ('kh-003', 'KH-003', 'Công ty Cổ phần Công Nghiệp Sài Gòn', 'Sài Gòn Industry', '3701234567', '0274.3888.777', 'info@saigonindustry.com', 'KCN VSIP II, Bến Cát, Bình Dương', 'Chị Mai (Trưởng phòng Mua hàng Nhà xưởng)', 'Tổng thầu nhà xưởng may mặc và linh kiện cơ khí'),
+    ('kh-004', 'KH-004', 'Tập đoàn Đầu tư & Phát triển Khang Điền', 'Khang Điền', '0303456789', '028.3740.1122', 'info@khangdien.com.vn', 'Khu dân cư cao cấp Riverfront City, Quận 9, TP.HCM', 'Anh Nam (Chỉ huy trưởng MEP CĐT)', 'Dự án biệt thự ven sông và hạ tầng cáp ngầm')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.clients (id, code, name, short_name, tax_code, phone, email, address, contact_person, notes)
+VALUES
+    ('kh-002', 'KH-002', 'Công Ty TNHH Tialoc Việt Nam', 'Tialoc Việt Nam', '0310892299', '028.3822.8899', 'contact@tialoc.com.vn', 'Số 68 Nguyễn Huệ, Bến Nghé, Quận 1, TP. Hồ Chí Minh', 'Mr. David Wong (Giám đốc Dự án Coherent)', 'Khách hàng FDI chủ đầu tư chuỗi nhà xưởng công nghệ cao VSIP 3'),
+    ('kh-001', 'KH-001', 'Tập đoàn Bất động sản Thịnh Vượng', 'Thịnh Vượng Corp', '0308765432', '028.3999.8888', 'contact@thinhvuong.vn', 'Quận 2, TP. Thủ Đức, TP.HCM', 'Anh Trần Hùng (Ban Quản Lý Dự Án M&E)', 'Chủ đầu tư tổ hợp trung tâm thương mại & căn hộ Landmark'),
+    ('kh-003', 'KH-003', 'Công ty Cổ phần Công Nghiệp Sài Gòn', 'Sài Gòn Industry', '3701234567', '0274.3888.777', 'info@saigonindustry.com', 'KCN VSIP II, Bến Cát, Bình Dương', 'Chị Mai (Trưởng phòng Mua hàng Nhà xưởng)', 'Tổng thầu nhà xưởng may mặc và linh kiện cơ khí'),
+    ('kh-004', 'KH-004', 'Tập đoàn Đầu tư & Phát triển Khang Điền', 'Khang Điền', '0303456789', '028.3740.1122', 'info@khangdien.com.vn', 'Khu dân cư cao cấp Riverfront City, Quận 9, TP.HCM', 'Anh Nam (Chỉ huy trưởng MEP CĐT)', 'Dự án biệt thự ven sông và hạ tầng cáp ngầm')
+ON CONFLICT (id) DO NOTHING;
+
+-- 7. Insert Bank Accounts (Tài Khoản Ngân Hàng vào cả bảng bank_accounts và bank_account)
+INSERT INTO public.bank_accounts (id, bank_name, account_number, account_holder, branch, account_type, initial_balance, current_balance, is_default, status, notes)
+VALUES
+    ('bank-01', 'Vietcombank', '0071001234567', 'CÔNG TY TNHH KỸ THUẬT CƠ ĐIỆN PHÚC NGUYÊN', 'Chi nhánh Tân Bình, TP. Hồ Chí Minh', 'company', 1500000000, 1500000000, true, 'active', 'Tài khoản chính thanh toán hợp đồng dự án và nhận tiền tạm ứng CĐT'),
+    ('bank-02', 'Techcombank', '19036789123018', 'CÔNG TY TNHH KỸ THUẬT CƠ ĐIỆN PHÚC NGUYÊN', 'Chi nhánh Bình Dương', 'company', 850000000, 850000000, false, 'active', 'Tài khoản thanh toán nhà thầu phụ, đơn mua vật tư PO và chi phí site'),
+    ('bank-03', 'MB Bank (Quân Đội)', '686899998888', 'Trần Anh Minh', 'Chi nhánh Sài Gòn', 'personal', 120000000, 120000000, false, 'active', 'Tài khoản quỹ tạm ứng hiện trường (Chỉ huy trưởng Trần Anh Minh)')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.bank_account (id, bank_name, account_number, account_holder, branch, account_type, initial_balance, current_balance, is_default, status, notes)
+VALUES
+    ('bank-01', 'Vietcombank', '0071001234567', 'CÔNG TY TNHH KỸ THUẬT CƠ ĐIỆN PHÚC NGUYÊN', 'Chi nhánh Tân Bình, TP. Hồ Chí Minh', 'company', 1500000000, 1500000000, true, 'active', 'Tài khoản chính thanh toán hợp đồng dự án và nhận tiền tạm ứng CĐT'),
+    ('bank-02', 'Techcombank', '19036789123018', 'CÔNG TY TNHH KỸ THUẬT CƠ ĐIỆN PHÚC NGUYÊN', 'Chi nhánh Bình Dương', 'company', 850000000, 850000000, false, 'active', 'Tài khoản thanh toán nhà thầu phụ, đơn mua vật tư PO và chi phí site'),
+    ('bank-03', 'MB Bank (Quân Đội)', '686899998888', 'Trần Anh Minh', 'Chi nhánh Sài Gòn', 'personal', 120000000, 120000000, false, 'active', 'Tài khoản quỹ tạm ứng hiện trường (Chỉ huy trưởng Trần Anh Minh)')
 ON CONFLICT (id) DO NOTHING;
 
