@@ -32,7 +32,8 @@ import {
   Sparkles,
   Info,
   Link2,
-  ExternalLink
+  ExternalLink,
+  Receipt
 } from 'lucide-react';
 import { ExpenseItem, Project, Customer, ProjectAddendum } from '../types';
 import { formatVND, formatDateVN, formatTy } from '../utils/formatters';
@@ -40,6 +41,7 @@ import { SortableHeader } from './common/SortableHeader';
 import { SortDirection, naturalCompareCode, parseDateTimestamp } from '../utils/sortUtils';
 import { ProjectAddendumsModal } from './projects/ProjectAddendumsModal';
 import { ProjectFinancialModal } from './projects/ProjectFinancialModal';
+import { calculateProjectFinances } from '../utils/projectFinance';
 
 interface ProjectsViewProps {
   projects: Project[];
@@ -119,15 +121,15 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   const [formContractDate, setFormContractDate] = useState('2026-03-01');
   const [formContractFileUrl, setFormContractFileUrl] = useState('');
   const [formVatRate, setFormVatRate] = useState(0);
-  const [formOriginalContractValue, setFormOriginalContractValue] = useState(23577927234);
-  const [formTotalBudget, setFormTotalBudget] = useState(19500000000);
-  const [formCurrentAdvance, setFormCurrentAdvance] = useState(7073378170);
+  const [formOriginalContractValue, setFormOriginalContractValue] = useState(0);
+  const [formTotalBudget, setFormTotalBudget] = useState(0);
+  const [formCurrentAdvance, setFormCurrentAdvance] = useState(0);
   const [formStatus, setFormStatus] = useState<Project['status']>('active');
-  const [formProgressPercentage, setFormProgressPercentage] = useState(74);
-  const [formLocation, setFormLocation] = useState('KCN VSIP 3, Tân Uyên, Bình Dương');
+  const [formProgressPercentage, setFormProgressPercentage] = useState(0);
+  const [formLocation, setFormLocation] = useState('TP. Hồ Chí Minh');
   const [formManager, setFormManager] = useState('Trần Anh Minh');
-  const [formLaborBudget, setFormLaborBudget] = useState(4200000000);
-  const [formMaterialBudget, setFormMaterialBudget] = useState(13500000000);
+  const [formLaborBudget, setFormLaborBudget] = useState(0);
+  const [formMaterialBudget, setFormMaterialBudget] = useState(0);
 
   // Tự động tính tiền VAT và Tổng giá trị HĐ sau VAT
   const formVatAmount = useMemo(() => {
@@ -201,72 +203,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     return Array.from(set);
   }, [projects]);
 
-  // Helper tính toán tài chính chi tiết của từng dự án
-  const getProjectFinances = (p: Project) => {
-    // Chỉ lấy các khoản CHI CỦA DỰ ÁN (loại trừ phiếu thu revenue và các khoản bị từ chối)
-    const prjExpenses = expenses.filter(
-      (e) =>
-        (e.projectId === p.id || e.projectId === p.code || (e.projectName && p.name && e.projectName.trim().toLowerCase() === p.name.trim().toLowerCase())) &&
-        e.type !== 'revenue' &&
-        e.status !== 'rejected'
-    );
-
-    const labor = prjExpenses
-      .filter((e) => e.category === 'labor_sub' || (e.title && /nhân công|lương|thợ/i.test(e.title)))
-      .reduce((sum, e) => sum + e.totalAmount, 0);
-
-    const material = prjExpenses
-      .filter((e) => e.category === 'material' && !(e.title && /nhân công|lương|thợ/i.test(e.title)))
-      .reduce((sum, e) => sum + e.totalAmount, 0);
-
-    const transport = prjExpenses
-      .filter((e) => e.category === 'transport')
-      .reduce((sum, e) => sum + e.totalAmount, 0);
-
-    const mealAndOther = prjExpenses
-      .filter((e) => e.category === 'overtime_meal' || (e.category === 'other' && !/nhân công|lương|thợ/i.test(e.title)))
-      .reduce((sum, e) => sum + e.totalAmount, 0);
-
-    // Tổng chi phí thực tế = tổng tất cả các khoản chi của dự án
-    const totalSpent = prjExpenses.reduce((sum, e) => sum + e.totalAmount, 0);
-    const expensesCount = prjExpenses.length;
-
-    const addendums = p.addendums || [];
-    const addendumTotal = addendums.reduce((sum, item) => sum + (item.totalAmount || 0), 0);
-    const originalValue = p.originalContractValue || p.totalRevenue || 0;
-    const vatRate = p.vatRate || 0;
-    const vatAmount = p.vatAmount !== undefined ? p.vatAmount : Math.round(originalValue * (vatRate / 100));
-    const contractValueWithVat = p.totalContractValueWithVat || (originalValue + vatAmount);
-    const totalAfterPLHD = contractValueWithVat + addendumTotal;
-
-    const collected = p.currentAdvance || 0;
-    const remainingToCollect = Math.max(0, totalAfterPLHD - collected);
-    const collectedPercentage = totalAfterPLHD > 0 ? (collected / totalAfterPLHD) * 100 : 0;
-
-    const grossProfit = totalAfterPLHD - totalSpent;
-    const profitMargin = totalAfterPLHD > 0 ? (grossProfit / totalAfterPLHD) * 100 : 0;
-
-    return {
-      totalSpent,
-      expensesCount,
-      labor,
-      material,
-      transport,
-      mealAndOther,
-      originalValue,
-      vatRate,
-      vatAmount,
-      contractValueWithVat,
-      addendumTotal,
-      addendumsCount: addendums.length,
-      totalAfterPLHD,
-      collected,
-      remainingToCollect,
-      collectedPercentage,
-      grossProfit,
-      profitMargin,
-    };
-  };
+  // Helper tính toán tài chính chi tiết của từng dự án (tổng hợp chính xác từ Phiếu Thu và Chi Phí thực tế)
+  const getProjectFinances = (p: Project) => calculateProjectFinances(p, expenses);
 
   // Lọc danh sách dự án
   const filteredProjects = useMemo(() => {
@@ -427,21 +365,22 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     setFormContractDate('2026-03-01');
     setFormContractFileUrl('');
     setFormVatRate(0);
-    setFormOriginalContractValue(15000000000);
-    setFormTotalBudget(12000000000);
-    setFormCurrentAdvance(4500000000);
+    setFormOriginalContractValue(0);
+    setFormTotalBudget(0);
+    setFormCurrentAdvance(0);
     setFormStatus('active');
-    setFormProgressPercentage(50);
+    setFormProgressPercentage(0);
     setFormLocation('TP. Hồ Chí Minh');
     setFormManager('Trần Anh Minh');
-    setFormLaborBudget(3000000000);
-    setFormMaterialBudget(8500000000);
+    setFormLaborBudget(0);
+    setFormMaterialBudget(0);
     setShowAddModal(true);
   };
 
   // Mở modal sửa dự án
   const handleOpenEditProject = (p: Project) => {
     setEditingProject(p);
+    const fin = getProjectFinances(p);
     setFormCode(p.code);
     setFormName(p.name);
     setFormClientId(p.clientId || '');
@@ -458,7 +397,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     setFormVatRate(p.vatRate ?? 0);
     setFormOriginalContractValue(p.originalContractValue || p.totalRevenue || 0);
     setFormTotalBudget(p.totalBudget);
-    setFormCurrentAdvance(p.currentAdvance);
+    setFormCurrentAdvance(fin.receiptsCount > 0 ? fin.receiptsTotal : (p.currentAdvance || 0));
     setFormStatus(p.status);
     setFormProgressPercentage(p.progressPercentage ?? 50);
     setFormLocation(p.location);
@@ -1253,14 +1192,25 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                           </div>
                         </td>
 
-                        {/* 6. ĐÃ THU CĐT */}
+                        {/* 6. ĐÃ THU CĐT (CHỈ SỐ THỂ HIỆN CHÍNH XÁC SỐ TIỀN TRONG PHIẾU THU CỦA TỪNG DỰ ÁN) */}
                         <td className="py-3 px-3 text-right">
-                          <div className="font-mono font-bold text-emerald-800 text-xs whitespace-nowrap">
-                            {formatVND(fin.collected)}
-                          </div>
-                          <div className="text-[10.5px] font-semibold text-emerald-700">
-                            Đạt {fin.collectedPercentage.toFixed(0)}% HĐ
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setActiveFinancialProject(p)}
+                            className="text-right hover:opacity-85 transition-opacity cursor-pointer group block w-full"
+                            title="Bấm để xem danh sách phiếu thu và sổ tài chính chi tiết của dự án"
+                          >
+                            <div className="font-mono font-bold text-emerald-800 text-xs whitespace-nowrap">
+                              {formatVND(fin.collected)}
+                            </div>
+                            <div className="text-[10.5px] font-semibold text-emerald-700">
+                              Đạt {fin.collectedPercentage.toFixed(1)}% HĐ
+                            </div>
+                            <div className="text-[9.5px] text-slate-500 font-normal flex items-center justify-end gap-1 mt-0.5 group-hover:text-emerald-700">
+                              <Receipt className="w-2.5 h-2.5 text-emerald-600" />
+                              <span>{fin.receiptsCount > 0 ? `${fin.receiptsCount} Phiếu Thu` : '0 Phiếu Thu'}</span>
+                            </div>
+                          </button>
                         </td>
 
                         {/* 7. CHI PHÍ & NHÂN CÔNG (THEO YÊU CẦU: "và chi phí thu chi , nhân công theo dự án đó") */}
@@ -1432,11 +1382,21 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                       <span className="font-black text-slate-900 font-mono">{formatVND(fin.totalAfterPLHD)}</span>
                     </div>
 
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <span className="text-slate-500">Đã thu từ CĐT:</span>
-                      <span className="font-bold text-emerald-800 font-mono">
-                        {formatVND(fin.collected)} ({fin.collectedPercentage.toFixed(0)}%)
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveFinancialProject(p)}
+                        className="text-right hover:opacity-80 cursor-pointer"
+                        title="Bấm để xem danh sách phiếu thu"
+                      >
+                        <span className="font-bold text-emerald-800 font-mono block">
+                          {formatVND(fin.collected)} ({fin.collectedPercentage.toFixed(1)}%)
+                        </span>
+                        <span className="text-[10px] text-slate-500 block">
+                          {fin.receiptsCount > 0 ? `${fin.receiptsCount} Phiếu Thu` : '0 Phiếu Thu'}
+                        </span>
+                      </button>
                     </div>
 
                     <div className="flex justify-between text-purple-800 font-semibold bg-purple-50 px-2 py-1 rounded">
@@ -1860,11 +1820,15 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                       type="number"
                       step="any"
                       value={formCurrentAdvance || ''}
-                      onChange={(e) => setFormCurrentAdvance(Number(e.target.value))}
+                      onChange={(e) => setFormCurrentAdvance(Math.max(0, Number(e.target.value)))}
+                      placeholder="0 đ"
                       className="w-full py-2 px-3 border border-emerald-300 bg-emerald-50 rounded-lg font-mono font-bold text-emerald-800"
                     />
                     <div className="text-[10px] font-mono text-emerald-700 mt-1 truncate">
                       = {formatVND(formCurrentAdvance)}
+                    </div>
+                    <div className="text-[9.5px] text-slate-500 mt-0.5 italic">
+                      * Tự động tổng hợp chính xác theo các Phiếu Thu phát sinh của dự án.
                     </div>
                   </div>
 
