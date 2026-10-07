@@ -2,11 +2,10 @@ import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
 import { ExpenseItem, Project, Supplier, User, MaterialItem, Customer, BankAccount } from '../types';
 
 export const CLIENT_TABLE_SQL = `-- ================================================================
--- TẠO BẢNG KHÁCH HÀNG & CHỦ ĐẦU TƯ (CLIENT & CLIENTS) TRÊN SUPABASE
+-- TẠO 1 BẢNG KHÁCH HÀNG & CHỦ ĐẦU TƯ (CLIENT) TRÊN SUPABASE
 -- Hệ thống M&E Phúc Nguyên - Quản lý Khách Hàng / Chủ Đầu Tư
 -- ================================================================
 
--- 1. BẢNG CLIENT (Chính xác theo tên bảng 'client' bạn yêu cầu)
 CREATE TABLE IF NOT EXISTS public.client (
     id TEXT PRIMARY KEY,
     code TEXT NOT NULL UNIQUE,
@@ -29,76 +28,14 @@ ALTER TABLE public.client ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow All Client" ON public.client;
 CREATE POLICY "Allow All Client" ON public.client FOR ALL USING (true) WITH CHECK (true);
 
--- 2. BẢNG CLIENTS (Đồng thời tạo bảng clients để tương thích 100%)
-CREATE TABLE IF NOT EXISTS public.clients (
-    id TEXT PRIMARY KEY,
-    code TEXT NOT NULL UNIQUE,
-    name TEXT NOT NULL,
-    short_name TEXT,
-    tax_code TEXT,
-    phone TEXT,
-    email TEXT,
-    address TEXT,
-    contact_person TEXT,
-    notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-);
-
-CREATE INDEX IF NOT EXISTS idx_clients_code ON public.clients(code);
-CREATE INDEX IF NOT EXISTS idx_clients_name ON public.clients(name);
-
-ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow All Clients" ON public.clients;
-CREATE POLICY "Allow All Clients" ON public.clients FOR ALL USING (true) WITH CHECK (true);
-
--- Tự động đồng bộ 2 chiều giữa bảng client và clients
-CREATE OR REPLACE FUNCTION sync_client_to_clients()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.clients (id, code, name, short_name, tax_code, phone, email, address, contact_person, notes, created_at, updated_at)
-  VALUES (NEW.id, NEW.code, NEW.name, NEW.short_name, NEW.tax_code, NEW.phone, NEW.email, NEW.address, NEW.contact_person, NEW.notes, NEW.created_at, NEW.updated_at)
-  ON CONFLICT (id) DO UPDATE SET
-    code = EXCLUDED.code,
-    name = EXCLUDED.name,
-    short_name = EXCLUDED.short_name,
-    tax_code = EXCLUDED.tax_code,
-    phone = EXCLUDED.phone,
-    email = EXCLUDED.email,
-    address = EXCLUDED.address,
-    contact_person = EXCLUDED.contact_person,
-    notes = EXCLUDED.notes,
-    updated_at = EXCLUDED.updated_at;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_sync_client_to_clients ON public.client;
-CREATE TRIGGER trg_sync_client_to_clients
-AFTER INSERT OR UPDATE ON public.client
-FOR EACH ROW EXECUTE FUNCTION sync_client_to_clients();
-
--- 3. KÍCH HOẠT REALTIME ĐỒNG BỘ TỰ ĐỘNG
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'client') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.client;
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'clients') THEN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.clients;
-  END IF;
 END $$;
 
--- 4. THÊM DỮ LIỆU MẪU BAN ĐẦU VÀO CẢ 2 BẢNG CLIENT & CLIENTS
 INSERT INTO public.client (id, code, name, short_name, tax_code, phone, email, address, contact_person, notes)
-VALUES
-    ('kh-002', 'KH-002', 'Công Ty TNHH Tialoc Việt Nam', 'Tialoc Việt Nam', '0310892299', '028.3822.8899', 'contact@tialoc.com.vn', 'Số 68 Nguyễn Huệ, Bến Nghé, Quận 1, TP. Hồ Chí Minh', 'Mr. David Wong (Giám đốc Dự án Coherent)', 'Khách hàng FDI chủ đầu tư chuỗi nhà xưởng công nghệ cao VSIP 3'),
-    ('kh-001', 'KH-001', 'Tập đoàn Bất động sản Thịnh Vượng', 'Thịnh Vượng Corp', '0308765432', '028.3999.8888', 'contact@thinhvuong.vn', 'Quận 2, TP. Thủ Đức, TP.HCM', 'Anh Trần Hùng (Ban Quản Lý Dự Án M&E)', 'Chủ đầu tư tổ hợp trung tâm thương mại & căn hộ Landmark'),
-    ('kh-003', 'KH-003', 'Công ty Cổ phần Công Nghiệp Sài Gòn', 'Sài Gòn Industry', '3701234567', '0274.3888.777', 'info@saigonindustry.com', 'KCN VSIP II, Bến Cát, Bình Dương', 'Chị Mai (Trưởng phòng Mua hàng Nhà xưởng)', 'Tổng thầu nhà xưởng may mặc và linh kiện cơ khí'),
-    ('kh-004', 'KH-004', 'Tập đoàn Đầu tư & Phát triển Khang Điền', 'Khang Điền', '0303456789', '028.3740.1122', 'info@khangdien.com.vn', 'Khu dân cư cao cấp Riverfront City, Quận 9, TP.HCM', 'Anh Nam (Chỉ huy trưởng MEP CĐT)', 'Dự án biệt thự ven sông và hạ tầng cáp ngầm')
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO public.clients (id, code, name, short_name, tax_code, phone, email, address, contact_person, notes)
 VALUES
     ('kh-002', 'KH-002', 'Công Ty TNHH Tialoc Việt Nam', 'Tialoc Việt Nam', '0310892299', '028.3822.8899', 'contact@tialoc.com.vn', 'Số 68 Nguyễn Huệ, Bến Nghé, Quận 1, TP. Hồ Chí Minh', 'Mr. David Wong (Giám đốc Dự án Coherent)', 'Khách hàng FDI chủ đầu tư chuỗi nhà xưởng công nghệ cao VSIP 3'),
     ('kh-001', 'KH-001', 'Tập đoàn Bất động sản Thịnh Vượng', 'Thịnh Vượng Corp', '0308765432', '028.3999.8888', 'contact@thinhvuong.vn', 'Quận 2, TP. Thủ Đức, TP.HCM', 'Anh Trần Hùng (Ban Quản Lý Dự Án M&E)', 'Chủ đầu tư tổ hợp trung tâm thương mại & căn hộ Landmark'),
@@ -107,28 +44,10 @@ VALUES
 ON CONFLICT (id) DO NOTHING;`;
 
 export const BANK_ACCOUNTS_TABLE_SQL = `-- ================================================================
--- TẠO BẢNG TÀI KHOẢN NGÂN HÀNG (BANK_ACCOUNTS) TRÊN SUPABASE
+-- TẠO 1 BẢNG TÀI KHOẢN NGÂN HÀNG (BANK_ACCOUNT) TRÊN SUPABASE
 -- Hệ thống M&E Phúc Nguyên - Quản lý Danh Sách Tài Khoản Ngân Hàng
 -- ================================================================
 
--- 1. BẢNG BANK_ACCOUNTS (Số nhiều tiêu chuẩn)
-CREATE TABLE IF NOT EXISTS public.bank_accounts (
-    id TEXT PRIMARY KEY,
-    bank_name TEXT NOT NULL,
-    account_number TEXT NOT NULL UNIQUE,
-    account_holder TEXT NOT NULL,
-    branch TEXT,
-    account_type TEXT DEFAULT 'company' CHECK (account_type IN ('company', 'project', 'personal', 'cash')),
-    initial_balance BIGINT DEFAULT 0,
-    current_balance BIGINT DEFAULT 0,
-    is_default BOOLEAN DEFAULT false,
-    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
-    notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-);
-
--- 2. BẢNG BANK_ACCOUNT (Số ít tương thích 100%)
 CREATE TABLE IF NOT EXISTS public.bank_account (
     id TEXT PRIMARY KEY,
     bank_name TEXT NOT NULL,
@@ -145,64 +64,19 @@ CREATE TABLE IF NOT EXISTS public.bank_account (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
-CREATE INDEX IF NOT EXISTS idx_bank_accounts_number ON public.bank_accounts(account_number);
-CREATE INDEX IF NOT EXISTS idx_bank_accounts_bank_name ON public.bank_accounts(bank_name);
 CREATE INDEX IF NOT EXISTS idx_bank_account_number ON public.bank_account(account_number);
-
--- Cấp toàn quyền RLS đọc, ghi, sửa, xóa
-ALTER TABLE public.bank_accounts ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow All Bank Accounts" ON public.bank_accounts;
-CREATE POLICY "Allow All Bank Accounts" ON public.bank_accounts FOR ALL USING (true) WITH CHECK (true);
+CREATE INDEX IF NOT EXISTS idx_bank_account_name ON public.bank_account(bank_name);
 
 ALTER TABLE public.bank_account ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow All Bank Account" ON public.bank_account;
 CREATE POLICY "Allow All Bank Account" ON public.bank_account FOR ALL USING (true) WITH CHECK (true);
 
--- Tự động đồng bộ 2 chiều giữa bank_account và bank_accounts
-CREATE OR REPLACE FUNCTION sync_bank_account_to_accounts()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.bank_accounts (id, bank_name, account_number, account_holder, branch, account_type, initial_balance, current_balance, is_default, status, notes, created_at, updated_at)
-  VALUES (NEW.id, NEW.bank_name, NEW.account_number, NEW.account_holder, NEW.branch, NEW.account_type, NEW.initial_balance, NEW.current_balance, NEW.is_default, NEW.status, NEW.notes, NEW.created_at, NEW.updated_at)
-  ON CONFLICT (id) DO UPDATE SET
-    bank_name = EXCLUDED.bank_name,
-    account_number = EXCLUDED.account_number,
-    account_holder = EXCLUDED.account_holder,
-    branch = EXCLUDED.branch,
-    account_type = EXCLUDED.account_type,
-    initial_balance = EXCLUDED.initial_balance,
-    current_balance = EXCLUDED.current_balance,
-    is_default = EXCLUDED.is_default,
-    status = EXCLUDED.status,
-    notes = EXCLUDED.notes,
-    updated_at = EXCLUDED.updated_at;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_sync_bank_account_to_accounts ON public.bank_account;
-CREATE TRIGGER trg_sync_bank_account_to_accounts
-AFTER INSERT OR UPDATE ON public.bank_account
-FOR EACH ROW EXECUTE FUNCTION sync_bank_account_to_accounts();
-
--- Kích hoạt Realtime
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'bank_accounts') THEN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_accounts;
-  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'bank_account') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_account;
   END IF;
 END $$;
-
--- Thêm dữ liệu mẫu tài khoản ngân hàng ban đầu
-INSERT INTO public.bank_accounts (id, bank_name, account_number, account_holder, branch, account_type, initial_balance, current_balance, is_default, status, notes)
-VALUES
-    ('bank-01', 'Vietcombank', '0071001234567', 'CÔNG TY TNHH KỸ THUẬT CƠ ĐIỆN PHÚC NGUYÊN', 'Chi nhánh Tân Bình, TP. Hồ Chí Minh', 'company', 1500000000, 1500000000, true, 'active', 'Tài khoản chính thanh toán hợp đồng dự án và nhận tiền tạm ứng CĐT'),
-    ('bank-02', 'Techcombank', '19036789123018', 'CÔNG TY TNHH KỸ THUẬT CƠ ĐIỆN PHÚC NGUYÊN', 'Chi nhánh Bình Dương', 'company', 850000000, 850000000, false, 'active', 'Tài khoản thanh toán nhà thầu phụ, đơn mua vật tư PO và chi phí site'),
-    ('bank-03', 'MB Bank (Quân Đội)', '686899998888', 'Trần Anh Minh', 'Chi nhánh Sài Gòn', 'personal', 120000000, 120000000, false, 'active', 'Tài khoản quỹ tạm ứng hiện trường (Chỉ huy trưởng Trần Anh Minh)')
-ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.bank_account (id, bank_name, account_number, account_holder, branch, account_type, initial_balance, current_balance, is_default, status, notes)
 VALUES
@@ -211,8 +85,24 @@ VALUES
     ('bank-03', 'MB Bank (Quân Đội)', '686899998888', 'Trần Anh Minh', 'Chi nhánh Sài Gòn', 'personal', 120000000, 120000000, false, 'active', 'Tài khoản quỹ tạm ứng hiện trường (Chỉ huy trưởng Trần Anh Minh)')
 ON CONFLICT (id) DO NOTHING;`;
 
+export const CLEANUP_DUPLICATES_SQL = `-- ================================================================
+-- XÓA BỎ 2 BẢNG TRÙNG LẶP DƯ THỪA (CHỈ GIỮ LẠI 1 BẢNG CLIENT & 1 BẢNG BANK_ACCOUNT)
+-- Dán đoạn mã này vào Supabase SQL Editor và nhấn RUN
+-- ================================================================
+
+-- 1. Xóa bỏ trigger & bảng thừa 'clients' (chỉ giữ lại đúng 1 bảng 'client')
+DROP TRIGGER IF EXISTS trg_sync_client_to_clients ON public.client;
+DROP FUNCTION IF EXISTS sync_client_to_clients();
+DROP TABLE IF EXISTS public.clients CASCADE;
+
+-- 2. Xóa bỏ trigger & bảng thừa 'bank_accounts' (chỉ giữ lại đúng 1 bảng 'bank_account')
+DROP TRIGGER IF EXISTS trg_sync_bank_account_to_accounts ON public.bank_account;
+DROP FUNCTION IF EXISTS sync_bank_account_to_accounts();
+DROP TABLE IF EXISTS public.bank_accounts CASCADE;
+`;
+
 export const CLIENT_AND_BANK_SQL = `-- ================================================================
--- KỊCH BẢN TẠO CẢ 2 BẢNG: KHÁCH HÀNG (CLIENT) & TÀI KHOẢN NGÂN HÀNG (BANK_ACCOUNTS)
+-- KỊCH BẢN TẠO 2 BẢNG DUY NHẤT: KHÁCH HÀNG (CLIENT) & NGÂN HÀNG (BANK_ACCOUNT)
 -- Hệ thống M&E Phúc Nguyên - Chạy trên Supabase SQL Editor
 -- ================================================================
 
@@ -926,30 +816,30 @@ export async function fetchBankAccountsFromSupabase(): Promise<BankAccount[] | n
       updatedAt: row.updated_at || undefined,
     }));
 
-  // 1. Thử lấy từ bảng 'bank_accounts'
+  // 1. Ưu tiên lấy từ bảng 'bank_account' (chuẩn số ít đồng bộ với 'client')
   try {
-    const { data: dataAccounts, error: errAccounts } = await supabase.from('bank_accounts').select('*');
-    if (!errAccounts && dataAccounts && dataAccounts.length > 0) {
-      return mapRows(dataAccounts);
+    const { data: dataAccount, error: errAccount } = await supabase.from('bank_account').select('*');
+    if (!errAccount && dataAccount && dataAccount.length > 0) {
+      return mapRows(dataAccount);
     }
-    if (!errAccounts && dataAccounts && dataAccounts.length === 0) {
-      // Nếu có bảng nhưng chưa có dữ liệu, thử xem bank_account
-      const { data: dataAccount, error: errAccount } = await supabase.from('bank_account').select('*');
-      if (!errAccount && dataAccount && dataAccount.length > 0) {
-        return mapRows(dataAccount);
+    if (!errAccount && dataAccount && dataAccount.length === 0) {
+      // Nếu có bảng nhưng chưa có dữ liệu, kiểm tra bảng cũ bank_accounts nếu có
+      const { data: dataAccounts, error: errAccounts } = await supabase.from('bank_accounts').select('*');
+      if (!errAccounts && dataAccounts && dataAccounts.length > 0) {
+        return mapRows(dataAccounts);
       }
       return [];
     }
   } catch (err) {}
 
-  // 2. Dự phòng: Thử lấy từ bảng 'bank_account'
+  // 2. Dự phòng: Thử lấy từ bảng 'bank_accounts'
   try {
-    const { data, error } = await supabase.from('bank_account').select('*');
+    const { data, error } = await supabase.from('bank_accounts').select('*');
     if (!error && data) {
       return mapRows(data);
     }
     if (error && error.code === '42P01') {
-      console.warn('Cả hai bảng public.bank_accounts và public.bank_account chưa được tạo trên Supabase.');
+      console.warn('Bảng public.bank_account chưa được tạo trên Supabase.');
       return null;
     }
     if (error) {
@@ -989,50 +879,52 @@ export async function upsertBankAccountToSupabase(item: BankAccount): Promise<{
   };
 
   let savedTable: string | null = null;
-  let bankAccountsTableMissing = false;
   let bankAccountTableMissing = false;
+  let bankAccountsTableMissing = false;
   let lastError: string | undefined;
 
-  // 1. Lưu vào bảng 'bank_accounts'
+  // 1. Lưu vào bảng 'bank_account' (chuẩn số ít)
   try {
-    const { error: err1 } = await supabase.from('bank_accounts').upsert(payload);
+    const { error: err1 } = await supabase.from('bank_account').upsert(payload);
     if (!err1) {
-      savedTable = 'bank_accounts';
+      savedTable = 'bank_account';
     } else if (err1.code === '42P01') {
-      bankAccountsTableMissing = true;
+      bankAccountTableMissing = true;
     } else {
       lastError = err1.message;
-      console.warn('Supabase upsert into bank_accounts error:', err1.message);
+      console.warn('Supabase upsert into bank_account error:', err1.message);
     }
   } catch (e: any) {
     lastError = e?.message || String(e);
   }
 
-  // 2. Đồng bộ tiếp vào bảng 'bank_account' (nếu có)
-  try {
-    const { error: err2 } = await supabase.from('bank_account').upsert(payload);
-    if (!err2) {
-      savedTable = savedTable ? `${savedTable} & bank_account` : 'bank_account';
-    } else if (err2.code === '42P01') {
-      bankAccountTableMissing = true;
-    } else if (!savedTable) {
-      lastError = err2.message;
-      console.warn('Supabase upsert into bank_account error:', err2.message);
+  // 2. Dự phòng: Nếu chưa lưu được và có bảng 'bank_accounts'
+  if (!savedTable) {
+    try {
+      const { error: err2 } = await supabase.from('bank_accounts').upsert(payload);
+      if (!err2) {
+        savedTable = 'bank_accounts';
+      } else if (err2.code === '42P01') {
+        bankAccountsTableMissing = true;
+      } else {
+        lastError = err2.message;
+        console.warn('Supabase upsert into bank_accounts error:', err2.message);
+      }
+    } catch (e: any) {
+      lastError = e?.message || String(e);
     }
-  } catch (e: any) {
-    if (!savedTable) lastError = e?.message || String(e);
   }
 
   if (savedTable) {
     return { success: true, tableUsed: savedTable };
   }
 
-  if (bankAccountsTableMissing && bankAccountTableMissing) {
-    console.warn('Cả hai bảng public.bank_accounts và public.bank_account đều chưa tồn tại trên Supabase.');
+  if (bankAccountTableMissing && bankAccountsTableMissing) {
+    console.warn('Bảng public.bank_account chưa tồn tại trên Supabase.');
     return {
       success: false,
       tableMissing: true,
-      error: 'Bảng bank_accounts chưa được tạo trên Supabase. Hãy chạy mã SQL tạo bảng bank_accounts.',
+      error: 'Bảng bank_account chưa được tạo trên Supabase. Hãy chạy mã SQL tạo bảng bank_account.',
     };
   }
 

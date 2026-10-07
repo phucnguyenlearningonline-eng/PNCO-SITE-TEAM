@@ -20,7 +20,14 @@ import {
   testSupabaseConnection, 
   SupabaseConfig 
 } from '../lib/supabase';
-import { syncAllLocalDataToSupabase, separateAndCleanTransactionsOnSupabase, CLIENT_TABLE_SQL, BANK_ACCOUNTS_TABLE_SQL, CLIENT_AND_BANK_SQL } from '../services/supabaseService';
+import { 
+  syncAllLocalDataToSupabase, 
+  separateAndCleanTransactionsOnSupabase, 
+  CLIENT_TABLE_SQL, 
+  BANK_ACCOUNTS_TABLE_SQL, 
+  CLIENT_AND_BANK_SQL,
+  CLEANUP_DUPLICATES_SQL 
+} from '../services/supabaseService';
 import { ExpenseItem, Project, Supplier, User, MaterialItem, Customer, BankAccount } from '../types';
 
 interface SupabaseModalProps {
@@ -62,6 +69,7 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
   const [copiedClientSql, setCopiedClientSql] = useState(false);
   const [copiedBankSql, setCopiedBankSql] = useState(false);
   const [copiedBothSql, setCopiedBothSql] = useState(false);
+  const [copiedCleanupSql, setCopiedCleanupSql] = useState(false);
 
   const FIX_SQL = `-- ================================================================
 -- 1. TẠO BẢNG TRANSACTIONS, MATERIALS VÀ CLIENTS (KHÁCH HÀNG)
@@ -322,6 +330,12 @@ END $$;`;
     navigator.clipboard.writeText(CLIENT_AND_BANK_SQL);
     setCopiedBothSql(true);
     setTimeout(() => setCopiedBothSql(false), 2500);
+  };
+
+  const handleCopyCleanupSql = () => {
+    navigator.clipboard.writeText(CLEANUP_DUPLICATES_SQL);
+    setCopiedCleanupSql(true);
+    setTimeout(() => setCopiedCleanupSql(false), 2500);
   };
 
   useEffect(() => {
@@ -744,16 +758,43 @@ WHERE type = 'revenue'
             )}
           </div>
 
-          {/* TẠO 2 BẢNG: 'client' (KHÁCH HÀNG) & 'bank_accounts' (TÀI KHOẢN NGÂN HÀNG) TRÊN SUPABASE */}
+          {/* DỌN DẸP XÓA BẢNG TRÙNG LẶP */}
+          <div className="bg-amber-50/80 border border-amber-300 rounded-xl p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="font-bold text-amber-950 text-sm flex items-center gap-1.5">
+                  <Database className="w-4 h-4 text-amber-700" />
+                  <span>Dọn Dẹp Xóa 2 Bảng Thừa (clients &amp; bank_accounts)</span>
+                </h4>
+                <p className="text-slate-600 text-xs mt-0.5 max-w-xl">
+                  Nếu bạn thấy xuất hiện 2 cặp bảng trùng lặp trên Supabase Dashboard như trong ảnh, hãy sao chép mã này để <strong>xóa bỏ 2 bảng thừa clients &amp; bank_accounts</strong>. Hệ thống sẽ chuẩn hóa chỉ giữ lại <strong>1 bảng client</strong> và <strong>1 bảng bank_account</strong> duy nhất!
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCopyCleanupSql}
+                  className="px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                  title="Sao chép kịch bản SQL xóa 2 bảng trùng lặp clients và bank_accounts"
+                >
+                  {copiedCleanupSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedCleanupSql ? 'Đã sao chép SQL!' : 'Sao Chép SQL Xóa Bảng Thừa'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* TẠO 2 BẢNG: 'client' (KHÁCH HÀNG) & 'bank_account' (TÀI KHOẢN NGÂN HÀNG) TRÊN SUPABASE */}
           <div className="bg-emerald-50/70 border border-emerald-300 rounded-xl p-4 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
               <div>
                 <h4 className="font-bold text-emerald-950 text-sm flex items-center gap-1.5">
                   <Database className="w-4 h-4 text-emerald-700" />
-                  <span>Tạo Bảng Khách Hàng (client) &amp; Tài Khoản Ngân Hàng (bank_accounts) Trên Supabase</span>
+                  <span>Chuẩn Hóa: 1 Bảng Khách Hàng (client) &amp; 1 Bảng Ngân Hàng (bank_account)</span>
                 </h4>
                 <p className="text-slate-600 text-xs mt-1 max-w-xl leading-relaxed">
-                  Hệ thống hỗ trợ lưu riêng biệt từng bảng trên Supabase: Bảng <strong className="text-emerald-800 font-mono">client</strong> dành cho Khách Hàng / Chủ Đầu Tư và Bảng <strong className="text-indigo-800 font-mono">bank_accounts</strong> dành cho Tài Khoản Ngân Hàng. Sao chép mã SQL và dán vào <strong>SQL Editor</strong> trên Supabase Dashboard.
+                  Hệ thống hỗ trợ chuẩn hóa đúng 1 bảng duy nhất cho mỗi mục: Bảng <strong className="text-emerald-800 font-mono">client</strong> dành cho Khách Hàng / CĐT và Bảng <strong className="text-indigo-800 font-mono">bank_account</strong> dành cho Tài Khoản Ngân Hàng.
                 </p>
               </div>
 
@@ -762,10 +803,10 @@ WHERE type = 'revenue'
                   type="button"
                   onClick={handleCopyBothSql}
                   className="px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-                  title="Sao chép kịch bản SQL tạo cả 2 bảng client và bank_accounts"
+                  title="Sao chép kịch bản SQL tạo cả 2 bảng client và bank_account"
                 >
                   {copiedBothSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedBothSql ? 'Đã sao chép Cả 2 Bảng!' : 'Sao Chép Cả 2 Bảng (client + bank_accounts)'}</span>
+                  <span>{copiedBothSql ? 'Đã sao chép Cả 2 Bảng!' : 'Sao Chép Cả 2 Bảng (client + bank_account)'}</span>
                 </button>
               </div>
             </div>
@@ -808,7 +849,7 @@ WHERE type = 'revenue'
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Tạo bảng <code className="font-mono text-slate-700">bank_accounts</code> và <code className="font-mono text-slate-700">bank_account</code>, thiết lập số tài khoản, số dư ban đầu &amp; realtime.
+                  Tạo đúng 1 bảng <code className="font-mono text-slate-700">bank_account</code>, thiết lập số tài khoản, số dư ban đầu &amp; realtime.
                 </p>
               </div>
             </div>
@@ -818,7 +859,7 @@ WHERE type = 'revenue'
               <ol className="list-decimal list-inside space-y-0.5 pl-1">
                 <li>Bấm nút <strong>"Sao Chép Cả 2 Bảng"</strong> (hoặc sao chép riêng từng bảng ở trên).</li>
                 <li>Mở tab Supabase Dashboard của bạn, nhấn vào icon <strong>SQL Editor</strong> (biểu tượng <code>&gt;_</code> ở cột menu màu đen bên trái).</li>
-                <li>Dán mã SQL (Ctrl + V) và nhấn <strong>Run</strong> (hoặc Ctrl + Enter). Hai bảng <code className="font-mono text-emerald-800 font-bold">client</code> và <code className="font-mono text-indigo-800 font-bold">bank_accounts</code> sẽ xuất hiện ngay lập tức trong Table Editor!</li>
+                <li>Dán mã SQL (Ctrl + V) và nhấn <strong>Run</strong> (hoặc Ctrl + Enter). Hai bảng <code className="font-mono text-emerald-800 font-bold">client</code> và <code className="font-mono text-indigo-800 font-bold">bank_account</code> sẽ sẵn sàng ngay lập tức!</li>
               </ol>
             </div>
           </div>
